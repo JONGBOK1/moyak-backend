@@ -6,36 +6,46 @@
 <style>
   body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
   h1 { font-size: 20px; }
-  textarea { width: 100%; height: 60px; font-size: 16px; padding: 8px; box-sizing: border-box; }
-  button { margin-top: 8px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
-  #result { margin-top: 24px; line-height: 1.6; }
+  #thread { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
+  .turn { display: flex; flex-direction: column; gap: 6px; }
+  .question {
+    align-self: flex-end; background: #1a56db; color: #fff; padding: 10px 14px;
+    border-radius: 12px; max-width: 80%; white-space: pre-wrap;
+  }
   .badge {
     display: inline-block; font-size: 12px; color: #1a5d1a; background: #e6f4ea;
-    border: 1px solid #b6dfc0; border-radius: 12px; padding: 3px 10px; margin-bottom: 10px;
+    border: 1px solid #b6dfc0; border-radius: 12px; padding: 3px 10px; width: fit-content;
   }
   .answer { background: #f4f4f4; padding: 16px; border-radius: 8px; white-space: pre-wrap; }
-  .sources { margin-top: 8px; color: #555; font-size: 14px; }
+  .sources { color: #555; font-size: 14px; }
   .loading { color: #888; }
-  details.evidence { margin-top: 12px; }
-  details.evidence summary { cursor: pointer; color: #1a56db; font-size: 14px; }
+  details.evidence { font-size: 14px; }
+  details.evidence summary { cursor: pointer; color: #1a56db; }
   .evidence-item {
     margin-top: 8px; padding: 10px 12px; background: #fafafa; border-left: 3px solid #1a56db;
-    font-size: 14px; white-space: pre-wrap;
+    white-space: pre-wrap;
   }
   .evidence-item b { color: #1a56db; }
+  textarea { width: 100%; height: 60px; font-size: 16px; padding: 8px; box-sizing: border-box; }
+  button { margin-top: 8px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+  .reset { background: none; border: none; color: #888; text-decoration: underline; font-size: 13px; padding: 0; }
 </style>
 </head>
 <body>
   <h1>💊 모약이 테스트</h1>
+  <div id="thread"></div>
   <textarea id="question" placeholder="예) 활명수는 어디에 사용하나요?"></textarea>
   <br />
   <button id="ask">질문하기</button>
-  <div id="result"></div>
+  <button id="reset" class="reset">대화 초기화</button>
 
 <script>
   const askBtn = document.getElementById("ask");
+  const resetBtn = document.getElementById("reset");
   const questionEl = document.getElementById("question");
-  const resultEl = document.getElementById("result");
+  const threadEl = document.getElementById("thread");
+
+  let history = []; // [{role, content}, ...]
 
   function el(tag, props, children) {
     const node = document.createElement(tag);
@@ -44,21 +54,17 @@
     return node;
   }
 
-  function renderResult(data) {
-    resultEl.innerHTML = "";
+  function renderTurn(question, data) {
+    const turn = el("div", { className: "turn" });
+    turn.appendChild(el("div", { className: "question", textContent: question }));
 
     if (data.evidence && data.evidence.length) {
-      resultEl.appendChild(
-        el("div", { className: "badge", textContent: "🏛 식품의약품안전처 공식 데이터 기반" })
-      );
+      turn.appendChild(el("div", { className: "badge", textContent: "🏛 식품의약품안전처 공식 데이터 기반" }));
     }
-
-    resultEl.appendChild(el("div", { className: "answer", textContent: data.answer }));
+    turn.appendChild(el("div", { className: "answer", textContent: data.answer }));
 
     const sourcesText = data.sources.length ? data.sources.join(", ") : "없음";
-    resultEl.appendChild(
-      el("div", { className: "sources", textContent: "참고 약품: " + sourcesText })
-    );
+    turn.appendChild(el("div", { className: "sources", textContent: "참고 약품: " + sourcesText }));
 
     if (data.evidence && data.evidence.length) {
       const details = el("details", { className: "evidence" });
@@ -70,31 +76,42 @@
         item.appendChild(document.createTextNode(e.text));
         details.appendChild(item);
       });
-      resultEl.appendChild(details);
+      turn.appendChild(details);
     }
+
+    threadEl.appendChild(turn);
+    turn.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
   async function ask() {
     const question = questionEl.value.trim();
     if (!question) return;
 
-    resultEl.innerHTML = '<div class="loading">답변을 생성하는 중입니다...</div>';
+    questionEl.value = "";
     askBtn.disabled = true;
+    const loading = el("div", { className: "loading", textContent: "답변을 생성하는 중입니다..." });
+    threadEl.appendChild(loading);
 
     try {
       const res = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, history }),
       });
+      loading.remove();
+
       if (!res.ok) {
         const err = await res.json();
-        resultEl.textContent = "오류: " + JSON.stringify(err);
+        threadEl.appendChild(el("div", { textContent: "오류: " + JSON.stringify(err) }));
         return;
       }
-      renderResult(await res.json());
+      const data = await res.json();
+      renderTurn(question, data);
+      history.push({ role: "user", content: question });
+      history.push({ role: "assistant", content: data.answer });
     } catch (e) {
-      resultEl.textContent = "요청 실패: " + e;
+      loading.remove();
+      threadEl.appendChild(el("div", { textContent: "요청 실패: " + e }));
     } finally {
       askBtn.disabled = false;
     }
@@ -103,6 +120,10 @@
   askBtn.addEventListener("click", ask);
   questionEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) ask();
+  });
+  resetBtn.addEventListener("click", () => {
+    history = [];
+    threadEl.innerHTML = "";
   });
 </script>
 </body>

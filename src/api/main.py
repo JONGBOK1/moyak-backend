@@ -8,15 +8,16 @@ from fastapi.responses import HTMLResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.routes import chat
-from src.rag.chain import get_llm, get_retriever
+from src.rag.chain import get_llm, get_rewrite_llm, get_vector_store
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.retriever = get_retriever()
+    app.state.vector_store = get_vector_store()
     app.state.llm = get_llm()
+    app.state.rewrite_llm = get_rewrite_llm()
     yield
 
 

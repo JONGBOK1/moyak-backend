@@ -93,9 +93,16 @@ moyak-backend/
    메타데이터에 `item_seq`, `item_name`, `company`, `field` 포함
 4. **STEP 3 - 임베딩**: `text-embedding-3-small`로 청크 텍스트 임베딩, 배치로 처리
 5. **STEP 4 - 인덱싱**: Pinecone 인덱스(dimension 1536, metric cosine)에 upsert
-6. **STEP 5 - RAG 체인**: LangChain으로 검색+생성 체인 구성. `top_k=5` 검색 후 프롬프트 컨텍스트로 삽입
+6. **STEP 5 - RAG 체인**: LangChain으로 검색+생성 체인 구성. 질문을 세 유형으로 분기 처리한다(`src/rag/chain.py`).
+   - **specific(특정 약 질문)**: 필드 혼합 `top_k=5` 검색 후 프롬프트 컨텍스트로 삽입 (기존 방식)
+   - **symptom(증상 기반 추천)**: ① GPT-4o-mini로 질문을 임상 키워드로 변환(`build_symptom_query`) → ② 효능(`field=efficacy`) 필드만 Pinecone 메타데이터 필터링해 후보 약 최대 3개 선정 → ③ 후보별 전체 필드(효능/사용법/주의사항 등)를 `item_seq` 필터로 모아 컨텍스트 구성 → ④ 추천 이유+복용법+주의사항을 포함하도록 별도 프롬프트(`RECOMMEND_SYSTEM_PROMPT`)로 생성. 후보가 실제로 증상과 무관하면 추천하지 않고 거부하도록 강제.
+   - **interaction(병용/상호작용 확인)**: ① GPT-4o-mini로 질문에 언급된 약 이름을 추출(`extract_drug_names`, 최대 3개) → ② 각 약 이름을 실제 등록 품목에 매칭해 전체 필드를 `item_seq` 필터로 모음(`_resolve_drug_docs`) → ③ 전용 프롬프트(`INTERACTION_SYSTEM_PROMPT`)로 답변 생성. **가장 중요한 규칙**: 자료에 특정 조합에 대한 언급이 없다고 "안전하다"고 결론 내리지 않고, "확인되지 않음 + 약사 상담"으로 답하도록 강제한다(e약은요 상호작용 데이터는 완전한 약물-약물 매트릭스가 아니라 각 약이 자체적으로 명시한 일반 문구이기 때문).
+   - 질문 유형 분류는 `classify_intent`(GPT-4o-mini)가 담당하며, 대화 후속 질문 재작성(`rewrite_standalone_question`) 이후에 실행된다.
+   - 답변에서 실제로 인용된 약품명만 출처/근거로 남기는 `_extract_cited`는 LLM이 긴 제품명의 띄어쓰기를 살짝 바꿔 쓰는 경우가 있어 공백 제거 후 비교한다.
 7. **STEP 6 - API 서버**: FastAPI `/chat` 엔드포인트. 프론트(Flutter)와 JSON 스펙 맞추기
-   - 요청: `POST /chat` `{"question": "string"}`
+   - 요청: `POST /chat` `{"question": "string", "history": [{"role": "user"|"assistant", "content": "string"}, ...]}`
+     - `history`: 이전 대화 턴(선택, 기본값 빈 배열). 서버는 세션을 저장하지 않는 완전 무상태(stateless) 방식이라, 프론트가 대화 기록을 들고 있다가 매 요청마다 함께 보낸다.
+     - 후속 질문(예: "부작용은?")은 검색 전에 GPT-4o-mini로 독립형 질문("활명수의 부작용은?")으로 재작성한 뒤 검색한다(`rewrite_standalone_question`). 이 재작성은 검색에만 쓰이고, 최종 답변 생성에는 원래 질문 + history 전체가 그대로 전달된다.
    - 응답: `{"answer": "string", "sources": ["string", ...], "evidence": [{"item_name", "field", "field_label", "text"}, ...]}`
      - `evidence`: 답변이 실제로 인용한 원본 청크 목록(신뢰도 어필용 — "AI 요약"이 아니라 식약처 원문 그대로임을 사용자에게 보여주기 위해 추가)
    - 헬스체크: `GET /health` → `{"status": "ok"}`
@@ -121,6 +128,9 @@ moyak-backend/
 - [x] STEP 3: 임베딩 (27,956개 청크 전부 임베딩 완료, `data/processed/embeddings.jsonl`)
 - [x] STEP 4: 인덱싱 (Pinecone 인덱스 `moyak-eyakeunyo`에 27,956개 벡터 upsert 완료, dimension 1536 / cosine)
 - [x] STEP 5: RAG 체인 (`prompts.py`/`chain.py` 작성, top_k=5 검색 + GPT-4o 생성, 근거기반/출처/가드레일 규칙 실제 질문으로 검증 완료)
+- [x] 대화 히스토리 지원 (`history` 파라미터, 무상태 서버 + 후속질문 재작성으로 대명사/생략 주어 해결, 실제 멀티턴 시나리오로 검증 완료)
+- [x] 증상 기반 약 추천 (efficacy 필드 우선 검색 → 후보 최대 3개 전체 정보 취합 → 추천이유+복용법+주의사항 응답, 실제 질문으로 검증 완료 — 로드맵 Phase 3)
+- [x] 병용/상호작용 안전성 확인 (질문에서 약 이름 추출 → 각 약 전체 정보 취합 → "명시 안 됨 = 안전"으로 오판하지 않도록 강제, 단일약/두약 언급 시나리오 실제 검증 완료 — 로드맵 Phase 2)
 - [x] STEP 6: FastAPI 서버 (`/chat`, `/health` 작성 완료, 실제 서버 기동 후 curl로 검증 완료)
 - [x] STEP 7: 테스트 (`tests/test_cleaning.py`, `tests/test_chunking.py` 유닛 테스트 9건 통과 / `tests/check_rag_quality.py` 셀프 체크 통과 — 안전 문구 규칙 자동 검증 + 어투는 수동 확인용)
 

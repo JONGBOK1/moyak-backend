@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.rag.chain import ask, get_llm, get_retriever
+from src.rag.chain import ask, get_llm, get_rewrite_llm, get_vector_store
 
 CASES = [
     {
@@ -28,16 +28,32 @@ CASES = [
         "question": "화성에 사람이 살 수 있나요?",
         "must_contain": ["확인되지 않습니다"],
     },
+    {
+        "label": "증상 기반 추천 (효능 근거 + 복용법 + 약사 상담 문구 필수)",
+        "question": "배 아플때 어떤 약을 먹는게 좋아?",
+        "must_contain": ["약사와 상담"],
+    },
+    {
+        "label": "병용 안전성 - 단일 약 언급 (약사 상담 문구 필수)",
+        "question": "타이레놀과 함께 먹으면 안되는 약이 있을까?",
+        "must_contain": ["약사와 상담"],
+    },
+    {
+        "label": "병용 안전성 - 두 약 언급 (약사 상담 문구 필수)",
+        "question": "타이레놀이랑 감기약 같이 먹어도 돼?",
+        "must_contain": ["약사와 상담"],
+    },
 ]
 
 
 def main():
-    retriever = get_retriever()
+    vector_store = get_vector_store()
     llm = get_llm()
+    rewrite_llm = get_rewrite_llm()
 
     failures = []
     for case in CASES:
-        result = ask(case["question"], retriever=retriever, llm=llm)
+        result = ask(case["question"], vector_store=vector_store, llm=llm, rewrite_llm=rewrite_llm)
         answer = result["answer"]
         print(f"\n[{case['label']}]")
         print(f"질문: {case['question']}")
