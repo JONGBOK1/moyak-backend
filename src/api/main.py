@@ -50,3 +50,8 @@ def health():
 @app.get("/", response_class=HTMLResponse)
 def chat_test_page():
     return (STATIC_DIR / "chat_test.html").read_text(encoding="utf-8")
+
+
+@app.get("/consult-demo", response_class=HTMLResponse)
+def consult_demo_page():
+    return (STATIC_DIR / "consult_demo.html").read_text(encoding="utf-8")

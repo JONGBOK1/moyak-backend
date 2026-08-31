@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>모약이 상담·자판기 데모</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/lib/browser.min.js"></script>
+<style>
+  body { font-family: sans-serif; max-width: 1100px; margin: 30px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 20px; }
+  .note { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .panels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+  .panel { border: 1px solid #ddd; border-radius: 10px; padding: 16px; background: #fafafa; }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0; }
+  label { display: block; font-size: 12px; color: #555; margin-top: 10px; }
+  input, textarea { width: 100%; padding: 6px 8px; font-size: 14px; box-sizing: border-box; margin-top: 2px; }
+  textarea { height: 50px; resize: vertical; }
+  button { margin-top: 10px; padding: 8px 14px; font-size: 13px; cursor: pointer; border-radius: 6px; border: 1px solid #333; background: #222; color: #fff; }
+  button.secondary { background: #fff; color: #333; }
+  button.reject { background: #fff; color: #c0392b; border-color: #c0392b; }
+  .result { margin-top: 12px; font-size: 13px; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 8px; white-space: pre-wrap; min-height: 20px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 4px; }
+  .badge.pending { background: #fff3cd; color: #856404; }
+  .badge.approved { background: #d4edda; color: #155724; }
+  .badge.rejected { background: #f8d7da; color: #721c24; }
+  .badge.dispensed { background: #d1ecf1; color: #0c5460; }
+  .consult-item { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-top: 8px; background: #fff; font-size: 13px; }
+  #qrCanvas { margin-top: 10px; border: 1px solid #ddd; border-radius: 6px; }
+</style>
+</head>
+<body>
+  <h1>💊 모약이 — 약사 상담 · 자판기 연동 데모</h1>
+  <p class="note">
+    세 패널이 각각 "사용자 앱" · "약사 대시보드" · "자판기 화면"을 흉내 냅니다. AI(챗봇)는 승인 권한이 없고,
+    승인은 항상 약사 패널에서 사람이 직접 눌러야 합니다.
+  </p>
+
+  <div class="panels">
+    <!-- 패널 1: 사용자 앱 -->
+    <div class="panel">
+      <h2>📱 사용자 앱</h2>
+      <label>사용자 ID</label>
+      <input id="userId" value="테스트유저" />
+      <label>챗봇 상담 요약</label>
+      <textarea id="chatSummary">머리가 아프다고 상담함</textarea>
+      <label>요청 약품 코드 (item_seq)</label>
+      <input id="drugSeq" value="202007844" />
+      <label>요청 약품명</label>
+      <input id="drugName" value="이너베린정" />
+      <button id="requestBtn">약사 상담 요청하기</button>
+      <div id="requestResult" class="result"></div>
+    </div>
+
+    <!-- 패널 2: 약사 대시보드 -->
+    <div class="panel">
+      <h2>🩺 약사 대시보드</h2>
+      <label>약사 ID</label>
+      <input id="pharmacistId" value="테스트약사" />
+      <button id="refreshBtn" class="secondary">대기 목록 새로고침</button>
+      <div id="consultList"></div>
+    </div>
+
+    <!-- 패널 3: 자판기 화면 -->
+    <div class="panel">
+      <h2>🏧 자판기 화면</h2>
+      <label>자판기 ID</label>
+      <input id="machineId" value="M001" />
+      <button id="qrBtn" class="secondary">QR 새로 발급</button>
+      <canvas id="qrCanvas" width="180" height="180"></canvas>
+      <div id="qrResult" class="result"></div>
+
+      <label style="margin-top: 16px">스캔한 사용자 ID (앱에서 QR 스캔했다고 가정)</label>
+      <input id="scanUserId" value="테스트유저" />
+      <button id="scanBtn">QR 스캔 시뮬레이션</button>
+      <div id="scanResult" class="result"></div>
+      <button id="dispenseBtn" style="display:none">수령 확정 (자판기 개방)</button>
+    </div>
+  </div>
+
+<script>
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  // ---------- 패널 1: 상담 요청 ----------
+  document.getElementById("requestBtn").addEventListener("click", async () => {
+    const box = document.getElementById("requestResult");
+    box.textContent = "요청 중...";
+    try {
+      const data = await api("POST", "/consultations", {
+        user_id: document.getElementById("userId").value,
+        chat_summary: document.getElementById("chatSummary").value,
+        requested_drug_item_seq: document.getElementById("drugSeq").value,
+        requested_drug_name: document.getElementById("drugName").value,
+      });
+      box.textContent = `상담 요청 생성됨 (id: ${data.id.slice(0, 8)}..., status: ${data.status})\n약사 대시보드에서 "대기 목록 새로고침"을 눌러보세요.`;
+    } catch (e) {
+      box.textContent = "오류: " + e.message;
+    }
+  });
+
+  // ---------- 패널 2: 약사 대시보드 ----------
+  async function refreshConsultations() {
+    const listEl = document.getElementById("consultList");
+    listEl.innerHTML = "불러오는 중...";
+    try {
+      const items = await api("GET", "/consultations?status=pending");
+      listEl.innerHTML = "";
+      if (items.length === 0) {
+        listEl.innerHTML = '<div class="result">대기 중인 상담이 없습니다.</div>';
+        return;
+      }
+      items.forEach((c) => {
+        const div = document.createElement("div");
+        div.className = "consult-item";
+        div.innerHTML = `
+          <div><b>${c.user_id}</b> <span class="badge pending">대기중</span></div>
+          <div>요약: ${c.chat_summary}</div>
+          <div>요청약: ${c.requested_drug_name || "-"} (${c.requested_drug_item_seq || "-"})</div>
+        `;
+        const approveBtn = document.createElement("button");
+        approveBtn.textContent = "승인";
+        approveBtn.addEventListener("click", () => decide(c.id, true));
+        const rejectBtn = document.createElement("button");
+        rejectBtn.textContent = "거절";
+        rejectBtn.className = "reject";
+        rejectBtn.addEventListener("click", () => decide(c.id, false));
+        div.appendChild(approveBtn);
+        div.appendChild(rejectBtn);
+        listEl.appendChild(div);
+      });
+    } catch (e) {
+      listEl.innerHTML = "오류: " + e.message;
+    }
+  }
+
+  async function decide(consultationId, approve) {
+    try {
+      const pharmacistId = document.getElementById("pharmacistId").value;
+      const data = await api("POST", `/consultations/${consultationId}/decision`, {
+        pharmacist_id: pharmacistId,
+        approve,
+      });
+      alert(`${approve ? "승인" : "거절"} 처리됨 (status: ${data.status})`);
+      refreshConsultations();
+    } catch (e) {
+      alert("오류: " + e.message);
+    }
+  }
+
+  document.getElementById("refreshBtn").addEventListener("click", refreshConsultations);
+
+  // ---------- 패널 3: 자판기 화면 ----------
+  let lastQrToken = null;
+
+  document.getElementById("qrBtn").addEventListener("click", async () => {
+    const machineId = document.getElementById("machineId").value;
+    const box = document.getElementById("qrResult");
+    box.textContent = "발급 중...";
+    try {
+      const data = await api("POST", `/vending/machines/${encodeURIComponent(machineId)}/rotate-qr`);
+      lastQrToken = data.qr_token;
+      const qrPayload = JSON.stringify({ machine_id: data.machine_id, qr_token: data.qr_token });
+      QRCode.toCanvas(document.getElementById("qrCanvas"), qrPayload, { width: 180 });
+      box.textContent = `발급 완료 (만료: ${new Date(data.qr_token_expires_at + "Z").toLocaleTimeString()})`;
+    } catch (e) {
+      box.textContent = "오류: " + e.message;
+    }
+  });
+
+  let lastPurchaseId = null;
+
+  document.getElementById("scanBtn").addEventListener("click", async () => {
+    const box = document.getElementById("scanResult");
+    const dispenseBtn = document.getElementById("dispenseBtn");
+    dispenseBtn.style.display = "none";
+    if (!lastQrToken) {
+      box.textContent = "먼저 QR을 발급하세요.";
+      return;
+    }
+    box.textContent = "스캔 확인 중...";
+    try {
+      const data = await api("POST", "/vending/scan", {
+        machine_id: document.getElementById("machineId").value,
+        qr_token: lastQrToken,
+        user_id: document.getElementById("scanUserId").value,
+      });
+      if (data.has_pending_purchase) {
+        lastPurchaseId = data.purchase.id;
+        box.textContent = `대기 중인 승인 건 발견!\n약품: ${data.purchase.drug_item_name}\n승인자: ${data.purchase.approved_by}`;
+        dispenseBtn.style.display = "inline-block";
+      } else {
+        box.textContent = "대기 중인 승인된 구매 건이 없습니다. (먼저 약사 승인을 받아야 해요)";
+      }
+    } catch (e) {
+      box.textContent = "오류: " + e.message;
+    }
+  });
+
+  document.getElementById("dispenseBtn").addEventListener("click", async () => {
+    const box = document.getElementById("scanResult");
+    try {
+      const data = await api("POST", "/vending/dispense", {
+        purchase_id: lastPurchaseId,
+        machine_id: document.getElementById("machineId").value,
+      });
+      box.textContent = `✅ 수령 완료! (status: ${data.status}, 자판기: ${data.dispensed_machine_id})`;
+      document.getElementById("dispenseBtn").style.display = "none";
+    } catch (e) {
+      box.textContent = "오류: " + e.message;
+    }
+  });
+
+  refreshConsultations();
+</script>
+</body>
+</html>
