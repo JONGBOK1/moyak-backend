@@ -36,9 +36,19 @@ class ConsultationResponse(BaseModel):
     decision_reason: str | None
     created_at: datetime
     decided_at: datetime | None
+    approved_purchase_id: str | None = None
+    approved_drug_name: str | None = None
 
     class Config:
         from_attributes = True
+
+
+def _to_response(consultation) -> ConsultationResponse:
+    response = ConsultationResponse.model_validate(consultation)
+    if consultation.purchase is not None:
+        response.approved_purchase_id = consultation.purchase.id
+        response.approved_drug_name = consultation.purchase.drug_item_name
+    return response
 
 
 @router.post("", response_model=ConsultationResponse)
@@ -50,12 +60,12 @@ def create_consultation(payload: ConsultationCreateRequest, db: Session = Depend
         requested_drug_item_seq=payload.requested_drug_item_seq,
         requested_drug_name=payload.requested_drug_name,
     )
-    return consultation
+    return _to_response(consultation)
 
 
 @router.get("", response_model=list[ConsultationResponse])
 def list_consultations(status: str | None = None, db: Session = Depends(get_db)) -> list[ConsultationResponse]:
-    return service.list_consultations(db, status=status)
+    return [_to_response(c) for c in service.list_consultations(db, status=status)]
 
 
 @router.post("/{consultation_id}/decision", response_model=ConsultationResponse)
@@ -63,7 +73,7 @@ def decide_consultation(
     consultation_id: str, payload: ConsultationDecisionRequest, db: Session = Depends(get_db)
 ) -> ConsultationResponse:
     try:
-        return service.decide_consultation(
+        consultation = service.decide_consultation(
             db,
             consultation_id=consultation_id,
             pharmacist_id=payload.pharmacist_id,
@@ -76,3 +86,4 @@ def decide_consultation(
         raise HTTPException(status_code=404, detail=str(e))
     except service.InvalidStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    return _to_response(consultation)

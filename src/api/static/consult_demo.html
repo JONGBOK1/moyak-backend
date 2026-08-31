@@ -38,14 +38,14 @@
     <!-- 패널 1: 사용자 앱 -->
     <div class="panel">
       <h2>📱 사용자 앱</h2>
+      <p class="note" style="margin-top:0">
+        실제 서비스에서는 이 요청이 <a href="/">챗봇 화면</a>의 "약사와 상담하기" 버튼에서 자동으로 만들어집니다
+        (사용자는 약품 코드를 몰라도 됩니다 — 여기선 API를 직접 확인해보기 위한 단축 폼이에요).
+      </p>
       <label>사용자 ID</label>
       <input id="userId" value="테스트유저" />
       <label>챗봇 상담 요약</label>
       <textarea id="chatSummary">머리가 아프다고 상담함</textarea>
-      <label>요청 약품 코드 (item_seq)</label>
-      <input id="drugSeq" value="202007844" />
-      <label>요청 약품명</label>
-      <input id="drugName" value="이너베린정" />
       <button id="requestBtn">약사 상담 요청하기</button>
       <div id="requestResult" class="result"></div>
     </div>
@@ -96,8 +96,6 @@
       const data = await api("POST", "/consultations", {
         user_id: document.getElementById("userId").value,
         chat_summary: document.getElementById("chatSummary").value,
-        requested_drug_item_seq: document.getElementById("drugSeq").value,
-        requested_drug_name: document.getElementById("drugName").value,
       });
       box.textContent = `상담 요청 생성됨 (id: ${data.id.slice(0, 8)}..., status: ${data.status})\n약사 대시보드에서 "대기 목록 새로고침"을 눌러보세요.`;
     } catch (e) {
@@ -121,12 +119,22 @@
         div.className = "consult-item";
         div.innerHTML = `
           <div><b>${c.user_id}</b> <span class="badge pending">대기중</span></div>
-          <div>요약: ${c.chat_summary}</div>
-          <div>요청약: ${c.requested_drug_name || "-"} (${c.requested_drug_item_seq || "-"})</div>
+          <div style="white-space:pre-wrap">대화 내용: ${c.chat_summary}</div>
         `;
+
+        const seqInput = document.createElement("input");
+        seqInput.placeholder = "처방할 약품 코드 (item_seq)";
+        seqInput.value = c.requested_drug_item_seq || "";
+        const nameInput = document.createElement("input");
+        nameInput.placeholder = "처방할 약품명";
+        nameInput.value = c.requested_drug_name || "";
+        nameInput.style.marginBottom = "4px";
+        div.appendChild(seqInput);
+        div.appendChild(nameInput);
+
         const approveBtn = document.createElement("button");
-        approveBtn.textContent = "승인";
-        approveBtn.addEventListener("click", () => decide(c.id, true));
+        approveBtn.textContent = "처방 승인";
+        approveBtn.addEventListener("click", () => decide(c.id, true, seqInput.value, nameInput.value));
         const rejectBtn = document.createElement("button");
         rejectBtn.textContent = "거절";
         rejectBtn.className = "reject";
@@ -140,14 +148,21 @@
     }
   }
 
-  async function decide(consultationId, approve) {
+  async function decide(consultationId, approve, drugItemSeq, drugItemName) {
+    if (approve && (!drugItemSeq || !drugItemName)) {
+      alert("처방하려면 약품 코드와 약품명을 모두 입력해주세요.");
+      return;
+    }
     try {
       const pharmacistId = document.getElementById("pharmacistId").value;
       const data = await api("POST", `/consultations/${consultationId}/decision`, {
         pharmacist_id: pharmacistId,
         approve,
+        drug_item_seq: drugItemSeq || undefined,
+        drug_item_name: drugItemName || undefined,
       });
-      alert(`${approve ? "승인" : "거절"} 처리됨 (status: ${data.status})`);
+      const detail = approve ? ` — 처방약: ${data.approved_drug_name}` : "";
+      alert(`${approve ? "처방 승인" : "거절"} 처리됨 (status: ${data.status})${detail}`);
       refreshConsultations();
     } catch (e) {
       alert("오류: " + e.message);
