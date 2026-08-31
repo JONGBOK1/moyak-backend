@@ -3,6 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from src.api.limiter import limiter
 from src.rag.chain import ask
 
 router = APIRouter()
@@ -32,7 +33,8 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest, request: Request) -> ChatResponse:
+@limiter.limit("15/minute;200/day")
+def chat(request: Request, payload: ChatRequest) -> ChatResponse:
     result = ask(
         payload.question,
         history=[m.model_dump() for m in payload.history],

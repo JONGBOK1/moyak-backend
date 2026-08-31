@@ -123,6 +123,8 @@ python tests/check_rag_quality.py   # RAG 답변 품질 셀프 체크 (실제 AP
 
 **`GET /health`** → `{"status": "ok"}`
 
+**요청량 제한**: `/chat`은 IP당 분당 15회 · 일일 200회로 제한됩니다. 초과 시 `429`와 함께 안내 메시지가 반환됩니다.
+
 ## 폴더 구조
 
 ```

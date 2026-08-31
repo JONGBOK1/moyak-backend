@@ -108,6 +108,7 @@ moyak-backend/
      - `evidence`: 답변이 실제로 인용한 원본 청크 목록(신뢰도 어필용 — "AI 요약"이 아니라 식약처 원문 그대로임을 사용자에게 보여주기 위해 추가)
    - 헬스체크: `GET /health` → `{"status": "ok"}`
    - 테스트용 페이지: `GET /` → 한국어 웹 UI (`src/api/static/chat_test.html`), 답변/출처/원문 근거를 브라우저에서 바로 확인 가능
+   - **요청량 제한**: `/chat`은 IP당 15회/분, 200회/일로 제한(`slowapi`, `src/api/limiter.py`). 초과 시 `429` + `{"detail": "요청이 너무 많습니다..."}`. 실제 비용이 드는 엔드포인트라 남용 방지용. Render처럼 프록시 뒤에 배포할 때는 uvicorn에 `--proxy-headers`를 켜야 진짜 클라이언트 IP로 카운트된다(안 켜면 전부 같은 IP로 잡혀 프록시 하나가 전체 사용자의 한도를 공유하게 됨).
    - (이 스펙이 바뀌면 반드시 이 문서와 팀에 공유할 것)
 8. **STEP 7 - 테스트**: 정제/청킹 로직 유닛 테스트(`pytest`, API 호출 없음), RAG 답변 품질 셀프 체크(`python tests/check_rag_quality.py`, 실제 API 호출·소액 비용 발생·수동 실행 전용이라 pytest 자동 수집 대상 아님)
 

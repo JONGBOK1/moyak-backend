@@ -5,8 +5,10 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from src.api.limiter import limiter, rate_limit_exceeded_handler
 from src.api.routes import chat
 from src.rag.chain import get_llm, get_rewrite_llm, get_vector_store
 
@@ -22,6 +24,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MOYAK 모약이 API", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
