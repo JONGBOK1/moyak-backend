@@ -19,6 +19,7 @@ from src.rag.prompts import (
     FIELD_LABELS,
     INTENT_SYSTEM_PROMPT,
     INTERACTION_SYSTEM_PROMPT,
+    POPULATION_SYSTEM_PROMPT,
     RECOMMEND_SYSTEM_PROMPT,
     REWRITE_SYSTEM_PROMPT,
     SYMPTOM_QUERY_PROMPT,
@@ -89,6 +90,20 @@ def classify_intent(question: str, rewrite_llm) -> str:
     return "specific"
 
 
+def detect_population(question: str, rewrite_llm) -> str | None:
+    """질문에 임산부/소아/고령자 등 특수 대상자가 언급됐는지 판단한다."""
+    messages = [
+        {"role": "system", "content": POPULATION_SYSTEM_PROMPT},
+        {"role": "user", "content": question},
+    ]
+    response = rewrite_llm.invoke(messages)
+    label = response.content.strip().lower()
+    for population in ("pregnant", "child", "elderly"):
+        if population in label:
+            return population
+    return None
+
+
 def _extract_cited(docs, answer: str) -> tuple[list[str], list[dict]]:
     """LLM이 답변에서 실제로 언급/인용한 청크만 출처/근거로 남긴다.
 
@@ -115,8 +130,29 @@ def _extract_cited(docs, answer: str) -> tuple[list[str], list[dict]]:
     return sources, evidence
 
 
-def _ask_specific(question: str, search_query: str, history: list[dict], vector_store, llm) -> dict:
-    docs = vector_store.similarity_search(search_query, k=TOP_K)
+def _ask_specific(
+    question: str,
+    search_query: str,
+    history: list[dict],
+    vector_store,
+    llm,
+    rewrite_llm=None,
+    population: str | None = None,
+) -> dict:
+    docs = None
+    if population and rewrite_llm is not None:
+        # 일반 top_k 검색은 "임산부가 먹어도 돼?" 같은 수식어 때문에 엉뚱한 약으로 샐 수 있다.
+        # 특수 대상자 질문일 때는 약 이름을 먼저 정확히 추출해서, 그 약의 전체 필드(주의사항/경고 포함)를 확실히 가져온다.
+        drug_names = extract_drug_names(search_query, rewrite_llm)
+        resolved_docs = []
+        for name in drug_names:
+            resolved_docs.extend(_resolve_drug_docs(name, vector_store))
+        if resolved_docs:
+            docs = resolved_docs
+
+    if docs is None:
+        docs = vector_store.similarity_search(search_query, k=TOP_K)
+
     context = build_context(docs)
     user_prompt = build_user_prompt(question, context)
 
@@ -249,7 +285,9 @@ def ask(question: str, history: list[dict] | None = None, vector_store=None, llm
         return _ask_symptom(question, search_query, history, vector_store, llm, rewrite_llm)
     if intent == "interaction":
         return _ask_interaction(question, search_query, history, vector_store, llm, rewrite_llm)
-    return _ask_specific(question, search_query, history, vector_store, llm)
+
+    population = detect_population(search_query, rewrite_llm)
+    return _ask_specific(question, search_query, history, vector_store, llm, rewrite_llm, population)
 
 
 def main():
