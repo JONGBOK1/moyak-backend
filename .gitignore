@@ -17,6 +17,9 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# 상담/자판기 연동 로컬 DB (SQLite)
+data/*.db
+
 # 노트북 체크포인트
 .ipynb_checkpoints/
 

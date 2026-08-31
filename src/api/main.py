@@ -9,7 +9,8 @@ from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
-from src.api.routes import chat
+from src.api.routes import chat, consultation, vending
+from src.consult.db import init_db
 from src.rag.chain import get_llm, get_rewrite_llm, get_vector_store
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -17,6 +18,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db()
     app.state.vector_store = get_vector_store()
     app.state.llm = get_llm()
     app.state.rewrite_llm = get_rewrite_llm()
@@ -36,6 +38,8 @@ app.add_middleware(
 )
 
 app.include_router(chat.router)
+app.include_router(consultation.router)
+app.include_router(vending.router)
 
 
 @app.get("/health")
