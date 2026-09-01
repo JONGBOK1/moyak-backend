@@ -151,10 +151,11 @@ moyak-backend/
 
 **배경**: 자판기에서 의약품을 파는 건 약사법상 엄격히 규제되는 영역이라, "AI가 직접 판매를 승인하지 않고 반드시 약사가 최종 승인한다"는 흐름을 실제로 작동하는 코드로 보여주는 게 목적이다(규제샌드박스 신청 근거 자료용). 실제 결제/실제 판매 기능은 아직 없다.
 
-**흐름**: 챗봇 상담(`/chat`) → (사용자는 챗봇 화면의 "약사와 상담하기" 버튼만 누름, 약품 코드를 몰라도 됨) → 화상상담 요청 → **약사가 대화 내용을 보고 처방할 약을 직접 정해서 승인/거절** → 승인 시 "승인된 구매 건" 생성(유효시간 있음) → 사용자가 자판기 QR을 앱으로 스캔 → 대기 중인 승인 건이 있으면 수령 확정 → 자판기 개방(모의).
+**흐름**: 챗봇 상담(`/chat`) → (사용자는 챗봇 화면의 "약사와 상담하기" 버튼만 누름, 약품 코드를 몰라도 됨) → **실제 화상 상담방(Daily.co) 생성 및 연결** → **약사가 대화 내용을 보고 처방할 약을 직접 정해서 승인/거절** → 승인 시 "승인된 구매 건" 생성(유효시간 있음) → 사용자가 자판기 QR을 앱으로 스캔 → 대기 중인 승인 건이 있으면 수령 확정 → 자판기 개방(모의).
 
-- `POST /consultations` — 상담 요청 생성. 요청 바디는 `user_id`, `chat_summary`만 있으면 되고(`requested_drug_*`는 선택), 약품 지정은 사용자가 아니라 약사가 승인 시점에 한다.
-  - 실사용 진입점: `src/api/static/chat_test.html`의 "🩺 약사와 상담하기" 버튼 — 클릭 시 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송한다. 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`).
+- `POST /consultations` — 상담 요청 생성. 요청 바디는 `user_id`, `chat_summary`만 있으면 되고(`requested_drug_*`는 선택), 약품 지정은 사용자가 아니라 약사가 승인 시점에 한다. 생성 시 `src/consult/video.py`가 Daily.co REST API로 화상 상담방을 만들고 `room_url`을 응답에 포함한다(생성 실패해도 상담 요청 자체는 계속 진행 — 화상은 부가 기능).
+  - 실사용 진입점: `src/api/static/chat_test.html`의 "🩺 약사와 상담하기" 버튼 — 클릭 시 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송하고, 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`).
+  - 약사 쪽 진입점: `/consult-demo`의 대기 목록에 "🎥 화상 상담 입장" 링크로 같은 `room_url`을 연다 — 사용자와 약사가 **같은 방**에 들어와야 화상이 연결된다.
 - `GET /consultations?status=pending` — 대기 목록 (약사 대시보드용)
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
 - `POST /vending/machines/{machine_id}/rotate-qr` — 자판기가 주기적으로 새 QR 토큰 발급(기본 60초 유효) → 화면에 QR로 표시
@@ -166,6 +167,6 @@ moyak-backend/
 
 **아직 스텁인 부분** (실제 서비스 전 반드시 교체 필요):
 - **사용자/약사 인증 없음**: `user_id`/`pharmacist_id`를 요청 바디로 그대로 받는다. 실제 인증 시스템이 붙으면 그 값으로 교체.
-- **화상상담 없음**: 화상통화 SDK(Agora/Daily.co 등) 연동은 아직. 지금은 "상담 요청 → 약사가 텍스트 요약만 보고 승인" 흐름으로 대체.
+- **화상상담**: Daily.co 프리빌트 iframe으로 연결됨(`DAILY_API_KEY`/`DAILY_SUBDOMAIN` 필요). 다만 자체 디자인의 커스텀 통화 UI는 아니고 Daily 기본 UI 그대로 노출됨 — Figma 디자인과 통일하려면 Daily의 JS/Flutter SDK로 직접 UI를 짜야 함.
 - **자판기 하드웨어 없음**: MQTT로 실제 자판기에 개방 신호를 보내는 부분은 아직 없고, `/vending/dispense`가 성공 응답만 준다.
 - **DB는 SQLite** (`data/moyak.db`, `.env`의 `DATABASE_URL`로 교체 가능). **Render 무료 인스턴스는 디스크가 휘발성이라 재배포/재시작 시 초기화된다** — 실제 서비스로 갈 땐 Postgres 같은 영속 DB로 바꿔야 한다.

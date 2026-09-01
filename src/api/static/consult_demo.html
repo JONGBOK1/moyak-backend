@@ -122,6 +122,17 @@
           <div style="white-space:pre-wrap">대화 내용: ${c.chat_summary}</div>
         `;
 
+        if (c.room_url) {
+          const videoLink = document.createElement("a");
+          videoLink.href = c.room_url;
+          videoLink.target = "_blank";
+          videoLink.textContent = "🎥 화상 상담 입장";
+          videoLink.style.display = "inline-block";
+          videoLink.style.marginTop = "6px";
+          div.appendChild(videoLink);
+          div.appendChild(document.createElement("br"));
+        }
+
         const seqInput = document.createElement("input");
         seqInput.placeholder = "처방할 약품 코드 (item_seq)";
         seqInput.value = c.requested_drug_item_seq || "";

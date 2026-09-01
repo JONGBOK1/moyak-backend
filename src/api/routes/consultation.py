@@ -29,6 +29,7 @@ class ConsultationResponse(BaseModel):
     id: str
     user_id: str
     chat_summary: str
+    room_url: str | None
     requested_drug_item_seq: str | None
     requested_drug_name: str | None
     status: str

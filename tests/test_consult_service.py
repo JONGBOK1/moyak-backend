@@ -18,6 +18,13 @@ def db():
     session.close()
 
 
+@pytest.fixture(autouse=True)
+def no_real_daily_calls(monkeypatch):
+    # create_consultation()이 실제 Daily.co API를 호출하지 않도록 막는다
+    # (테스트가 느려지고 무료 할당량을 깎는 걸 방지).
+    monkeypatch.setattr(service.video, "create_room", lambda: "https://moyak-team.daily.co/test-room")
+
+
 def approved_consultation(db, user_id="user1"):
     consultation = service.create_consultation(
         db, user_id=user_id, chat_summary="두통 상담", requested_drug_item_seq="A1", requested_drug_name="약A"
@@ -29,6 +36,18 @@ def test_create_consultation_defaults_to_pending(db):
     consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
     assert consultation.status == ConsultationStatus.PENDING
     assert consultation.id
+
+
+def test_create_consultation_stores_room_url(db):
+    consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
+    assert consultation.room_url == "https://moyak-team.daily.co/test-room"
+
+
+def test_create_consultation_survives_room_creation_failure(db, monkeypatch):
+    monkeypatch.setattr(service.video, "create_room", lambda: None)
+    consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
+    assert consultation.status == ConsultationStatus.PENDING
+    assert consultation.room_url is None
 
 
 def test_decide_consultation_approve_creates_purchase(db):

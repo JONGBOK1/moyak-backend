@@ -43,6 +43,7 @@ class ConsultationRequest(Base):
     id = Column(String, primary_key=True, default=_uuid)
     user_id = Column(String, nullable=False, index=True)
     chat_summary = Column(String, nullable=False)  # 챗봇 대화 요약 (약사가 참고)
+    room_url = Column(String, nullable=True)  # 화상 상담방 URL (Daily.co). 생성 실패 시 None
     requested_drug_item_seq = Column(String, nullable=True)
     requested_drug_name = Column(String, nullable=True)
     status = Column(String, default=ConsultationStatus.PENDING, nullable=False)

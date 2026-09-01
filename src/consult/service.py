@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from src.consult import video
 from src.consult.models import ApprovedPurchase, ConsultationRequest, ConsultationStatus, PurchaseStatus, VendingMachine
 
 PURCHASE_VALID_MINUTES = 60
@@ -40,6 +41,7 @@ def create_consultation(
     consultation = ConsultationRequest(
         user_id=user_id,
         chat_summary=chat_summary,
+        room_url=video.create_room(),
         requested_drug_item_seq=requested_drug_item_seq,
         requested_drug_name=requested_drug_name,
     )
