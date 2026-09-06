@@ -153,9 +153,12 @@ moyak-backend/
 
 **흐름**: 챗봇 상담(`/chat`) → (사용자는 챗봇 화면의 "약사와 상담하기" 버튼만 누름, 약품 코드를 몰라도 됨) → **실제 화상 상담방(Daily.co) 생성 및 연결** → **약사가 대화 내용을 보고 처방할 약을 직접 정해서 승인/거절** → 승인 시 "승인된 구매 건" 생성(유효시간 있음) → 사용자가 자판기 QR을 앱으로 스캔 → 대기 중인 승인 건이 있으면 수령 확정 → 자판기 개방(모의).
 
-- `POST /consultations` — 상담 요청 생성. 요청 바디는 `user_id`, `chat_summary`만 있으면 되고(`requested_drug_*`는 선택), 약품 지정은 사용자가 아니라 약사가 승인 시점에 한다. 생성 시 `src/consult/video.py`가 Daily.co REST API로 화상 상담방을 만들고 `room_url`을 응답에 포함한다(생성 실패해도 상담 요청 자체는 계속 진행 — 화상은 부가 기능).
-  - 실사용 진입점: `src/api/static/chat_test.html`의 "🩺 약사와 상담하기" 버튼 — 클릭 시 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송하고, 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`).
-  - 약사 쪽 진입점: `/consult-demo`의 대기 목록에 "🎥 화상 상담 입장" 링크로 같은 `room_url`을 연다 — 사용자와 약사가 **같은 방**에 들어와야 화상이 연결된다.
+- `POST /consultations` — 상담 요청 생성. 요청 바디는 `user_id`만 필수이고 `chat_summary`는 선택이다(`requested_drug_*`도 선택) — 약품 지정은 사용자가 아니라 약사가 승인 시점에 한다. `chat_summary`를 안 보내면 서버가 `DIRECT_REQUEST_SUMMARY`(고정 문구: "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)")로 채운다. 생성 시 `src/consult/video.py`가 Daily.co REST API로 화상 상담방을 만들고 `room_url`을 응답에 포함한다(생성 실패해도 상담 요청 자체는 계속 진행 — 화상은 부가 기능).
+  - **진입점 두 곳**이 같은 API를 쓴다(회의 결과: 챗봇을 강제로 거치게 하지 않기 위해 분리):
+    - `GET /` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
+    - `GET /consult` (`consult_direct.html`) — 네비게이션바/메뉴에서 바로 진입하는 용도. 텍스트 입력 없이 버튼 하나로 즉시 상담 요청(= `chat_summary` 생략) → 바로 화상 화면으로 전환
+  - 두 진입점 다 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`, 두 페이지가 같은 키를 써서 동일 브라우저면 ID가 이어진다).
+  - 약사 쪽 진입점: `/consult-demo`의 대기 목록에 "🎥 화상 상담 입장" 링크로 같은 `room_url`을 연다 — 사용자와 약사가 **같은 방**에 들어와야 화상이 연결된다. `chat_summary`가 기본 문구 그대로면 "챗봇 대화 없이 바로 온 상담"임을 약사가 바로 알 수 있다.
 - `GET /consultations?status=pending` — 대기 목록 (약사 대시보드용)
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
 - `POST /vending/machines/{machine_id}/rotate-qr` — 자판기가 주기적으로 새 QR 토큰 발급(기본 60초 유효) → 화면에 QR로 표시

@@ -31,16 +31,19 @@ class InvalidStateError(Exception):
     pass
 
 
+DIRECT_REQUEST_SUMMARY = "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)"
+
+
 def create_consultation(
     db: Session,
     user_id: str,
-    chat_summary: str,
+    chat_summary: str | None = None,
     requested_drug_item_seq: str | None = None,
     requested_drug_name: str | None = None,
 ) -> ConsultationRequest:
     consultation = ConsultationRequest(
         user_id=user_id,
-        chat_summary=chat_summary,
+        chat_summary=chat_summary or DIRECT_REQUEST_SUMMARY,
         room_url=video.create_room(),
         requested_drug_item_seq=requested_drug_item_seq,
         requested_drug_name=requested_drug_name,

@@ -12,7 +12,9 @@ router = APIRouter(prefix="/consultations", tags=["consultation"])
 
 class ConsultationCreateRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
-    chat_summary: str = Field(..., min_length=1, description="챗봇 상담 대화 요약 (약사가 참고)")
+    chat_summary: str | None = Field(
+        None, description="챗봇 상담 대화 요약 (약사가 참고). 챗봇 없이 바로 상담을 시작한 경우 비워도 됨"
+    )
     requested_drug_item_seq: str | None = None
     requested_drug_name: str | None = None
 

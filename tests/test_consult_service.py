@@ -50,6 +50,13 @@ def test_create_consultation_survives_room_creation_failure(db, monkeypatch):
     assert consultation.room_url is None
 
 
+def test_create_consultation_without_chat_summary_uses_default_text(db):
+    # 챗봇 없이 네비게이션바 등에서 바로 상담을 시작한 경우
+    consultation = service.create_consultation(db, user_id="user1")
+    assert consultation.chat_summary == service.DIRECT_REQUEST_SUMMARY
+    assert consultation.status == ConsultationStatus.PENDING
+
+
 def test_decide_consultation_approve_creates_purchase(db):
     consultation = approved_consultation(db)
     assert consultation.status == ConsultationStatus.APPROVED

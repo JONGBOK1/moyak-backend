@@ -55,3 +55,9 @@ def chat_test_page():
 @app.get("/consult-demo", response_class=HTMLResponse)
 def consult_demo_page():
     return (STATIC_DIR / "consult_demo.html").read_text(encoding="utf-8")
+
+
+@app.get("/consult", response_class=HTMLResponse)
+def consult_direct_page():
+    """챗봇 대화 없이 바로 약사 화상 상담을 시작하는 진입점 (네비게이션바용)."""
+    return (STATIC_DIR / "consult_direct.html").read_text(encoding="utf-8")
