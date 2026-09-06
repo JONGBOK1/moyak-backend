@@ -137,7 +137,8 @@ moyak-backend/
 - [x] STEP 6: FastAPI 서버 (`/chat`, `/health` 작성 완료, 실제 서버 기동 후 curl로 검증 완료)
 - [x] STEP 7: 테스트 (`tests/test_cleaning.py`, `tests/test_chunking.py` 유닛 테스트 9건 통과 / `tests/check_rag_quality.py` 셀프 체크 통과 — 안전 문구 규칙 자동 검증 + 어투는 수동 확인용)
 - [x] `/chat` 요청량 제한 (IP당 15회/분·200회/일, `slowapi`, `src/api/limiter.py`)
-- [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 15건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
+- [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
+- [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
 
 ## 8. 코딩 시 참고사항
 
@@ -158,8 +159,11 @@ moyak-backend/
     - `GET /` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
     - `GET /consult` (`consult_direct.html`) — 네비게이션바/메뉴에서 바로 진입하는 용도. 텍스트 입력 없이 버튼 하나로 즉시 상담 요청(= `chat_summary` 생략) → 바로 화상 화면으로 전환
   - 두 진입점 다 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`, 두 페이지가 같은 키를 써서 동일 브라우저면 ID가 이어진다).
+  - **상담 생성 전에 항상 `GET /consultations?status=pending&user_id=`로 먼저 조회**해서, 이미 대기 중인 상담이 있으면 새로 만들지 않고 그걸 재사용한다(중복 상담 방지 — 사용자가 버튼을 여러 번 누르거나 페이지를 새로고침해도 상담이 중복 생성되지 않음).
+  - 상담 생성/재사용 이후 두 페이지 모두 **3초 간격으로 `GET /consultations/{id}`를 폴링**해서 상태 변화를 실시간 반영한다: `approved`가 되면 처방된 약 이름(`approved_drug_name`)과 "자판기에서 QR 스캔" 안내 배너를, `rejected`가 되면 약사가 입력한 `decision_reason`(없으면 기본 안내 문구)을 화면에 표시하고 폴링을 멈춘다.
   - 약사 쪽 진입점: `/consult-demo`의 대기 목록에 "🎥 화상 상담 입장" 링크로 같은 `room_url`을 연다 — 사용자와 약사가 **같은 방**에 들어와야 화상이 연결된다. `chat_summary`가 기본 문구 그대로면 "챗봇 대화 없이 바로 온 상담"임을 약사가 바로 알 수 있다.
-- `GET /consultations?status=pending` — 대기 목록 (약사 대시보드용)
+- `GET /consultations?status=pending&user_id=` — 대기 목록 (약사 대시보드용으로는 `status`만, 특정 사용자의 중복 상담 확인용으로는 `user_id`도 같이 필터링)
+- `GET /consultations/{id}` — 단건 조회. 챗봇/상담 페이지가 자신이 만든 상담의 상태를 폴링할 때 쓴다. 없는 id면 404.
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
 - `POST /vending/machines/{machine_id}/rotate-qr` — 자판기가 주기적으로 새 QR 토큰 발급(기본 60초 유효) → 화면에 QR로 표시
 - `POST /vending/scan` — 앱이 QR 스캔 결과 전송 → 그 사용자의 대기 중인 승인 건 확인

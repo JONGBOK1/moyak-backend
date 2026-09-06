@@ -54,11 +54,23 @@ def create_consultation(
     return consultation
 
 
-def list_consultations(db: Session, status: str | None = None) -> list[ConsultationRequest]:
+def list_consultations(
+    db: Session, status: str | None = None, user_id: str | None = None
+) -> list[ConsultationRequest]:
     query = db.query(ConsultationRequest)
     if status:
         query = query.filter(ConsultationRequest.status == status)
+    if user_id:
+        query = query.filter(ConsultationRequest.user_id == user_id)
     return query.order_by(ConsultationRequest.created_at.desc()).all()
+
+
+def get_consultation(db: Session, consultation_id: str) -> ConsultationRequest:
+    """채팅 화면이 자신이 요청한 상담의 현재 상태(대기/승인/거절)를 폴링할 때 쓴다."""
+    consultation = db.get(ConsultationRequest, consultation_id)
+    if consultation is None:
+        raise NotFoundError(f"상담 요청을 찾을 수 없습니다: {consultation_id}")
+    return consultation
 
 
 def decide_consultation(

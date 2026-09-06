@@ -67,8 +67,20 @@ def create_consultation(payload: ConsultationCreateRequest, db: Session = Depend
 
 
 @router.get("", response_model=list[ConsultationResponse])
-def list_consultations(status: str | None = None, db: Session = Depends(get_db)) -> list[ConsultationResponse]:
-    return [_to_response(c) for c in service.list_consultations(db, status=status)]
+def list_consultations(
+    status: str | None = None, user_id: str | None = None, db: Session = Depends(get_db)
+) -> list[ConsultationResponse]:
+    return [_to_response(c) for c in service.list_consultations(db, status=status, user_id=user_id)]
+
+
+@router.get("/{consultation_id}", response_model=ConsultationResponse)
+def get_consultation(consultation_id: str, db: Session = Depends(get_db)) -> ConsultationResponse:
+    """채팅 화면이 자신이 요청한 상담의 상태를 폴링할 때 쓰는 단건 조회."""
+    try:
+        consultation = service.get_consultation(db, consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return _to_response(consultation)
 
 
 @router.post("/{consultation_id}/decision", response_model=ConsultationResponse)

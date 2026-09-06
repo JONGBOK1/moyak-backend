@@ -136,12 +136,15 @@ python tests/check_rag_quality.py   # RAG 답변 품질 셀프 체크 (실제 AP
 - `GET /` — 챗봇과 대화 후 "🩺 약사와 상담하기" (대화 내용이 약사에게 전달됨)
 - `GET /consult` — 네비게이션바용. 버튼 하나로 바로 화상 연결 (대화 없이 화상으로 바로 문진)
 
+두 진입점 모두 상담 요청 후 **3초 간격 폴링**으로 결과를 실시간 반영합니다: 이미 대기 중인 상담이 있으면 새로 만들지 않고 재사용하고(중복 방지), 약사가 승인하면 처방된 약 이름과 "자판기에서 QR 스캔" 안내가, 거절하면 약사가 남긴 사유가 화면에 자동으로 뜹니다.
+
 **데모 페이지**: `/consult-demo`에서 사용자 앱·약사 대시보드·자판기 화면(실제 QR 이미지 포함)을 한 화면에서 확인할 수 있습니다.
 
 ```
-POST /consultations                        상담 요청 생성
-GET  /consultations?status=pending          대기 목록 (약사용)
-POST /consultations/{id}/decision           약사 승인/거절
+POST /consultations                          상담 요청 생성
+GET  /consultations?status=pending&user_id=  대기 목록 (약사용 / 사용자별 중복 확인용)
+GET  /consultations/{id}                     단건 조회 (챗봇·상담 페이지가 상태 폴링할 때 사용)
+POST /consultations/{id}/decision            약사 승인/거절
 POST /vending/machines/{machine_id}/rotate-qr   자판기 QR 토큰 발급
 POST /vending/scan                          QR 스캔 → 대기 중인 승인 건 확인
 POST /vending/dispense                      수령 확정

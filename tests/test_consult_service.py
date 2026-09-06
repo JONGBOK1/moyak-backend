@@ -38,6 +38,26 @@ def test_create_consultation_defaults_to_pending(db):
     assert consultation.id
 
 
+def test_get_consultation_returns_it(db):
+    created = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
+    fetched = service.get_consultation(db, created.id)
+    assert fetched.id == created.id
+
+
+def test_get_consultation_not_found_raises(db):
+    with pytest.raises(service.NotFoundError):
+        service.get_consultation(db, "nope")
+
+
+def test_list_consultations_filters_by_user_id(db):
+    service.create_consultation(db, user_id="user1", chat_summary="a")
+    service.create_consultation(db, user_id="user2", chat_summary="b")
+
+    results = service.list_consultations(db, user_id="user1")
+    assert len(results) == 1
+    assert results[0].user_id == "user1"
+
+
 def test_create_consultation_stores_room_url(db):
     consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
     assert consultation.room_url == "https://moyak-team.daily.co/test-room"

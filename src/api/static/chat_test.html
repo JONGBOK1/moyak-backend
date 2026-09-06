@@ -35,6 +35,8 @@
     align-self: center; background: #fff3cd; color: #856404; padding: 8px 14px;
     border-radius: 8px; font-size: 13px; text-align: center;
   }
+  .approved-note { background: #d4edda; color: #155724; }
+  .rejected-note { background: #f8d7da; color: #721c24; }
   .video-wrap { align-self: center; width: 100%; }
   .video-wrap iframe {
     width: 100%; height: 420px; border: 1px solid #ddd; border-radius: 10px;
@@ -151,6 +153,52 @@
     threadEl.innerHTML = "";
   });
 
+  const POLL_INTERVAL_MS = 3000;
+  let pollTimer = null;
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function renderConsultationOutcome(data) {
+    if (data.status === "approved") {
+      threadEl.appendChild(
+        el("div", {
+          className: "system-note approved-note",
+          textContent:
+            "🎉 약사가 [" + (data.approved_drug_name || "약") + "]을(를) 처방했습니다. " +
+            "자판기에서 QR을 스캔하면 받으실 수 있어요.",
+        })
+      );
+    } else if (data.status === "rejected") {
+      const reasonText = data.decision_reason ? "사유: " + data.decision_reason : "사유가 별도로 전달되지 않았습니다.";
+      threadEl.appendChild(
+        el("div", { className: "system-note rejected-note", textContent: "상담이 거절되었습니다. " + reasonText })
+      );
+    }
+    threadEl.lastChild.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  function pollConsultationStatus(consultationId) {
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch("/consultations/" + consultationId);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status !== "pending") {
+          stopPolling();
+          renderConsultationOutcome(data);
+        }
+      } catch (e) {
+        // 네트워크 순단 등은 조용히 무시하고 다음 폴링에서 다시 시도한다.
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
   async function requestConsultation() {
     if (history.length === 0) {
       alert("먼저 챗봇과 증상/약에 대해 대화해주세요. 그 대화 내용이 약사에게 전달됩니다.");
@@ -163,19 +211,36 @@
     waiting.scrollIntoView({ behavior: "smooth", block: "end" });
 
     try {
-      const chatSummary = history
-        .map((h) => (h.role === "user" ? "사용자: " : "모약이: ") + h.content)
-        .join("\n");
+      // 이미 대기 중인 상담이 있으면 새로 만들지 않고 그걸 이어서 보여준다.
+      const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
+      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
 
-      const res = await fetch("/consultations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, chat_summary: chatSummary }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+      let data;
+      const reused = pendingList.length > 0;
+      if (reused) {
+        data = pendingList[0];
+      } else {
+        const chatSummary = history
+          .map((h) => (h.role === "user" ? "사용자: " : "모약이: ") + h.content)
+          .join("\n");
+
+        const res = await fetch("/consultations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, chat_summary: chatSummary }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+      }
 
       waiting.remove();
+
+      if (reused) {
+        threadEl.appendChild(
+          el("div", { className: "system-note", textContent: "이미 대기 중인 상담이 있어서 이어서 진행합니다. (요청 ID: " + data.id.slice(0, 8) + "...)" })
+        );
+        threadEl.lastChild.scrollIntoView({ behavior: "smooth", block: "end" });
+      }
 
       if (data.room_url) {
         const videoWrap = el("div", { className: "video-wrap" });
@@ -196,6 +261,8 @@
         );
         threadEl.lastChild.scrollIntoView({ behavior: "smooth", block: "end" });
       }
+
+      pollConsultationStatus(data.id);
     } catch (e) {
       waiting.remove();
       alert("상담 요청 실패: " + e.message);

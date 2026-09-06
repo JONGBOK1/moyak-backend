@@ -16,6 +16,8 @@
   }
   .start-btn:disabled { opacity: 0.6; cursor: default; }
   .waiting { color: #856404; background: #fff3cd; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-top: 20px; }
+  .approved-note { color: #155724; background: #d4edda; }
+  .rejected-note { color: #721c24; background: #f8d7da; }
   .video-wrap { margin-top: 20px; }
   .video-wrap iframe { width: 100%; height: 480px; border: 1px solid #ddd; border-radius: 10px; }
   .video-label { font-size: 12px; color: #888; margin-bottom: 6px; }
@@ -55,6 +57,49 @@
     return node;
   }
 
+  const POLL_INTERVAL_MS = 3000;
+  let pollTimer = null;
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function renderConsultationOutcome(data) {
+    if (data.status === "approved") {
+      resultEl.appendChild(
+        el("div", {
+          className: "waiting approved-note",
+          textContent:
+            "🎉 약사가 [" + (data.approved_drug_name || "약") + "]을(를) 처방했습니다. " +
+            "자판기에서 QR을 스캔하면 받으실 수 있어요.",
+        })
+      );
+    } else if (data.status === "rejected") {
+      const reasonText = data.decision_reason ? "사유: " + data.decision_reason : "사유가 별도로 전달되지 않았습니다.";
+      resultEl.appendChild(el("div", { className: "waiting rejected-note", textContent: "상담이 거절되었습니다. " + reasonText }));
+    }
+  }
+
+  function pollConsultationStatus(consultationId) {
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch("/consultations/" + consultationId);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status !== "pending") {
+          stopPolling();
+          renderConsultationOutcome(data);
+        }
+      } catch (e) {
+        // 네트워크 순단 등은 조용히 무시하고 다음 폴링에서 다시 시도한다.
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
   async function startConsultation() {
     startBtn.disabled = true;
     introEl.style.display = "none";
@@ -64,15 +109,31 @@
     resultEl.appendChild(waiting);
 
     try {
-      const res = await fetch("/consultations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+      // 이미 대기 중인 상담이 있으면 새로 만들지 않고 그걸 이어서 보여준다.
+      const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
+      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
+
+      let data;
+      const reused = pendingList.length > 0;
+      if (reused) {
+        data = pendingList[0];
+      } else {
+        const res = await fetch("/consultations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+      }
 
       waiting.remove();
+
+      if (reused) {
+        resultEl.appendChild(
+          el("div", { className: "waiting", textContent: "이미 대기 중인 상담이 있어서 이어서 진행합니다. (요청 ID: " + data.id.slice(0, 8) + "...)" })
+        );
+      }
 
       if (data.room_url) {
         const videoWrap = el("div", { className: "video-wrap" });
@@ -86,6 +147,8 @@
           el("div", { className: "waiting", textContent: "화상 연결에 문제가 있습니다. 잠시 후 다시 시도해주세요. (요청 ID: " + data.id.slice(0, 8) + "...)" })
         );
       }
+
+      pollConsultationStatus(data.id);
     } catch (e) {
       waiting.remove();
       resultEl.appendChild(el("div", { className: "waiting", textContent: "상담 요청 실패: " + e.message }));
