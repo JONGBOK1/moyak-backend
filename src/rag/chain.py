@@ -6,6 +6,7 @@
 - interaction: 병용 안전성 질문 -> 언급된 약 이름을 추출해 각각 전체 정보를 모아 상호작용/주의사항/경고를 비교
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -104,18 +105,26 @@ def detect_population(question: str, rewrite_llm) -> str | None:
     return None
 
 
+def _normalize_item_name(name: str) -> str:
+    """비교용으로 정규화한다.
+
+    LLM이 답변에서 제품명을 인용할 때 띄어쓰기를 살짝 바꾸거나(예: "타이레놀정500밀리그람" ->
+    "타이레놀정 500밀리그람"), 끝의 성분명 괄호를 생략하는 경우가 있어(예: "타이레놀정500밀리그람(아세트아미노펜)" ->
+    "타이레놀정500밀리그람") 공백 제거 + 끝 괄호 제거 후 비교한다.
+    """
+    return re.sub(r"\([^)]*\)\s*$", "", name).replace(" ", "")
+
+
 def _extract_cited(docs, answer: str) -> tuple[list[str], list[dict]]:
     """LLM이 답변에서 실제로 언급/인용한 청크만 출처/근거로 남긴다.
 
     그렇지 않으면 "확인되지 않습니다" 류 답변에도 무관한 약품명/원문이 붙는 문제가 생긴다.
-    LLM이 긴 제품명을 인용할 때 띄어쓰기를 살짝 바꿔 쓰는 경우가 있어(예: "타이레놀정500밀리그람" ->
-    "타이레놀정 500밀리그람"), 공백을 제거하고 비교한다.
     """
     answer_no_space = answer.replace(" ", "")
     cited_docs = [
         doc
         for doc in docs
-        if doc.metadata.get("item_name") and doc.metadata["item_name"].replace(" ", "") in answer_no_space
+        if doc.metadata.get("item_name") and _normalize_item_name(doc.metadata["item_name"]) in answer_no_space
     ]
     sources = sorted({doc.metadata["item_name"] for doc in cited_docs})
     evidence = [
