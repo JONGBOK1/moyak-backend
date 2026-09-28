@@ -67,6 +67,12 @@ class DispenseRequest(BaseModel):
     machine_id: str = Field(..., min_length=1)
 
 
+@router.get("/purchases", response_model=list[PurchaseResponse])
+def list_purchases(user_id: str, db: Session = Depends(get_db)) -> list[PurchaseResponse]:
+    """마이페이지 '전자 구매 허가서' 목록 — 상태(사용 가능/만료/수령 완료) 전부 포함."""
+    return service.list_purchases_for_user(db, user_id=user_id)
+
+
 @router.post("/machines/{machine_id}/rotate-qr", response_model=QrTokenResponse)
 def rotate_qr(machine_id: str, name: str | None = None, db: Session = Depends(get_db)) -> QrTokenResponse:
     """자판기가 주기적으로 호출 — 새 QR 토큰을 발급받아 화면에 QR로 표시한다."""

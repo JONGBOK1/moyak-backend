@@ -233,3 +233,15 @@ def dispense(db: Session, purchase_id: str, machine_id: str) -> ApprovedPurchase
     db.commit()
     db.refresh(purchase)
     return purchase
+
+
+def list_purchases_for_user(db: Session, user_id: str) -> list[ApprovedPurchase]:
+    """마이페이지의 '전자 구매 허가서' 목록에서 쓴다. 상태와 무관하게 전부 반환하고,
+    화면에서 만료 여부를 바로 알 수 있게 조회 시점에 만료 처리를 반영한다."""
+    purchases = (
+        db.query(ApprovedPurchase)
+        .filter(ApprovedPurchase.user_id == user_id)
+        .order_by(ApprovedPurchase.created_at.desc())
+        .all()
+    )
+    return [_expire_if_needed(db, p) for p in purchases]

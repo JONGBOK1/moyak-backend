@@ -275,3 +275,26 @@ def test_dispense_expired_purchase_raises(db):
 
     with pytest.raises(service.InvalidStateError):
         service.dispense(db, purchase_id=purchase.id, machine_id="M1")
+
+
+def test_list_purchases_for_user_returns_all_statuses(db):
+    approved_consultation(db, user_id="user1")
+    results = service.list_purchases_for_user(db, user_id="user1")
+    assert len(results) == 1
+    assert results[0].status == PurchaseStatus.PENDING
+
+
+def test_list_purchases_for_user_marks_expired(db):
+    consultation = approved_consultation(db, user_id="user1")
+    purchase = db.get(ApprovedPurchase, consultation.purchase.id)
+    purchase.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
+    db.commit()
+
+    results = service.list_purchases_for_user(db, user_id="user1")
+    assert results[0].status == PurchaseStatus.EXPIRED
+
+
+def test_list_purchases_for_user_excludes_other_users(db):
+    approved_consultation(db, user_id="user1")
+    results = service.list_purchases_for_user(db, user_id="user2")
+    assert results == []
