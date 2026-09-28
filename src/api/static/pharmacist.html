@@ -163,7 +163,8 @@
         const results = await api("GET", `/drugs/search?q=${encodeURIComponent(q)}`);
         resultsHolder.items = results;
         if (results.length === 0) {
-          closeDropdown();
+          dropdown.innerHTML = '<div class="drug-option" style="color:#888;cursor:default">검색 결과가 없습니다</div>';
+          dropdown.classList.add("open");
           return;
         }
         dropdown.innerHTML = results
@@ -174,7 +175,8 @@
           .join("");
         dropdown.classList.add("open");
       } catch (e) {
-        // 검색 실패는 조용히 무시 (자동완성이라 치명적이지 않음)
+        dropdown.innerHTML = '<div class="drug-option" style="color:#c0392b;cursor:default">약품 검색에 실패했습니다: ' + escapeHtml(e.message) + "</div>";
+        dropdown.classList.add("open");
       }
     }, 250);
 
@@ -183,7 +185,7 @@
     dropdown.addEventListener("mousedown", (e) => {
       // click 대신 mousedown: input의 blur보다 먼저 실행되게 해서 드롭다운이 닫히기 전에 선택을 잡는다.
       const opt = e.target.closest(".drug-option");
-      if (!opt) return;
+      if (!opt || opt.dataset.index === undefined) return; // 안내 문구 줄은 선택 대상 아님
       const item = resultsHolder.items[Number(opt.dataset.index)];
       nameInput.value = item.item_name;
       resultsHolder.selectedSeq = item.item_seq;

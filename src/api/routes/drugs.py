@@ -7,11 +7,11 @@ from pathlib import Path
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from src.config import DATA_PROCESSED_DIR
-
 router = APIRouter(prefix="/drugs", tags=["drugs"])
 
-CSV_PATH = DATA_PROCESSED_DIR / "eyakeunyo_clean.csv"
+# data/processed/는 .gitignore라 배포 서버에 없다 — 검색용 3개 컬럼만 뽑아 git에 포함시킨
+# 경량 인덱스를 쓴다 (scripts/build_drug_index.py로 생성).
+CSV_PATH = Path(__file__).resolve().parent.parent / "drug_index.csv"
 
 
 class DrugSummary(BaseModel):
