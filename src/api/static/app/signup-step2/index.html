@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="signup-step-2">
+    <div class="signup-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="top-header">
+        <div class="back-icon-container" id="backBtn">
+          <img class="chevron-left" src="chevron-left0.svg" />
+        </div>
+        <div class="div">회원가입</div>
+        <div class="rectangle"></div>
+      </div>
+      <div class="signup-progress-section">
+        <div class="step-label">
+          <div class="div2">비밀번호 설정</div>
+          <div class="_2-3">2 / 3</div>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill"></div>
+        </div>
+      </div>
+      <div class="signup-body">
+        <div class="input-group-pw">
+          <div class="div3">비밀번호</div>
+          <div class="input-wrapper">
+            <input class="div4" id="pwInput" type="password" placeholder="비밀번호를 입력해주세요" />
+            <img class="eye" src="eye0.svg" id="togglePw" />
+          </div>
+          <div class="_8" id="pwStrength" style="display:none">✓ 영문, 숫자, 특수문자 조합 8자 이상 충족</div>
+        </div>
+        <div class="input-group-confirm">
+          <div class="div3">비밀번호 확인</div>
+          <div class="input-wrapper">
+            <input class="div4" id="pwConfirmInput" type="password" placeholder="비밀번호를 다시 입력해주세요" />
+            <img class="eye-off" src="eye-off0.svg" id="toggleConfirm" />
+          </div>
+          <div class="div5" id="pwMismatch" style="display:none">✗ 비밀번호가 일치하지 않습니다.</div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-cta">
+      <div class="primary-button" id="nextBtn">
+        <div class="div6">다음</div>
+      </div>
+      <div class="home-indicator-area">
+        <div class="home-pill"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // 실제 회원가입 백엔드가 없어서(스텁 구간), 비밀번호 규칙/일치 여부만 클라이언트에서 검증한다.
+  const PW_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
+  const pwInput = document.getElementById("pwInput");
+  const pwConfirmInput = document.getElementById("pwConfirmInput");
+  const pwStrength = document.getElementById("pwStrength");
+  const pwMismatch = document.getElementById("pwMismatch");
+
+  function togglePasswordVisibility(input, icon) {
+    icon.addEventListener("click", () => {
+      input.type = input.type === "password" ? "text" : "password";
+    });
+  }
+  togglePasswordVisibility(pwInput, document.getElementById("togglePw"));
+  togglePasswordVisibility(pwConfirmInput, document.getElementById("toggleConfirm"));
+
+  function validate() {
+    pwStrength.style.display = PW_PATTERN.test(pwInput.value) ? "block" : "none";
+    pwMismatch.style.display = pwConfirmInput.value && pwConfirmInput.value !== pwInput.value ? "block" : "none";
+  }
+  pwInput.addEventListener("input", validate);
+  pwConfirmInput.addEventListener("input", validate);
+
+  document.getElementById("nextBtn").addEventListener("click", () => {
+    if (!PW_PATTERN.test(pwInput.value)) {
+      alert("영문, 숫자, 특수문자 조합 8자 이상으로 입력해주세요.");
+      return;
+    }
+    if (pwInput.value !== pwConfirmInput.value) {
+      alert("비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    location.href = "/app/signup-step3/";
+  });
+
+  document.getElementById("backBtn").addEventListener("click", () => {
+    location.href = "/app/signup-step1/";
+  });
+</script>
+</body>
+</html>
