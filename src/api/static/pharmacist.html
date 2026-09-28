@@ -212,18 +212,36 @@
   });
 
   // ---------- 대기 목록 ----------
+  // 5초마다 자동 새로고침되는데, 매번 카드를 통째로 새로 그리면 약사가 입력 중이던
+  // 약품명이 계속 지워지는 문제가 있었다. 그래서 이미 화면에 있는 카드는 건드리지 않고
+  // 새로 들어온 상담만 추가, 더 이상 대기 중이 아닌 상담만 제거하는 방식으로 바꿨다.
   async function loadPending() {
     const holder = document.getElementById("pendingTab");
     try {
       const items = await api("GET", "/consultations?status=pending");
+
+      const emptyNote = holder.querySelector("p.note");
+      if (emptyNote) emptyNote.remove();
+
       if (items.length === 0) {
-        holder.innerHTML = '<p class="note">대기 중인 상담이 없습니다.</p>';
+        holder.querySelectorAll(".card[data-id]").forEach((el) => el.remove());
+        if (!holder.querySelector("p.note")) {
+          holder.innerHTML = '<p class="note">대기 중인 상담이 없습니다.</p>';
+        }
         return;
       }
-      holder.innerHTML = "";
+
+      const currentIds = new Set(items.map((c) => c.id));
+      holder.querySelectorAll(".card[data-id]").forEach((el) => {
+        if (!currentIds.has(el.dataset.id)) el.remove();
+      });
+
       items.forEach((c) => {
+        if (holder.querySelector(`.card[data-id="${c.id}"]`)) return; // 이미 떠있는 카드는 그대로 둠 (입력 중인 값 보존)
+
         const card = document.createElement("div");
         card.className = "card";
+        card.dataset.id = c.id;
 
         const drugResults = { items: [], selectedSeq: "" };
         card.innerHTML = `
