@@ -55,8 +55,9 @@
         document.getElementById("subtitle").textContent = "아래 약품을 자판기에서 수령하실 수 있습니다.";
         document.getElementById("drugName").textContent = data.purchase.drug_item_name;
         document.getElementById("drugCard").style.display = "block";
+        document.getElementById("noticeBody").textContent = "잠시 후 로그인 홈 화면으로 이동합니다.";
         setTimeout(() => {
-          location.href = `/kiosk/dispensing/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(data.purchase.id)}`;
+          location.href = `/kiosk/main-home2/?machine=${encodeURIComponent(machineId)}`;
         }, 1800);
       } else {
         document.getElementById("subtitle").textContent = "연동이 완료되었습니다. 현재 약사가 승인한 구매 건은 없습니다.";
