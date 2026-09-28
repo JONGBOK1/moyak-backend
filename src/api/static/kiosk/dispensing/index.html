@@ -29,7 +29,8 @@
 <script>
   const params = new URLSearchParams(location.search);
   const machineId = params.get("machine") || "M001";
-  const purchaseId = params.get("purchase");
+  const purchaseId = params.get("purchase"); // 본인인증 구매 경로 (약사 승인건)
+  const orderId = params.get("order"); // 의약외품 즉시구매 경로 (장바구니 주문)
 
   async function api(method, path, body) {
     const res = await fetch(path, {
@@ -42,29 +43,49 @@
     return data;
   }
 
+  function showSuccess(summaryText) {
+    document.getElementById("iconWrap").innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="#593d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+    document.getElementById("title").textContent = "✅ 수령이 완료되었습니다";
+    document.getElementById("subtitle").textContent = `하단 수령구에서 ${summaryText}을(를) 꺼내주세요.`;
+    document.getElementById("restartBtn").style.display = "inline-block";
+    setTimeout(() => {
+      location.href = "/kiosk/start/";
+    }, 8000);
+  }
+
+  function showFailure(message) {
+    document.getElementById("title").textContent = "배출에 실패했습니다";
+    document.getElementById("subtitle").textContent = message;
+    document.getElementById("restartBtn").style.display = "inline-block";
+  }
+
   async function runDispense() {
-    if (!purchaseId) {
-      document.getElementById("title").textContent = "잘못된 접근입니다.";
-      document.getElementById("subtitle").textContent = "QR 연동부터 다시 진행해주세요.";
-      document.getElementById("restartBtn").style.display = "inline-block";
+    if (purchaseId) {
+      try {
+        const data = await api("POST", "/vending/dispense", { purchase_id: purchaseId, machine_id: machineId });
+        showSuccess(`[${data.drug_item_name}]`);
+      } catch (e) {
+        showFailure(e.message);
+      }
       return;
     }
-    try {
-      const data = await api("POST", "/vending/dispense", { purchase_id: purchaseId, machine_id: machineId });
-      document.getElementById("iconWrap").innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="#593d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
-      document.getElementById("title").textContent = "✅ 수령이 완료되었습니다";
-      document.getElementById("subtitle").textContent =
-        `하단 수령구에서 [${data.drug_item_name}]을(를) 꺼내주세요.`;
-      document.getElementById("restartBtn").style.display = "inline-block";
-      setTimeout(() => {
-        location.href = "/kiosk/start/";
-      }, 8000);
-    } catch (e) {
-      document.getElementById("title").textContent = "배출에 실패했습니다";
-      document.getElementById("subtitle").textContent = e.message;
-      document.getElementById("restartBtn").style.display = "inline-block";
+
+    if (orderId) {
+      try {
+        const data = await api("POST", `/vending/orders/${encodeURIComponent(orderId)}/dispense`);
+        const summary =
+          data.items.length > 1 ? `[${data.items[0].item_name} 외 ${data.items.length - 1}건]` : `[${data.items[0].item_name}]`;
+        showSuccess(summary);
+      } catch (e) {
+        showFailure(e.message);
+      }
+      return;
     }
+
+    document.getElementById("title").textContent = "잘못된 접근입니다.";
+    document.getElementById("subtitle").textContent = "처음 화면부터 다시 진행해주세요.";
+    document.getElementById("restartBtn").style.display = "inline-block";
   }
 
   document.getElementById("restartBtn").addEventListener("click", () => {

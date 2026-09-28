@@ -1,0 +1,69 @@
+@import url("https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Gothic+A1:wght@400;500;700;800&display=swap");
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  font-family: "Gothic A1", "Noto Sans KR", sans-serif;
+  background: #fffde7;
+  color: #593d0d;
+}
+
+.kiosk-cart {
+  width: 100%;
+  min-width: 1080px;
+  min-height: 1920px;
+  padding: 64px;
+  display: flex;
+  flex-direction: column;
+}
+
+.header { margin-bottom: 40px; }
+.title { font-family: "Gowun Dodum", sans-serif; font-size: 40px; margin-bottom: 8px; }
+.subtitle { font-size: 20px; color: #8b6914; }
+
+.cart-list { display: flex; flex-direction: column; gap: 16px; flex: 1; }
+.empty { text-align: center; padding: 80px 0; color: #8b6914; font-size: 20px; }
+
+.cart-row {
+  background: #ffffff;
+  border: 1px solid #fff3c4;
+  border-radius: 16px;
+  padding: 24px 28px;
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 24px;
+}
+.item-name { font-size: 22px; font-weight: 700; }
+.qty-controls { display: flex; align-items: center; gap: 12px; }
+.qty-btn {
+  width: 36px; height: 36px; border-radius: 8px; border: 1px solid #ffd54f;
+  background: #fff8e1; color: #593d0d; font-size: 18px; cursor: pointer;
+}
+.qty { font-size: 18px; min-width: 24px; text-align: center; }
+.line-total { font-size: 20px; font-weight: 700; min-width: 120px; text-align: right; }
+.remove-btn {
+  font-size: 14px; color: #c0392b; background: none; border: none; cursor: pointer; text-decoration: underline;
+}
+
+.summary {
+  margin-top: 40px;
+  background: #fff8e1;
+  border-radius: 20px;
+  padding: 32px;
+}
+.summary-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 24px; font-weight: 700; margin-bottom: 24px;
+}
+.summary-row span:last-child { font-size: 32px; color: #593d0d; }
+.btn-row { display: flex; gap: 16px; }
+.btn-secondary, .btn-primary {
+  flex: 1; font-family: "Gothic A1", sans-serif; font-weight: 700; font-size: 20px;
+  padding: 20px; border-radius: 14px; cursor: pointer; border: none;
+}
+.btn-secondary { background: #ffffff; color: #593d0d; border: 1px solid #ffd54f; }
+.btn-primary { background: #ffd54f; color: #593d0d; }
+
+.footer { margin-top: 32px; }
+.btn-back { background: none; border: none; color: #8b6914; font-size: 16px; cursor: pointer; }

@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
-from src.api.routes import chat, consultation, drugs, vending
+from src.api.routes import chat, consultation, drugs, shop, vending
 from src.consult.db import init_db
 from src.rag.chain import get_llm, get_rewrite_llm, get_vector_store
 
@@ -42,6 +42,7 @@ app.include_router(chat.router)
 app.include_router(consultation.router)
 app.include_router(drugs.router)
 app.include_router(vending.router)
+app.include_router(shop.router)
 
 app.mount("/kiosk", StaticFiles(directory=STATIC_DIR / "kiosk", html=True), name="kiosk")
 

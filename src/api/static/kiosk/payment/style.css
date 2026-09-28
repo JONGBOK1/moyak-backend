@@ -1,0 +1,60 @@
+@import url("https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Gothic+A1:wght@400;500;700;800&display=swap");
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  font-family: "Gothic A1", "Noto Sans KR", sans-serif;
+  background: #fffde7;
+  color: #593d0d;
+}
+
+.kiosk-payment {
+  width: 100%;
+  min-width: 1080px;
+  min-height: 1920px;
+  padding: 64px;
+  display: flex;
+  flex-direction: column;
+}
+
+.header { margin-bottom: 40px; }
+.title { font-family: "Gowun Dodum", sans-serif; font-size: 40px; margin-bottom: 8px; }
+.subtitle { font-size: 20px; color: #8b6914; }
+
+.content { display: flex; flex-direction: column; gap: 32px; flex: 1; }
+
+.order-block, .pay-block {
+  background: #ffffff;
+  border: 1px solid #fff3c4;
+  border-radius: 20px;
+  padding: 32px;
+}
+.block-title { font-size: 22px; font-weight: 800; margin-bottom: 20px; }
+
+.order-items { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.order-item { display: flex; justify-content: space-between; font-size: 18px; }
+.total-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-top: 1px solid #fff3c4; padding-top: 20px; font-size: 22px; font-weight: 700;
+}
+.total-row span:last-child { font-size: 30px; }
+
+.pay-methods { display: flex; gap: 16px; margin-bottom: 16px; }
+.pay-method-btn {
+  flex: 1; padding: 20px; border-radius: 14px; border: 2px solid #fff3c4;
+  background: #fff8e1; color: #8b6914; font-family: "Gothic A1", sans-serif; font-weight: 700;
+  font-size: 18px; cursor: pointer;
+}
+.pay-method-btn.active { border-color: #ffd54f; background: #ffd54f; color: #593d0d; }
+.pay-hint { font-size: 14px; color: #8b6914; }
+
+.footer { margin-top: 40px; display: flex; gap: 16px; }
+.btn-cancel {
+  padding: 20px 32px; border-radius: 14px; border: 1px solid #ffd54f; background: #ffffff;
+  color: #593d0d; font-family: "Gothic A1", sans-serif; font-weight: 700; font-size: 18px; cursor: pointer;
+}
+.btn-pay {
+  flex: 1; padding: 20px; border-radius: 14px; border: none; background: #ffd54f;
+  color: #593d0d; font-family: "Gothic A1", sans-serif; font-weight: 800; font-size: 22px; cursor: pointer;
+}
+.btn-pay:disabled { opacity: 0.6; cursor: default; }
