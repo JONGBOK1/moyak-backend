@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
@@ -54,7 +54,13 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", include_in_schema=False)
+def root():
+    # 서버 주소로 바로 들어오면 앱 첫 화면(스플래시)부터 보여준다.
+    return RedirectResponse("/app/splash/")
+
+
+@app.get("/chat-test", response_class=HTMLResponse)
 def chat_test_page():
     return (STATIC_DIR / "chat_test.html").read_text(encoding="utf-8")
 

@@ -107,7 +107,8 @@ moyak-backend/
    - 응답: `{"answer": "string", "sources": ["string", ...], "evidence": [{"item_name", "field", "field_label", "text"}, ...]}`
      - `evidence`: 답변이 실제로 인용한 원본 청크 목록(신뢰도 어필용 — "AI 요약"이 아니라 식약처 원문 그대로임을 사용자에게 보여주기 위해 추가)
    - 헬스체크: `GET /health` → `{"status": "ok"}`
-   - 테스트용 페이지: `GET /` → 한국어 웹 UI (`src/api/static/chat_test.html`), 답변/출처/원문 근거를 브라우저에서 바로 확인 가능
+   - 루트: `GET /` → 앱 첫 화면 `/app/splash/`로 리다이렉트 (서버 주소만 입력해도 앱 전체 흐름을 볼 수 있게)
+   - 테스트용 페이지: `GET /chat-test` → 한국어 웹 UI (`src/api/static/chat_test.html`), 답변/출처/원문 근거를 브라우저에서 바로 확인 가능
    - **요청량 제한**: `/chat`은 IP당 15회/분, 200회/일로 제한(`slowapi`, `src/api/limiter.py`). 초과 시 `429` + `{"detail": "요청이 너무 많습니다..."}`. 실제 비용이 드는 엔드포인트라 남용 방지용. Render처럼 프록시 뒤에 배포할 때는 uvicorn에 `--proxy-headers`를 켜야 진짜 클라이언트 IP로 카운트된다(안 켜면 전부 같은 IP로 잡혀 프록시 하나가 전체 사용자의 한도를 공유하게 됨).
    - (이 스펙이 바뀌면 반드시 이 문서와 팀에 공유할 것)
 8. **STEP 7 - 테스트**: 정제/청킹 로직 유닛 테스트(`pytest`, API 호출 없음), RAG 답변 품질 셀프 체크(`python tests/check_rag_quality.py`, 실제 API 호출·소액 비용 발생·수동 실행 전용이라 pytest 자동 수집 대상 아님)
@@ -156,7 +157,7 @@ moyak-backend/
 
 - `POST /consultations` — 상담 요청 생성. 요청 바디는 `user_id`만 필수이고 `chat_summary`는 선택이다(`requested_drug_*`도 선택) — 약품 지정은 사용자가 아니라 약사가 승인 시점에 한다. `chat_summary`를 안 보내면 서버가 `DIRECT_REQUEST_SUMMARY`(고정 문구: "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)")로 채운다. 생성 시 `src/consult/video.py`가 Daily.co REST API로 화상 상담방을 만들고 `room_url`을 응답에 포함한다(생성 실패해도 상담 요청 자체는 계속 진행 — 화상은 부가 기능).
   - **진입점 두 곳**이 같은 API를 쓴다(회의 결과: 챗봇을 강제로 거치게 하지 않기 위해 분리):
-    - `GET /` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
+    - `GET /chat-test` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
     - `GET /consult` (`consult_direct.html`) — 네비게이션바/메뉴에서 바로 진입하는 용도. 텍스트 입력 없이 버튼 하나로 즉시 상담 요청(= `chat_summary` 생략) → 바로 화상 화면으로 전환
   - 두 진입점 다 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`, 두 페이지가 같은 키를 써서 동일 브라우저면 ID가 이어진다).
   - **상담 생성 전에 항상 `GET /consultations?status=pending&user_id=`로 먼저 조회**해서, 이미 대기 중인 상담이 있으면 새로 만들지 않고 그걸 재사용한다(중복 상담 방지 — 사용자가 버튼을 여러 번 누르거나 페이지를 새로고침해도 상담이 중복 생성되지 않음).
