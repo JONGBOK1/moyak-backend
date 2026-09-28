@@ -129,13 +129,13 @@
   async function pollSession() {
     try {
       const data = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/session`);
-      if (data.paired && data.purchase) {
+      if (data.paired) {
         clearInterval(rotateTimer);
         clearInterval(pollTimer);
         document.getElementById("spinner").style.display = "none";
         document.getElementById("statusText").textContent = "✅ 연동 완료! 확인 화면으로 이동합니다...";
         setTimeout(() => {
-          location.href = `/kiosk/welcome/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(data.purchase.id)}`;
+          location.href = `/kiosk/welcome/?machine=${encodeURIComponent(machineId)}`;
         }, 1200);
       }
     } catch (e) {

@@ -11,16 +11,17 @@
     <div class="check-circle">
       <svg viewBox="0 0 24 24" fill="none" stroke="#593d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
     </div>
-    <div class="title">본인인증 완료</div>
-    <div class="subtitle" id="subtitle">약사가 승인한 약품을 확인하고 있습니다...</div>
+    <div class="title" id="title">본인인증 완료</div>
+    <div class="subtitle" id="subtitle">로그인 정보를 확인하고 있습니다...</div>
     <div class="drug-card" id="drugCard" style="display:none">
       <div class="label">수령할 약품</div>
       <div class="drug-name" id="drugName"></div>
     </div>
-    <div class="notice">
+    <div class="notice" id="notice">
       <div class="notice-title">⏱ 안내 및 보안 사항</div>
-      <div class="notice-body">잠시 후 자동으로 수령 화면으로 이동합니다. 자리를 비우지 말고 기다려주세요.</div>
+      <div class="notice-body" id="noticeBody">잠시 후 자동으로 수령 화면으로 이동합니다. 자리를 비우지 말고 기다려주세요.</div>
     </div>
+    <button class="continue-btn" id="continueBtn" style="display:none">확인했습니다 (계속하기)</button>
   </div>
 
 <script>
@@ -37,16 +38,35 @@
   async function loadSession() {
     try {
       const data = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/session`);
-      if (!data.paired || !data.purchase) {
-        document.getElementById("subtitle").textContent = "연동 정보가 만료되었습니다. 처음부터 다시 시도해주세요.";
+
+      if (!data.paired) {
+        // 로그인 자체가 안 된 상태 (QR 만료 등) — 처음부터 다시 진행해야 한다.
+        document.getElementById("title").textContent = "연동 정보가 없습니다";
+        document.getElementById("subtitle").textContent = "처음부터 다시 시도해주세요.";
+        document.getElementById("notice").style.display = "none";
+        document.getElementById("continueBtn").textContent = "처음 화면으로";
+        document.getElementById("continueBtn").style.display = "inline-block";
+        document.getElementById("continueBtn").onclick = () => (location.href = "/kiosk/start/");
         return;
       }
-      document.getElementById("subtitle").textContent = "아래 약품을 자판기에서 수령하실 수 있습니다.";
-      document.getElementById("drugName").textContent = data.purchase.drug_item_name;
-      document.getElementById("drugCard").style.display = "block";
-      setTimeout(() => {
-        location.href = `/kiosk/dispensing/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(data.purchase.id)}`;
-      }, 1800);
+
+      // 로그인은 성공. 승인된 구매 건이 있는지는 별개로 확인한다.
+      if (data.purchase) {
+        document.getElementById("subtitle").textContent = "아래 약품을 자판기에서 수령하실 수 있습니다.";
+        document.getElementById("drugName").textContent = data.purchase.drug_item_name;
+        document.getElementById("drugCard").style.display = "block";
+        setTimeout(() => {
+          location.href = `/kiosk/dispensing/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(data.purchase.id)}`;
+        }, 1800);
+      } else {
+        document.getElementById("subtitle").textContent = "연동이 완료되었습니다. 현재 약사가 승인한 구매 건은 없습니다.";
+        document.getElementById("noticeBody").textContent =
+          "약사 상담을 통해 승인을 받으시면 이 화면에 바로 표시됩니다. 지금은 의약외품을 둘러보실 수 있어요.";
+        document.getElementById("continueBtn").textContent = "의약외품 둘러보기";
+        document.getElementById("continueBtn").style.display = "inline-block";
+        document.getElementById("continueBtn").onclick = () =>
+          (location.href = `/kiosk/otc-list/?machine=${encodeURIComponent(machineId)}`);
+      }
     } catch (e) {
       document.getElementById("subtitle").textContent = "정보를 불러오지 못했습니다: " + e.message;
     }

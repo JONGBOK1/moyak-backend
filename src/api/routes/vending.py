@@ -57,7 +57,8 @@ class ScanResponse(BaseModel):
 
 class SessionResponse(BaseModel):
     machine_id: str
-    paired: bool
+    paired: bool  # 유효한 QR 로그인 여부 (승인된 구매 건 유무와 무관)
+    user_id: str | None = None
     purchase: PurchaseResponse | None = None
 
 
@@ -83,10 +84,10 @@ def rotate_qr(machine_id: str, name: str | None = None, db: Session = Depends(ge
 def get_session(machine_id: str, db: Session = Depends(get_db)) -> SessionResponse:
     """자판기 화면이 폴링 — 지금 QR로 누군가 로그인(스캔)했는지 확인한다."""
     try:
-        machine, purchase = service.get_machine_session(db, machine_id=machine_id)
+        machine, user_id, purchase = service.get_machine_session(db, machine_id=machine_id)
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return SessionResponse(machine_id=machine.id, paired=purchase is not None, purchase=purchase)
+    return SessionResponse(machine_id=machine.id, paired=user_id is not None, user_id=user_id, purchase=purchase)
 
 
 @router.post("/scan", response_model=ScanResponse)

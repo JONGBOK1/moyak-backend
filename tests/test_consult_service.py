@@ -195,14 +195,16 @@ def test_scan_qr_pairs_machine_to_purchase(db):
 
     service.scan_qr(db, machine_id="M1", qr_token=machine.qr_token, user_id="user1")
 
-    _, purchase = service.get_machine_session(db, machine_id="M1")
+    _, user_id, purchase = service.get_machine_session(db, machine_id="M1")
+    assert user_id == "user1"
     assert purchase is not None
     assert purchase.id == consultation.purchase.id
 
 
 def test_get_machine_session_unpaired_by_default(db):
     service.rotate_qr_token(db, machine_id="M1")
-    machine, purchase = service.get_machine_session(db, machine_id="M1")
+    machine, user_id, purchase = service.get_machine_session(db, machine_id="M1")
+    assert user_id is None
     assert purchase is None
 
 
@@ -211,14 +213,26 @@ def test_get_machine_session_not_found_raises(db):
         service.get_machine_session(db, machine_id="ghost")
 
 
+def test_scan_qr_logs_in_even_without_pending_purchase(db):
+    # QR 로그인 자체는 승인된 구매 건이 없어도 항상 성사되어야 한다.
+    machine = service.rotate_qr_token(db, machine_id="M1")
+    found = service.scan_qr(db, machine_id="M1", qr_token=machine.qr_token, user_id="user_no_purchase")
+
+    assert found is None
+    _, user_id, purchase = service.get_machine_session(db, machine_id="M1")
+    assert user_id == "user_no_purchase"
+    assert purchase is None
+
+
 def test_rotate_qr_token_clears_previous_pairing(db):
     consultation = approved_consultation(db, user_id="user1")
     machine = service.rotate_qr_token(db, machine_id="M1")
     service.scan_qr(db, machine_id="M1", qr_token=machine.qr_token, user_id="user1")
 
-    service.rotate_qr_token(db, machine_id="M1")  # 새 QR 발급 = 이전 페어링 무효화
+    service.rotate_qr_token(db, machine_id="M1")  # 새 QR 발급 = 이전 로그인/페어링 무효화
 
-    _, purchase = service.get_machine_session(db, machine_id="M1")
+    _, user_id, purchase = service.get_machine_session(db, machine_id="M1")
+    assert user_id is None
     assert purchase is None
     assert consultation.purchase.status == PurchaseStatus.PENDING  # 구매 건 자체는 그대로
 
@@ -230,7 +244,8 @@ def test_dispense_clears_machine_pairing(db):
 
     service.dispense(db, purchase_id=consultation.purchase.id, machine_id="M1")
 
-    _, purchase = service.get_machine_session(db, machine_id="M1")
+    _, user_id, purchase = service.get_machine_session(db, machine_id="M1")
+    assert user_id is None
     assert purchase is None
 
 

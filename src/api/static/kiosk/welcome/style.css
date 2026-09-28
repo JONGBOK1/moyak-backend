@@ -65,3 +65,16 @@ body {
 }
 .notice-title { font-weight: 700; font-size: 18px; margin-bottom: 6px; }
 .notice-body { font-size: 15px; color: #8b6914; line-height: 1.6; }
+
+.continue-btn {
+  margin-top: 40px;
+  font-family: "Gothic A1", sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  padding: 18px 40px;
+  border-radius: 14px;
+  border: none;
+  background: #ffd54f;
+  color: #593d0d;
+  cursor: pointer;
+}

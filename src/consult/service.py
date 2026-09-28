@@ -126,34 +126,38 @@ def rotate_qr_token(db: Session, machine_id: str, machine_name: str | None = Non
 
     machine.qr_token = secrets.token_urlsafe(16)
     machine.qr_token_expires_at = _now() + timedelta(seconds=QR_TOKEN_VALID_SECONDS)
-    machine.paired_purchase_id = None  # 새 QR 사이클이 시작되면 이전 페어링은 무효
+    machine.paired_user_id = None  # 새 QR 사이클이 시작되면 이전 로그인은 무효
+    machine.paired_purchase_id = None
     db.commit()
     db.refresh(machine)
     return machine
 
 
-def get_machine_session(db: Session, machine_id: str) -> tuple[VendingMachine, ApprovedPurchase | None]:
-    """자판기 화면이 폴링해서 '누군가 QR을 스캔해 로그인했는지'를 확인할 때 쓴다."""
+def get_machine_session(db: Session, machine_id: str) -> tuple[VendingMachine, str | None, ApprovedPurchase | None]:
+    """자판기 화면이 폴링해서 '누군가 QR을 스캔해 로그인했는지'를 확인할 때 쓴다.
+
+    로그인(paired_user_id)과 승인된 구매 건(paired_purchase_id)은 별개다 —
+    로그인은 유효한 QR을 스캔하기만 하면 항상 성사되고, 구매 건은 있을 수도 없을 수도 있다.
+    """
     machine = db.get(VendingMachine, machine_id)
     if machine is None:
         raise NotFoundError(f"자판기를 찾을 수 없습니다: {machine_id}")
+    if machine.paired_user_id is None:
+        return machine, None, None
+
     if machine.paired_purchase_id is None:
-        return machine, None
+        return machine, machine.paired_user_id, None
 
     purchase = db.get(ApprovedPurchase, machine.paired_purchase_id)
-    if purchase is None:
+    if purchase is not None:
+        purchase = _expire_if_needed(db, purchase)
+    if purchase is None or purchase.status != PurchaseStatus.PENDING:
+        # 이미 수령됐거나 만료된 건은 더 이상 유효한 구매 건이 아니다 (로그인 자체는 유지).
         machine.paired_purchase_id = None
         db.commit()
-        return machine, None
+        return machine, machine.paired_user_id, None
 
-    purchase = _expire_if_needed(db, purchase)
-    if purchase.status != PurchaseStatus.PENDING:
-        # 이미 수령됐거나 만료된 건 더 이상 유효한 페어링이 아니다.
-        machine.paired_purchase_id = None
-        db.commit()
-        return machine, None
-
-    return machine, purchase
+    return machine, machine.paired_user_id, purchase
 
 
 def _expire_if_needed(db: Session, purchase: ApprovedPurchase) -> ApprovedPurchase:
@@ -165,12 +169,15 @@ def _expire_if_needed(db: Session, purchase: ApprovedPurchase) -> ApprovedPurcha
 
 
 def scan_qr(db: Session, machine_id: str, qr_token: str, user_id: str) -> ApprovedPurchase | None:
-    """QR 로그인. 토큰이 유효하면 이 사용자의 대기 중인 승인 건을 찾아 반환한다 (없으면 None)."""
+    """QR 로그인. 토큰이 유효하면 로그인은 항상 성사되고(자판기가 이 사용자로 페어링됨),
+    그중 대기 중인 승인 건이 있으면 함께 반환한다 (없으면 None — 로그인 자체는 여전히 성공)."""
     machine = db.get(VendingMachine, machine_id)
     if machine is None or machine.qr_token != qr_token:
         raise InvalidStateError("유효하지 않은 QR입니다.")
     if machine.qr_token_expires_at < _now():
         raise InvalidStateError("만료된 QR입니다. 자판기 화면을 다시 스캔해주세요.")
+
+    machine.paired_user_id = user_id
 
     candidates = (
         db.query(ApprovedPurchase)
@@ -184,6 +191,9 @@ def scan_qr(db: Session, machine_id: str, qr_token: str, user_id: str) -> Approv
             machine.paired_purchase_id = purchase.id
             db.commit()
             return purchase
+
+    machine.paired_purchase_id = None
+    db.commit()
     return None
 
 
@@ -203,6 +213,7 @@ def dispense(db: Session, purchase_id: str, machine_id: str) -> ApprovedPurchase
     machine = db.get(VendingMachine, machine_id)
     if machine is not None and machine.paired_purchase_id == purchase.id:
         machine.paired_purchase_id = None
+        machine.paired_user_id = None  # 수령까지 끝났으니 다음 고객을 위해 로그아웃
 
     db.commit()
     db.refresh(purchase)

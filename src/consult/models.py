@@ -87,8 +87,11 @@ class VendingMachine(Base):
     name = Column(String, nullable=False)
     qr_token = Column(String, nullable=True)
     qr_token_expires_at = Column(DateTime, nullable=True)
-    # 현재 QR 사이클에서 앱이 스캔해 로그인/매칭된 승인 건. 자판기 화면이 이 값을 폴링해서
-    # "누군가 로그인했다"를 감지하고 대기 화면 -> 환영/수령 화면으로 전환한다.
+    # 현재 QR 사이클에서 앱이 스캔해 로그인한 사용자. 승인된 구매 건 유무와 무관하게,
+    # 유효한 QR을 스캔하기만 하면 항상 채워진다 (로그인 자체는 항상 성공).
+    # 자판기 화면이 이 값을 폴링해서 "누군가 로그인했다"를 감지하고 대기 -> 환영 화면으로 전환한다.
+    paired_user_id = Column(String, nullable=True)
+    # 로그인한 사용자에게 마침 승인된 구매 건이 있으면 채워진다 (없을 수도 있음).
     paired_purchase_id = Column(String, ForeignKey("approved_purchases.id"), nullable=True)
 
 
