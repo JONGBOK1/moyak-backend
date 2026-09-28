@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="onboarding-4">
+    <img class="main-home-connected-4" src="main-home-connected-40.png" />
+    <div class="onboarding-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="frame"></div>
+      <div class="illustration-container">
+        <div class="text-block">
+          <div class="div">가까운 자판기를 찾아보세요</div>
+          <div class="div2">
+            실시간 재고 확인과 최단 경로 길찾기까지 스마트하게 제공합니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-carousel-controls">
+      <div class="rectangle-42"></div>
+      <div class="page-dots">
+        <div class="dot-1"></div>
+        <div class="dot-2"></div>
+        <div class="dot-3"></div>
+        <div class="dot-4"></div>
+      </div>
+      <div class="cta-padding">
+        <div class="primary-button" id="startBtn">
+          <div class="div3">시작하기</div>
+        </div>
+        <div class="home-indicator-area">
+          <div class="home-pill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.getElementById("startBtn").addEventListener("click", () => {
+    location.href = "/app/main-home/";
+  });
+</script>
+</body>
+</html>
