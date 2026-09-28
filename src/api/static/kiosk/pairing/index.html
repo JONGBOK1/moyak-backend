@@ -71,7 +71,7 @@
         </div>
       </div>
       <div class="qr-pair-plate">
-        <canvas class="qr-code" id="qrCanvas" width="320" height="320"></canvas>
+        <div class="qr-code" id="qrCanvas"></div>
         <div class="device-id-badge">
           <div class="md-2409-rome">자판기 고유인증 키: <span id="machineIdText">-</span></div>
         </div>
@@ -96,7 +96,6 @@
     </div>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/lib/browser.min.js"></script>
 <script>
   const params = new URLSearchParams(location.search);
   const machineId = params.get("machine") || "M001";
@@ -121,8 +120,7 @@
     try {
       const data = await api("POST", `/vending/machines/${encodeURIComponent(machineId)}/rotate-qr`);
       currentToken = data.qr_token;
-      const payload = JSON.stringify({ machine_id: data.machine_id, qr_token: data.qr_token });
-      QRCode.toCanvas(document.getElementById("qrCanvas"), payload, { width: 320, margin: 1 });
+      document.getElementById("qrCanvas").innerHTML = data.qr_svg; // 서버가 SVG로 직접 그려서 내려줌 (외부 JS 라이브러리 불필요)
     } catch (e) {
       document.getElementById("statusText").textContent = "QR 발급 실패, 잠시 후 재시도합니다...";
     }

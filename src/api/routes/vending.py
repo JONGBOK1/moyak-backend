@@ -1,5 +1,8 @@
+import json
 from datetime import datetime
 
+import qrcode
+import qrcode.image.svg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -10,10 +13,18 @@ from src.consult.db import get_db
 router = APIRouter(prefix="/vending", tags=["vending"])
 
 
+def _qr_svg(payload: dict) -> str:
+    """QR을 서버에서 SVG로 직접 생성한다 — 자판기 화면이 외부 CDN(JS 라이브러리)에
+    의존하지 않고도 항상 뜨게 하기 위함 (네트워크 환경에 따라 CDN이 막힐 수 있음)."""
+    img = qrcode.make(json.dumps(payload), image_factory=qrcode.image.svg.SvgPathImage)
+    return img.to_string(encoding="unicode")
+
+
 class QrTokenResponse(BaseModel):
     machine_id: str
     qr_token: str
     qr_token_expires_at: datetime
+    qr_svg: str
 
 
 class ScanRequest(BaseModel):
@@ -59,8 +70,12 @@ class DispenseRequest(BaseModel):
 def rotate_qr(machine_id: str, name: str | None = None, db: Session = Depends(get_db)) -> QrTokenResponse:
     """자판기가 주기적으로 호출 — 새 QR 토큰을 발급받아 화면에 QR로 표시한다."""
     machine = service.rotate_qr_token(db, machine_id=machine_id, machine_name=name)
+    svg = _qr_svg({"machine_id": machine.id, "qr_token": machine.qr_token})
     return QrTokenResponse(
-        machine_id=machine.id, qr_token=machine.qr_token, qr_token_expires_at=machine.qr_token_expires_at
+        machine_id=machine.id,
+        qr_token=machine.qr_token,
+        qr_token_expires_at=machine.qr_token_expires_at,
+        qr_svg=svg,
     )
 
 
