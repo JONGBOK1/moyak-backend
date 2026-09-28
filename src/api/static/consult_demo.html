@@ -77,6 +77,18 @@
   </div>
 
 <script>
+  function formatRequestedAt(isoString) {
+    // 백엔드가 naive UTC로 저장/직렬화하므로("Z" 없는 ISO 문자열), 명시적으로 UTC로 해석시킨 뒤
+    // 브라우저 로컬 시간대로 표시한다.
+    const date = new Date(isoString + "Z");
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    const h = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return `${y}년 ${m}월 ${d}일 ${h}시 ${min}분`;
+  }
+
   async function api(method, path, body) {
     const res = await fetch(path, {
       method,
@@ -119,6 +131,7 @@
         div.className = "consult-item";
         div.innerHTML = `
           <div><b>${c.user_id}</b> <span class="badge pending">대기중</span></div>
+          <div class="note" style="margin:2px 0">신청 시각: ${formatRequestedAt(c.created_at)}</div>
           <div style="white-space:pre-wrap">대화 내용: ${c.chat_summary}</div>
         `;
 

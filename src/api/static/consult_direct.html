@@ -42,10 +42,21 @@
   const resultEl = document.getElementById("result");
   const userIdLabelEl = document.getElementById("userIdLabel");
 
+  // crypto.randomUUID()는 보안 컨텍스트(HTTPS/localhost)에서만 동작해서,
+  // 로컬 네트워크 IP로 접속하는 개발 환경(http://192.168.x.x)에서는 쓸 수 없다.
+  function makeUserId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
   // chat_test.html과 동일한 키를 써서, 같은 브라우저라면 챗봇 쪽과 사용자 ID가 이어진다.
   let userId = localStorage.getItem("moyak_user_id");
   if (!userId) {
-    userId = crypto.randomUUID();
+    userId = makeUserId();
     localStorage.setItem("moyak_user_id", userId);
   }
   userIdLabelEl.textContent = userId;

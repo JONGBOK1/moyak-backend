@@ -58,6 +58,24 @@ def test_list_consultations_filters_by_user_id(db):
     assert results[0].user_id == "user1"
 
 
+def test_list_consultations_filters_by_pharmacist_id(db):
+    approved_consultation(db, user_id="user1")  # pharm1이 처리
+    consultation2 = service.create_consultation(db, user_id="user2", chat_summary="b", requested_drug_item_seq="A2", requested_drug_name="약B")
+    service.decide_consultation(db, consultation_id=consultation2.id, pharmacist_id="pharm2", approve=True)
+
+    results = service.list_consultations(db, pharmacist_id="pharm1")
+    assert len(results) == 1
+    assert results[0].pharmacist_id == "pharm1"
+
+
+def test_list_consultations_by_pharmacist_id_excludes_pending(db):
+    # 아직 아무도 처리하지 않은 상담은 pharmacist_id가 없어서 필터에 걸리지 않는다.
+    service.create_consultation(db, user_id="user1", chat_summary="a")
+
+    results = service.list_consultations(db, pharmacist_id="pharm1")
+    assert results == []
+
+
 def test_create_consultation_stores_room_url(db):
     consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
     assert consultation.room_url == "https://moyak-team.daily.co/test-room"

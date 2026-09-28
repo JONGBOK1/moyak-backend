@@ -65,11 +65,22 @@
 
   let history = []; // [{role, content}, ...]
 
+  // crypto.randomUUID()는 보안 컨텍스트(HTTPS/localhost)에서만 동작해서,
+  // 로컬 네트워크 IP로 접속하는 개발 환경(http://192.168.x.x)에서는 쓸 수 없다.
+  function makeUserId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
   // 아직 실제 로그인/본인인증이 없어서, 브라우저별로 임시 사용자 ID를 만들어 유지한다.
   // (실제 앱에서는 본인인증 후 발급되는 진짜 사용자 ID로 대체될 지점)
   let userId = localStorage.getItem("moyak_user_id");
   if (!userId) {
-    userId = crypto.randomUUID();
+    userId = makeUserId();
     localStorage.setItem("moyak_user_id", userId);
   }
   userIdLabelEl.textContent = userId;

@@ -68,9 +68,15 @@ def create_consultation(payload: ConsultationCreateRequest, db: Session = Depend
 
 @router.get("", response_model=list[ConsultationResponse])
 def list_consultations(
-    status: str | None = None, user_id: str | None = None, db: Session = Depends(get_db)
+    status: str | None = None,
+    user_id: str | None = None,
+    pharmacist_id: str | None = None,
+    db: Session = Depends(get_db),
 ) -> list[ConsultationResponse]:
-    return [_to_response(c) for c in service.list_consultations(db, status=status, user_id=user_id)]
+    return [
+        _to_response(c)
+        for c in service.list_consultations(db, status=status, user_id=user_id, pharmacist_id=pharmacist_id)
+    ]
 
 
 @router.get("/{consultation_id}", response_model=ConsultationResponse)

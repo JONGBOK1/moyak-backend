@@ -55,13 +55,15 @@ def create_consultation(
 
 
 def list_consultations(
-    db: Session, status: str | None = None, user_id: str | None = None
+    db: Session, status: str | None = None, user_id: str | None = None, pharmacist_id: str | None = None
 ) -> list[ConsultationRequest]:
     query = db.query(ConsultationRequest)
     if status:
         query = query.filter(ConsultationRequest.status == status)
     if user_id:
         query = query.filter(ConsultationRequest.user_id == user_id)
+    if pharmacist_id:
+        query = query.filter(ConsultationRequest.pharmacist_id == pharmacist_id)
     return query.order_by(ConsultationRequest.created_at.desc()).all()
 
 
