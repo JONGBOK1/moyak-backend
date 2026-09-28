@@ -1,0 +1,57 @@
+.kiosk-01-start,
+.kiosk-01-start * {
+  box-sizing: border-box;
+}
+.kiosk-01-start {
+  background: #fffde7;
+  height: 1920px;
+  position: relative;
+  overflow: hidden;
+}
+.rectangle-1 {
+  border-radius: 0px;
+  width: 565px;
+  height: 115px;
+  position: absolute;
+  left: 50%;
+  translate: -50%;
+  top: 1521px;
+  overflow: visible;
+}
+.moyak {
+  position: absolute;
+  left: 50%;
+  translate: -50%;
+  top: 178px;
+  width: 804px;
+  height: auto;
+}
+.b-76-cb-27-d-cc-4-d-4-d-95-b-1-a-5-52124864-bc-02-1 {
+  width: 1069px;
+  height: 712px;
+  position: absolute;
+  left: -64px;
+  top: 712px;
+  object-fit: cover;
+  aspect-ratio: 1069/712;
+}
+.div {
+  color: #593d0d;
+  text-align: left;
+  font-family: "Inter-Medium", sans-serif;
+  font-size: 70px;
+  font-weight: 500;
+  position: absolute;
+  left: calc(50% - 131px);
+  top: 529px;
+}
+.div2 {
+  color: #593d0d;
+  text-align: left;
+  font-family: "Inter-Medium", sans-serif;
+  font-size: 48px;
+  font-weight: 500;
+  position: absolute;
+  left: 407px;
+  top: 1550px;
+}
