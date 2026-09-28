@@ -45,6 +45,7 @@ app.include_router(vending.router)
 app.include_router(shop.router)
 
 app.mount("/kiosk", StaticFiles(directory=STATIC_DIR / "kiosk", html=True), name="kiosk")
+app.mount("/app", StaticFiles(directory=STATIC_DIR / "app", html=True), name="app")
 app.mount("/static/vendor", StaticFiles(directory=STATIC_DIR / "vendor"), name="vendor")
 
 

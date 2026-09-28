@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="permissions">
+    <div class="background-simulation"></div>
+    <div class="permissions-main">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="bottom-sheet">
+        <div class="sheet-header">
+          <div class="div">앱 이용 권한 안내</div>
+          <div class="div2">
+            모약 서비스를 편리하게 이용하기 위해 다음 권한 허용이 필요합니다.
+          </div>
+        </div>
+        <div class="line"></div>
+        <div class="permissions-list">
+          <div class="permission-row">
+            <div class="icon-wrapper">
+              <img class="camera" src="camera0.svg" />
+            </div>
+            <div class="text-wrapper">
+              <div class="div3">카메라 (선택)</div>
+              <div class="qr">약품 바코드 인식 및 QR코드 매칭 시 사용됩니다.</div>
+            </div>
+          </div>
+          <div class="permission-row">
+            <div class="icon-wrapper">
+              <img class="map-pin" src="map-pin0.svg" />
+            </div>
+            <div class="text-wrapper">
+              <div class="div3">위치 정보 (선택)</div>
+              <div class="div4">
+                가장 가까운 모약 자판기 위치를 조회할 때 필요합니다.
+              </div>
+            </div>
+          </div>
+          <div class="permission-row">
+            <div class="icon-wrapper">
+              <img class="mic" src="mic0.svg" />
+            </div>
+            <div class="text-wrapper">
+              <div class="div3">마이크 (선택)</div>
+              <div class="div4">음성 명령 및 실시간 건강 상담 시 활용됩니다.</div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-footer">
+          <div class="div5">
+            선택 권한은 동의하지 않아도 앱을 이용할 수 있습니다.
+          </div>
+          <div class="primary-button">
+            <div class="div6">허용하기</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.querySelector(".primary-button").addEventListener("click", () => {
+    location.href = "/app/login/";
+  });
+</script>
+</body>
+</html>
