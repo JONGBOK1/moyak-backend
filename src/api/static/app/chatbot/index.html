@@ -297,7 +297,11 @@
   document.getElementById("navMap").addEventListener("click", () => {
     location.href = "/app/map-screen/";
   });
-  document.getElementById("navConsult").addEventListener("click", requestConsultation);
+  // 하단 "약사상담" 버튼: 챗봇 대화 없이 바로 약사 화상 상담으로.
+  // (대화 중 나오는 "약사에게 바로 상담하기" 버튼은 지금까지의 대화를 약사에게 함께 전달한다)
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/pharmacist-waiting/?direct=1";
+  });
   document.getElementById("navMypage").addEventListener("click", () => {
     location.href = "/app/mypage/";
   });

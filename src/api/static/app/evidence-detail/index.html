@@ -266,8 +266,9 @@
   document.getElementById("navMap").addEventListener("click", () => {
     location.href = "/app/map-screen/";
   });
+  // 하단 "약사상담" 버튼: 챗봇 대화 없이 바로 약사 화상 상담으로
   document.getElementById("navConsult").addEventListener("click", () => {
-    location.href = "/app/chatbot/";
+    location.href = "/app/pharmacist-waiting/?direct=1";
   });
   document.getElementById("navChatbot").addEventListener("click", () => {
     location.href = "/app/chatbot/";

@@ -203,6 +203,8 @@
     return data;
   }
 
+  // ?direct=1: 하단 "약사상담" 버튼으로 온 경우 — 챗봇 대화 없이 상담을 만들고 바로 화상 입장 화면으로 보낸다.
+  const direct = new URLSearchParams(location.search).get("direct") === "1";
   let consultationId = null;
   let requestedAt = null;
   let pollTimer = null;
@@ -279,7 +281,8 @@
       if (pendingList.length > 0) {
         data = pendingList[0];
       } else {
-        const chatSummary = sessionStorage.getItem("moyak_pending_chat_summary") || "";
+        // 직접 상담은 대화 요약 없이 보낸다 → 서버가 "직접 상담 요청 (사전 챗봇 대화 없음)" 문구로 채워 약사에게 표시
+        const chatSummary = direct ? "" : sessionStorage.getItem("moyak_pending_chat_summary") || "";
         data = await api("POST", "/consultations", { user_id: userId, chat_summary: chatSummary || undefined });
       }
       sessionStorage.removeItem("moyak_pending_chat_summary");
@@ -287,6 +290,12 @@
       consultationId = data.id;
       requestedAt = new Date(data.created_at + "Z").getTime();
       applyStatus(data);
+      if (direct && data.status === "pending" && data.room_url) {
+        // 뒤로가기 시 이 화면(대기 상태)으로 돌아오도록 direct 표시는 주소에서 지운다
+        history.replaceState(null, "", "/app/pharmacist-waiting/");
+        location.href = "/app/video-consult-entry/";
+        return;
+      }
       startClock();
       poll();
     } catch (e) {
@@ -318,8 +327,9 @@
   document.getElementById("navMap").addEventListener("click", () => {
     location.href = "/app/map-screen/";
   });
+  // 하단 "약사상담" 버튼: 챗봇 대화 없이 바로 약사 화상 상담으로
   document.getElementById("navConsult").addEventListener("click", () => {
-    location.href = "/app/chatbot/";
+    location.href = "/app/pharmacist-waiting/?direct=1";
   });
   document.getElementById("navChatbot").addEventListener("click", () => {
     location.href = "/app/chatbot/";
