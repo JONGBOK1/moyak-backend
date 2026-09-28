@@ -182,7 +182,6 @@
         </div>
         <div class="helpful"><img class="thumbs-up" src="thumbs-up0.svg" /><div class="label4">도움돼요</div></div>
       </div>
-      <div class="evidence-detail" style="display:none"></div>
       <div class="sources-line"></div>
     `;
     answerCard.querySelector(".summary").textContent = data.answer;
@@ -190,15 +189,9 @@
       "참고 약품: " + (data.sources && data.sources.length ? data.sources.join(", ") : "없음");
 
     if (data.evidence && data.evidence.length) {
-      const detail = answerCard.querySelector(".evidence-detail");
-      data.evidence.forEach((e) => {
-        const item = el("div", { className: "evidence-item" });
-        item.innerHTML = `<b>${e.item_name} · ${e.field_label}</b><div></div>`;
-        item.querySelector("div").textContent = e.text;
-        detail.appendChild(item);
-      });
       answerCard.querySelector(".evidence-link").addEventListener("click", () => {
-        detail.style.display = detail.style.display === "none" ? "block" : "none";
+        sessionStorage.setItem("moyak_last_evidence", JSON.stringify({ question, answer: data.answer, sources: data.sources, evidence: data.evidence }));
+        location.href = "/app/evidence-detail/";
       });
     }
     answerCard.querySelector(".helpful").addEventListener("click", (e) => {
