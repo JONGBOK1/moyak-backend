@@ -1,76 +1,120 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
   <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
   <title>본인인증 완료</title>
 </head>
 <body>
   <div class="kiosk-welcome">
-    <div class="check-circle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#593d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    <div class="kiosk-header">
+      <div class="header-left">
+        <div class="step-row">
+          <div class="div">본인인증 완료</div>
+          <div class="div2">| 본인인증이 안전하게 완료되었습니다</div>
+        </div>
+        <div class="logo-row">
+          <div class="logo-badge">
+            <div class="div3">모두의 약</div>
+          </div>
+          <div class="div4">모약</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="lang-button">
+          <div class="div5">한국어</div>
+          <img class="chevron-down" src="chevron-down0.svg" />
+        </div>
+      </div>
     </div>
-    <div class="title" id="title">본인인증 완료</div>
-    <div class="subtitle" id="subtitle">로그인 정보를 확인하고 있습니다...</div>
-    <div class="drug-card" id="drugCard" style="display:none">
-      <div class="label">수령할 약품</div>
-      <div class="drug-name" id="drugName"></div>
+    <div class="welcome-body">
+      <div class="success-circle">
+        <img class="check-circle" src="check-circle0.svg" />
+      </div>
+      <div class="welcome-msg">
+        <div class="div6">지*민님 환영합니다</div>
+        <div class="div7">본인 연동 및 안전 거래 한도가 활성화되었습니다.</div>
+      </div>
+      <div class="security-card">
+        <div class="alert-row">
+          <img class="alert-triangle" src="alert-triangle0.svg" />
+          <div class="div8">안내 및 보안 주의 사항</div>
+        </div>
+        <div class="div9">
+          - 약품 결제가 완료되면 회원 정보가 안전을 위해 자동 로그아웃됩니다.
+        </div>
+      </div>
+      <div class="actions"></div>
     </div>
-    <div class="notice" id="notice">
-      <div class="notice-title">⏱ 안내 및 보안 사항</div>
-      <div class="notice-body" id="noticeBody">잠시 후 자동으로 수령 화면으로 이동합니다. 자리를 비우지 말고 기다려주세요.</div>
-    </div>
-    <button class="continue-btn" id="continueBtn" style="display:none">확인했습니다 (계속하기)</button>
+    <div class="kiosk-footer"></div>
   </div>
 
 <script>
   const params = new URLSearchParams(location.search);
   const machineId = params.get("machine") || "M001";
-
-  async function api(method, path) {
-    const res = await fetch(path, { method });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-    return data;
-  }
+  const q = (s) => document.querySelector(s);
+  let nextUrl = null;
+  const next = () => { if (nextUrl) location.href = nextUrl; };
 
   async function loadSession() {
     try {
-      const data = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/session`);
+      const res = await fetch(`/vending/machines/${encodeURIComponent(machineId)}/session`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
 
       if (!data.paired) {
         // 로그인 자체가 안 된 상태 (QR 만료 등) — 처음부터 다시 진행해야 한다.
-        document.getElementById("title").textContent = "연동 정보가 없습니다";
-        document.getElementById("subtitle").textContent = "처음부터 다시 시도해주세요.";
-        document.getElementById("notice").style.display = "none";
-        document.getElementById("continueBtn").textContent = "처음 화면으로";
-        document.getElementById("continueBtn").style.display = "inline-block";
-        document.getElementById("continueBtn").onclick = () => (location.href = "/kiosk/start/");
+        q(".div6").textContent = "연동 정보가 없습니다";
+        q(".div7").textContent = "화면을 터치하면 처음 화면으로 돌아갑니다.";
+        nextUrl = "/kiosk/start/";
         return;
       }
 
-      // 로그인은 성공. 승인된 구매 건이 있는지는 별개로 확인한다.
-      if (data.purchase) {
-        document.getElementById("subtitle").textContent = "아래 약품을 자판기에서 수령하실 수 있습니다.";
-        document.getElementById("drugName").textContent = data.purchase.drug_item_name;
-        document.getElementById("drugCard").style.display = "block";
-        document.getElementById("noticeBody").textContent = "잠시 후 로그인 홈 화면으로 이동합니다.";
-        setTimeout(() => {
-          location.href = `/kiosk/main-home2/?machine=${encodeURIComponent(machineId)}`;
-        }, 1800);
-      } else {
-        document.getElementById("subtitle").textContent = "연동이 완료되었습니다. 현재 약사가 승인한 구매 건은 없습니다.";
-        document.getElementById("noticeBody").textContent = "잠시 후 로그인 홈 화면으로 이동합니다.";
-        setTimeout(() => {
-          location.href = `/kiosk/main-home3/?machine=${encodeURIComponent(machineId)}`;
-        }, 1800);
-      }
+      // 실명 데이터가 없어서 디자인의 "지*민님" 대신 일반 호칭을 쓴다.
+      q(".div6").textContent = "회원님 환영합니다";
+      // 승인 건 유무에 따라 로그인 홈이 다르다 (main-home2: 승인 약 있음 / main-home3: 없음)
+      const home = data.purchase ? "main-home2" : "main-home3";
+      nextUrl = `/kiosk/${home}/?machine=${encodeURIComponent(machineId)}`;
+      setTimeout(next, 2500);
     } catch (e) {
-      document.getElementById("subtitle").textContent = "정보를 불러오지 못했습니다: " + e.message;
+      q(".div7").textContent = "정보를 불러오지 못했습니다: " + e.message;
     }
   }
 
+  document.body.style.cursor = "pointer";
+  document.body.addEventListener("click", next);
   loadSession();
 </script>
 </body>
