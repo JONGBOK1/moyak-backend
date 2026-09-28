@@ -61,12 +61,10 @@
         }, 1800);
       } else {
         document.getElementById("subtitle").textContent = "연동이 완료되었습니다. 현재 약사가 승인한 구매 건은 없습니다.";
-        document.getElementById("noticeBody").textContent =
-          "약사 상담을 통해 승인을 받으시면 이 화면에 바로 표시됩니다. 지금은 의약외품을 둘러보실 수 있어요.";
-        document.getElementById("continueBtn").textContent = "의약외품 둘러보기";
-        document.getElementById("continueBtn").style.display = "inline-block";
-        document.getElementById("continueBtn").onclick = () =>
-          (location.href = `/kiosk/otc-list/?machine=${encodeURIComponent(machineId)}`);
+        document.getElementById("noticeBody").textContent = "잠시 후 로그인 홈 화면으로 이동합니다.";
+        setTimeout(() => {
+          location.href = `/kiosk/main-home3/?machine=${encodeURIComponent(machineId)}`;
+        }, 1800);
       }
     } catch (e) {
       document.getElementById("subtitle").textContent = "정보를 불러오지 못했습니다: " + e.message;
