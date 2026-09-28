@@ -41,6 +41,8 @@ class PurchaseResponse(BaseModel):
     drug_item_name: str
     approved_by: str
     status: str
+    price: int | None = None  # 약사가 승인 시 입력한 판매가(원). None이면 결제 없이 수령
+    paid_at: datetime | None = None
     created_at: datetime
     expires_at: datetime
     dispensed_machine_id: str | None
@@ -71,6 +73,28 @@ class DispenseRequest(BaseModel):
 def list_purchases(user_id: str, db: Session = Depends(get_db)) -> list[PurchaseResponse]:
     """마이페이지 '전자 구매 허가서' 목록 — 상태(사용 가능/만료/수령 완료) 전부 포함."""
     return service.list_purchases_for_user(db, user_id=user_id)
+
+
+class PayPurchasesRequest(BaseModel):
+    machine_id: str = Field(..., min_length=1)
+    purchase_ids: list[str] = Field(..., min_length=1)
+
+
+class PayPurchasesResponse(BaseModel):
+    total_amount: int
+    purchases: list[PurchaseResponse]
+
+
+@router.post("/purchases/pay", response_model=PayPurchasesResponse)
+def pay_purchases(payload: PayPurchasesRequest, db: Session = Depends(get_db)) -> PayPurchasesResponse:
+    """키오스크 cart2 → 결제: 로그인한 본인의 승인 약들을 결제(모의)하고 자판기 로그인을 해제한다."""
+    try:
+        purchases = service.pay_purchases(db, machine_id=payload.machine_id, purchase_ids=payload.purchase_ids)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return PayPurchasesResponse(total_amount=sum(p.price or 0 for p in purchases), purchases=purchases)
 
 
 @router.post("/machines/{machine_id}/rotate-qr", response_model=QrTokenResponse)

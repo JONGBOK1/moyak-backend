@@ -83,6 +83,7 @@ def decide_consultation(
     reason: str | None = None,
     drug_item_seq: str | None = None,
     drug_item_name: str | None = None,
+    price: int | None = None,
 ) -> ConsultationRequest:
     consultation = db.get(ConsultationRequest, consultation_id)
     if consultation is None:
@@ -99,6 +100,8 @@ def decide_consultation(
         item_name = drug_item_name or consultation.requested_drug_name
         if not item_seq or not item_name:
             raise InvalidStateError("승인하려면 약품 정보(item_seq, item_name)가 필요합니다.")
+        if price is not None and price < 0:
+            raise InvalidStateError("가격은 0원 이상이어야 합니다.")
 
         consultation.status = ConsultationStatus.APPROVED
         purchase = ApprovedPurchase(
@@ -107,6 +110,7 @@ def decide_consultation(
             drug_item_seq=item_seq,
             drug_item_name=item_name,
             approved_by=pharmacist_id,
+            price=price,
             expires_at=_now() + timedelta(minutes=PURCHASE_VALID_MINUTES),
         )
         db.add(purchase)
@@ -220,6 +224,8 @@ def dispense(db: Session, purchase_id: str, machine_id: str) -> ApprovedPurchase
     purchase = _expire_if_needed(db, purchase)
     if purchase.status != PurchaseStatus.PENDING:
         raise InvalidStateError(f"수령할 수 없는 상태입니다 (현재 상태: {purchase.status})")
+    if purchase.price is not None and purchase.paid_at is None:
+        raise InvalidStateError("결제가 완료되지 않은 승인 건입니다. 결제 후 수령할 수 있습니다.")
 
     purchase.status = PurchaseStatus.DISPENSED
     purchase.dispensed_machine_id = machine_id
@@ -233,6 +239,42 @@ def dispense(db: Session, purchase_id: str, machine_id: str) -> ApprovedPurchase
     db.commit()
     db.refresh(purchase)
     return purchase
+
+
+def pay_purchases(db: Session, machine_id: str, purchase_ids: list[str]) -> list[ApprovedPurchase]:
+    """키오스크에서 승인된 약(여러 건)을 한 번에 결제(모의)한다.
+
+    자판기에 QR 로그인한 본인의 대기 중 승인 건만 결제할 수 있다. 결제가 끝나면
+    안내 문구("결제가 완료되면 자동 로그아웃")대로 자판기 로그인을 해제한다 —
+    결제된 건은 purchase_id로 수령하므로 로그인이 풀려도 수령에는 지장이 없다.
+    """
+    if not purchase_ids:
+        raise InvalidStateError("결제할 승인 건이 없습니다.")
+    machine = db.get(VendingMachine, machine_id)
+    if machine is None or machine.paired_user_id is None:
+        raise InvalidStateError("자판기에 로그인된 사용자가 없습니다. QR로 다시 로그인해주세요.")
+
+    purchases = []
+    for pid in dict.fromkeys(purchase_ids):  # 중복 id 제거, 순서 유지
+        purchase = db.get(ApprovedPurchase, pid)
+        if purchase is None or purchase.user_id != machine.paired_user_id:
+            raise NotFoundError(f"승인 건을 찾을 수 없습니다: {pid}")
+        purchase = _expire_if_needed(db, purchase)
+        if purchase.status != PurchaseStatus.PENDING:
+            raise InvalidStateError(f"결제할 수 없는 상태입니다: {purchase.drug_item_name} (현재 상태: {purchase.status})")
+        if purchase.paid_at is not None:
+            raise InvalidStateError(f"이미 결제된 승인 건입니다: {purchase.drug_item_name}")
+        purchases.append(purchase)
+
+    now = _now()
+    for purchase in purchases:
+        purchase.paid_at = now
+    machine.paired_user_id = None
+    machine.paired_purchase_id = None
+    db.commit()
+    for purchase in purchases:
+        db.refresh(purchase)
+    return purchases
 
 
 def list_purchases_for_user(db: Session, user_id: str) -> list[ApprovedPurchase]:

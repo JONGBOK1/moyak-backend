@@ -175,9 +175,9 @@
         location.href = `/kiosk/main-home3/?machine=${encodeURIComponent(machineId)}`;
         return;
       }
-      // 장바구니(cart2) 디자인이 오기 전까지는 바로 수령 화면으로 보낸다.
       if (usable.length === 0) usable = [session.purchase];
-      receiveUrl = `/kiosk/dispensing/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(session.purchase.id)}`;
+      // 승인 약 확인(cart2) → 결제 → 수령
+      receiveUrl = `/kiosk/cart2/?machine=${encodeURIComponent(machineId)}`;
       q("._2").textContent = usable.length;
       q("._1").textContent =
         (usable.length > 1 ? `${usable[0].drug_item_name} 외 ${usable.length - 1}건` : usable[0].drug_item_name) +

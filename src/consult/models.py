@@ -73,6 +73,10 @@ class ApprovedPurchase(Base):
     drug_item_name = Column(String, nullable=False)
     approved_by = Column(String, nullable=False)  # pharmacist_id
     status = Column(String, default=PurchaseStatus.PENDING, nullable=False)
+    # 약사가 승인 시 안내하는 판매가(원). 가격이 있으면 키오스크에서 결제(paid_at)해야 수령 가능.
+    # 가격 도입 전 승인 건은 NULL — 결제 없이 수령 가능(기존 동작 유지).
+    price = Column(Integer, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_now, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     dispensed_machine_id = Column(String, nullable=True)

@@ -25,6 +25,7 @@ class ConsultationDecisionRequest(BaseModel):
     reason: str | None = None
     drug_item_seq: str | None = None
     drug_item_name: str | None = None
+    price: int | None = Field(None, ge=0)  # 약사가 안내하는 판매가(원), 키오스크 결제 금액
 
 
 class ConsultationResponse(BaseModel):
@@ -114,6 +115,7 @@ def decide_consultation(
             reason=payload.reason,
             drug_item_seq=payload.drug_item_seq,
             drug_item_name=payload.drug_item_name,
+            price=payload.price,
         )
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

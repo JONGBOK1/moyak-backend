@@ -258,6 +258,9 @@
             </div>
           </div>
           <div class="decide-row">
+            <input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="판매가 (원) — 키오스크 결제 금액" />
+          </div>
+          <div class="decide-row">
             <button class="approve-btn">처방 승인</button>
             <button class="reject reject-btn">거절</button>
           </div>
@@ -273,6 +276,12 @@
             alert("목록에서 약품을 선택해주세요 (검색 후 자동완성에서 골라야 정확한 코드가 지정됩니다).");
             return;
           }
+          const priceText = card.querySelector(".drug-price").value.trim();
+          const price = Number(priceText);
+          if (priceText === "" || !Number.isInteger(price) || price < 0) {
+            alert("판매가를 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제됩니다).");
+            return;
+          }
           if (!pharmacistIdEl.value) {
             alert("약사 ID를 입력해주세요.");
             return;
@@ -283,8 +292,9 @@
               approve: true,
               drug_item_seq: itemSeq,
               drug_item_name: nameInput.value,
+              price,
             });
-            alert(`승인 완료 — 처방약: ${data.approved_drug_name}`);
+            alert(`승인 완료 — 처방약: ${data.approved_drug_name} (${price.toLocaleString()}원)`);
             loadPending();
           } catch (e) {
             alert("오류: " + e.message);

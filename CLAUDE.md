@@ -165,6 +165,8 @@ moyak-backend/
 - `GET /consultations?status=pending&user_id=` — 대기 목록 (약사 대시보드용으로는 `status`만, 특정 사용자의 중복 상담 확인용으로는 `user_id`도 같이 필터링)
 - `GET /consultations/{id}` — 단건 조회. 챗봇/상담 페이지가 자신이 만든 상담의 상태를 폴링할 때 쓴다. 없는 id면 404.
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
+  - `price`(원, 선택, 0 이상): 약사가 승인 시 안내하는 판매가(e약은요엔 가격 데이터가 없어 약사가 입력). 약사 콘솔(`/pharmacist`)에서는 필수 입력. 가격이 있는 승인 건은 키오스크에서 **결제해야 수령 가능**하고, 가격이 없는 건(가격 도입 전/데모 페이지 승인)은 기존처럼 결제 없이 수령.
+- `POST /vending/purchases/pay` `{"machine_id", "purchase_ids": [...]}` — 키오스크 승인 약(cart2) 결제(모의). 자판기에 QR 로그인한 본인의 대기 중 승인 건만 결제 가능하며, 결제 완료 시 `paid_at` 기록 + **자판기 로그인 자동 해제**(welcome 화면 안내 문구와 일치). 응답 `{"total_amount", "purchases"}`. 승인 건 응답(`PurchaseResponse`)에 `price`/`paid_at` 필드 추가.
 - `POST /vending/machines/{machine_id}/rotate-qr` — 자판기가 주기적으로 새 QR 토큰 발급(기본 60초 유효) → 화면에 QR로 표시
 - `POST /vending/scan` — 앱이 QR 스캔 결과 전송 → 그 사용자의 대기 중인 승인 건 확인
 - `POST /vending/dispense` — 수령 확정 → 자판기 개방(모의) + 기록

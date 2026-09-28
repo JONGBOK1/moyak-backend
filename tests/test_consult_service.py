@@ -298,3 +298,71 @@ def test_list_purchases_for_user_excludes_other_users(db):
     approved_consultation(db, user_id="user1")
     results = service.list_purchases_for_user(db, user_id="user2")
     assert results == []
+
+def priced_purchase(db, user_id="user1", price=3500):
+    consultation = service.create_consultation(db, user_id=user_id)
+    consultation = service.decide_consultation(
+        db, consultation_id=consultation.id, pharmacist_id="pharm1", approve=True,
+        drug_item_seq="A1", drug_item_name="약A", price=price,
+    )
+    return consultation.purchase
+
+
+def logged_in_machine(db, user_id="user1", machine_id="M1"):
+    machine = service.rotate_qr_token(db, machine_id=machine_id)
+    service.scan_qr(db, machine_id=machine_id, qr_token=machine.qr_token, user_id=user_id)
+
+
+def test_decide_consultation_stores_price(db):
+    assert priced_purchase(db, price=4200).price == 4200
+
+
+def test_decide_consultation_negative_price_raises(db):
+    consultation = service.create_consultation(db, user_id="user1")
+    with pytest.raises(service.InvalidStateError):
+        service.decide_consultation(
+            db, consultation_id=consultation.id, pharmacist_id="pharm1", approve=True,
+            drug_item_seq="A1", drug_item_name="약A", price=-1,
+        )
+
+
+def test_dispense_priced_purchase_before_payment_raises(db):
+    purchase = priced_purchase(db)
+    with pytest.raises(service.InvalidStateError):
+        service.dispense(db, purchase_id=purchase.id, machine_id="M1")
+
+
+def test_pay_purchases_then_dispense_and_logs_out(db):
+    p1, p2 = priced_purchase(db, price=3500), priced_purchase(db, price=3000)
+    logged_in_machine(db)
+
+    paid = service.pay_purchases(db, machine_id="M1", purchase_ids=[p1.id, p2.id])
+    assert all(p.paid_at is not None for p in paid)
+    _, user_id, _ = service.get_machine_session(db, machine_id="M1")
+    assert user_id is None  # 결제 완료 시 자동 로그아웃
+
+    assert service.dispense(db, purchase_id=p1.id, machine_id="M1").status == PurchaseStatus.DISPENSED
+    assert service.dispense(db, purchase_id=p2.id, machine_id="M1").status == PurchaseStatus.DISPENSED
+
+
+def test_pay_purchases_requires_login(db):
+    purchase = priced_purchase(db)
+    service.rotate_qr_token(db, machine_id="M1")
+    with pytest.raises(service.InvalidStateError):
+        service.pay_purchases(db, machine_id="M1", purchase_ids=[purchase.id])
+
+
+def test_pay_purchases_rejects_other_users_purchase(db):
+    others = priced_purchase(db, user_id="user2")
+    logged_in_machine(db, user_id="user1")
+    with pytest.raises(service.NotFoundError):
+        service.pay_purchases(db, machine_id="M1", purchase_ids=[others.id])
+
+
+def test_pay_purchases_twice_raises(db):
+    purchase = priced_purchase(db)
+    logged_in_machine(db)
+    service.pay_purchases(db, machine_id="M1", purchase_ids=[purchase.id])
+    logged_in_machine(db)
+    with pytest.raises(service.InvalidStateError):
+        service.pay_purchases(db, machine_id="M1", purchase_ids=[purchase.id])
