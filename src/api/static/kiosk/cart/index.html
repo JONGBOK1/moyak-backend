@@ -1,40 +1,146 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
   <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
   <title>장바구니</title>
 </head>
 <body>
   <div class="kiosk-cart">
-    <div class="header">
-      <div class="title">장바구니</div>
-      <div class="subtitle">담은 약품을 확인해 주세요</div>
-    </div>
-
-    <div class="cart-list" id="cartList"></div>
-
-    <div class="summary">
-      <div class="summary-row">
-        <span>합계 금액</span>
-        <span id="totalAmount">0원</span>
+    <div class="screen-content">
+      <div class="kiosk-header">
+        <div class="header-left">
+          <div class="step-row">
+            <div class="div">장바구니</div>
+            <div class="div2">| 담으신 약품 내역을 확인해 주세요</div>
+          </div>
+        </div>
+        <div class="logo-row">
+          <div class="logo-badge">
+            <div class="div3">모두의 약</div>
+          </div>
+          <div class="div4">모약</div>
+        </div>
+        <div class="lang-button">
+          <div class="div5">한국어</div>
+          <img class="chevron-down" src="chevron-down0.svg" />
+        </div>
       </div>
-      <div class="btn-row">
-        <button class="btn-secondary" id="addMoreBtn">+ 의약외품 추가하기</button>
-        <button class="btn-primary" id="checkoutBtn">선택완료 및 결제하기</button>
+      <div class="cart-body">
+        <div class="cart-header-badge">
+          <div class="div6">담은 약품 리스트</div>
+          <div class="count-badge">
+            <div class="_3-4">3종류 (총 4개)</div>
+          </div>
+        </div>
+        <div class="cart-items-ledger"><!-- JS가 실제 장바구니로 채움 -->
+        </div>
       </div>
     </div>
-
-    <div class="footer">
-      <button class="btn-back" id="backBtn">← 이전으로</button>
+    <div class="billing-calculation">
+      <div class="calc-line"></div>
+      <div class="calc-line-promo"></div>
+      <div class="line"></div>
+      <div class="calc-line-final">
+        <div class="div9">최종 결제 금액</div>
+        <div class="_10-500">10,500원</div>
+      </div>
+    </div>
+    <div class="footer-and-confirm">
+      <div class="action-button-row">
+        <div class="btn-keep-shopping">
+          <div class="div10">← 의약외품 추가하기</div>
+        </div>
+        <div class="btn-checkout">
+          <div class="div11">선택완료 및 결제하기</div>
+        </div>
+      </div>
+      <div class="kiosk-footer">
+        <div class="footer-left">
+          <div class="btn-back">
+            <img class="arrow-left" src="arrow-left0.svg" />
+            <div class="div12">첫 화면으로</div>
+          </div>
+          <div class="_10">
+            * 장바구니에 담긴 약품은 미선택 및 미결제 시 10분 후 자동 삭제되어
+            안전 정렬됩니다.
+          </div>
+        </div>
+        <div class="footer-right"></div>
+      </div>
     </div>
   </div>
 
+<style>
+  /* 디자인의 고정 샘플 3행 대신 실제 장바구니 행을 그리기 위한 보조 스타일 */
+  .cart-items-ledger { height: 1130px; overflow-y: auto; }
+  .cart-items-ledger .item-tag { width: auto; height: auto; white-space: nowrap; }
+  .cart-items-ledger .item-tag .div7 { position: static; }
+  .count-badge { width: auto; white-space: nowrap; }
+  ._3-4 { position: static; }
+  ._10-500 { left: auto; right: 0; }
+  .qty-btn {
+    position: absolute; top: 6px; width: 40px; height: 40px; border-radius: 10px;
+    background: #ffffff; color: #593d0d; font-size: 28px; font-weight: 800; line-height: 40px;
+    text-align: center; cursor: pointer; user-select: none;
+  }
+  .qty-btn.minus { left: 6px; }
+  .qty-btn.plus { right: 6px; }
+  .stepper ._1 { left: 0; right: 0; text-align: center; }
+  .remove-btn, .btn-keep-shopping, .btn-checkout, .btn-back { cursor: pointer; }
+  .btn-checkout.disabled { opacity: 0.4; cursor: default; }
+  .cart-empty {
+    padding-top: 120px; text-align: center; color: #475569; font-size: 28px; font-weight: 700;
+  }
+</style>
 <script>
   const params = new URLSearchParams(location.search);
   const machineId = params.get("machine") || "M001";
   const CART_KEY = `moyak_kiosk_cart_${machineId}`;
+  const q = (s) => document.querySelector(s);
+
+  // otc-list 화면과 같은 상품 이미지를 재사용한다 (상품명 기준)
+  const PRODUCT_IMAGES = {
+    "대일밴드 뉴 표준형 20매": "/kiosk/otc-list/image-80.png",
+    "메디폼 H뷰티": "/kiosk/otc-list/image-90.png",
+    "KF94 보건용 마스크": "/kiosk/otc-list/image-70.png",
+    "리스테린 구강청결제": "/kiosk/otc-list/img-plate0.png",
+    "알콜스왑": "/kiosk/otc-list/image-50.png",
+    "좋은느낌 생리대": "/kiosk/otc-list/image-60.png",
+  };
+  let badges = {}; // productId → 태그 문구 (상품 API의 badge)
 
   async function api(method, path, body) {
     const res = await fetch(path, {
@@ -57,47 +163,54 @@
   function saveCart(cart) {
     sessionStorage.setItem(CART_KEY, JSON.stringify(cart));
   }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   function render() {
     const cart = loadCart();
-    const listEl = document.getElementById("cartList");
-    listEl.innerHTML = "";
+    const ledger = q(".cart-items-ledger");
+    ledger.innerHTML = "";
     if (cart.length === 0) {
-      listEl.innerHTML = '<div class="empty">담은 약품이 없습니다.</div>';
+      ledger.innerHTML = '<div class="cart-empty">담은 약품이 없습니다.<br>의약외품을 추가해 주세요.</div>';
     }
     cart.forEach((item, i) => {
       const row = document.createElement("div");
-      row.className = "cart-row";
+      row.className = "cart-row-0";
+      row.style.top = `${i * 164}px`;
+      const img = PRODUCT_IMAGES[item.itemName];
+      const tag = badges[item.productId];
       row.innerHTML = `
-        <div class="item-name">${item.itemName}</div>
-        <div class="qty-controls">
-          <button class="qty-btn minus" data-i="${i}">-</button>
-          <span class="qty">${item.quantity}</span>
-          <button class="qty-btn plus" data-i="${i}">+</button>
+        <div class="item-info">
+          ${img ? `<img class="thumb-img" src="${img}" />` : ""}
+          <div class="item-text">
+            <div class="tag-row">${tag ? `<div class="item-tag"><div class="div7">${esc(tag)}</div></div>` : ""}</div>
+            <div class="_500-mg-8">${esc(item.itemName)}</div>
+          </div>
         </div>
-        <div class="line-total">${(item.price * item.quantity).toLocaleString()}원</div>
-        <button class="remove-btn" data-i="${i}">삭제</button>
-      `;
-      listEl.appendChild(row);
+        <div class="item-actions">
+          <div class="stepper">
+            <div class="qty-btn minus">−</div>
+            <div class="_1">${item.quantity}</div>
+            <div class="qty-btn plus">+</div>
+          </div>
+          <div class="_3-500">${(item.price * item.quantity).toLocaleString()}원</div>
+          <div class="remove-btn"><img class="x-circle" src="x-circle0.svg" /></div>
+        </div>`;
+      row.querySelector(".minus").addEventListener("click", () => changeQty(i, -1));
+      row.querySelector(".plus").addEventListener("click", () => changeQty(i, 1));
+      row.querySelector(".remove-btn").addEventListener("click", () => {
+        const c = loadCart();
+        c.splice(i, 1);
+        saveCart(c);
+        render();
+      });
+      ledger.appendChild(row);
     });
 
+    const totalQty = cart.reduce((sum, c) => sum + c.quantity, 0);
     const total = cart.reduce((sum, c) => sum + c.price * c.quantity, 0);
-    document.getElementById("totalAmount").textContent = total.toLocaleString() + "원";
-
-    listEl.querySelectorAll(".minus").forEach((btn) =>
-      btn.addEventListener("click", () => changeQty(Number(btn.dataset.i), -1))
-    );
-    listEl.querySelectorAll(".plus").forEach((btn) =>
-      btn.addEventListener("click", () => changeQty(Number(btn.dataset.i), 1))
-    );
-    listEl.querySelectorAll(".remove-btn").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const cart = loadCart();
-        cart.splice(Number(btn.dataset.i), 1);
-        saveCart(cart);
-        render();
-      })
-    );
+    q("._3-4").textContent = `${cart.length}종류 (총 ${totalQty}개)`;
+    q("._10-500").textContent = total.toLocaleString() + "원";
+    q(".btn-checkout").classList.toggle("disabled", cart.length === 0);
   }
 
   function changeQty(i, delta) {
@@ -107,20 +220,24 @@
     render();
   }
 
-  document.getElementById("addMoreBtn").addEventListener("click", () => {
+  // 로그인(페어링) 상태면 로그인 홈으로, 아니면 비회원 홈으로
+  async function goHome() {
+    let url = "/kiosk/main-home/";
+    try {
+      const s = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/session`);
+      if (s.paired) url = `/kiosk/${s.purchase ? "main-home2" : "main-home3"}/`;
+    } catch (e) {}
+    location.href = `${url}?machine=${encodeURIComponent(machineId)}`;
+  }
+
+  q(".btn-keep-shopping").addEventListener("click", () => {
     location.href = `/kiosk/otc-list/?machine=${encodeURIComponent(machineId)}`;
   });
+  q(".btn-back").addEventListener("click", goHome);
 
-  document.getElementById("backBtn").addEventListener("click", () => {
-    location.href = `/kiosk/otc-list/?machine=${encodeURIComponent(machineId)}`;
-  });
-
-  document.getElementById("checkoutBtn").addEventListener("click", async () => {
+  q(".btn-checkout").addEventListener("click", async () => {
     const cart = loadCart();
-    if (cart.length === 0) {
-      alert("담은 약품이 없습니다.");
-      return;
-    }
+    if (cart.length === 0) return;
     try {
       const order = await api("POST", `/vending/machines/${encodeURIComponent(machineId)}/orders`, {
         items: cart.map((c) => ({ product_id: c.productId, quantity: c.quantity })),
@@ -132,7 +249,27 @@
     }
   });
 
+  // 디자인 안내 문구대로: 10분 동안 아무 조작이 없으면 장바구니를 비우고 첫 화면으로
+  const IDLE_MS = 10 * 60 * 1000;
+  let idleTimer;
+  function resetIdle() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      sessionStorage.removeItem(CART_KEY);
+      goHome();
+    }, IDLE_MS);
+  }
+  ["click", "touchstart"].forEach((ev) => document.addEventListener(ev, resetIdle));
+  resetIdle();
+
   render();
+  // 태그(badge)는 상품 API에만 있어서 불러온 뒤 다시 그린다
+  api("GET", `/vending/machines/${encodeURIComponent(machineId)}/products`)
+    .then((products) => {
+      products.forEach((p) => (badges[p.id] = p.badge));
+      render();
+    })
+    .catch(() => {});
 </script>
 </body>
 </html>
