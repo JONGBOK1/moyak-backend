@@ -71,14 +71,14 @@
         </div>
       </div>
       <div class="qr-pair-plate">
-        <img class="qr-code" src="qr-code0.png" />
+        <canvas class="qr-code" id="qrCanvas" width="320" height="320"></canvas>
         <div class="device-id-badge">
-          <div class="md-2409-rome">자판기 고유인증 키: MD-2409-ROME</div>
+          <div class="md-2409-rome">자판기 고유인증 키: <span id="machineIdText">-</span></div>
         </div>
       </div>
       <div class="status-indicator">
-        <div class="spinner"></div>
-        <div class="div6">스마트폰 연동 대기 중...</div>
+        <div class="spinner" id="spinner"></div>
+        <div class="div6" id="statusText">스마트폰 연동 대기 중...</div>
       </div>
       <div class="div7">
         스마트폰 연동 시, 구매 이력과 처방전 연동 등이 완벽히 동기화되어
@@ -95,6 +95,63 @@
       </div>
     </div>
   </div>
-  
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/lib/browser.min.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const machineId = params.get("machine") || "M001";
+  document.getElementById("machineIdText").textContent = machineId;
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  let currentToken = null;
+  let rotateTimer = null;
+  let pollTimer = null;
+
+  async function rotateQr() {
+    try {
+      const data = await api("POST", `/vending/machines/${encodeURIComponent(machineId)}/rotate-qr`);
+      currentToken = data.qr_token;
+      const payload = JSON.stringify({ machine_id: data.machine_id, qr_token: data.qr_token });
+      QRCode.toCanvas(document.getElementById("qrCanvas"), payload, { width: 320, margin: 1 });
+    } catch (e) {
+      document.getElementById("statusText").textContent = "QR 발급 실패, 잠시 후 재시도합니다...";
+    }
+  }
+
+  async function pollSession() {
+    try {
+      const data = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/session`);
+      if (data.paired && data.purchase) {
+        clearInterval(rotateTimer);
+        clearInterval(pollTimer);
+        document.getElementById("spinner").style.display = "none";
+        document.getElementById("statusText").textContent = "✅ 연동 완료! 확인 화면으로 이동합니다...";
+        setTimeout(() => {
+          location.href = `/kiosk/welcome/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(data.purchase.id)}`;
+        }, 1200);
+      }
+    } catch (e) {
+      // 네트워크 순단은 다음 폴링에서 다시 시도
+    }
+  }
+
+  rotateQr();
+  rotateTimer = setInterval(rotateQr, 55000); // 토큰 유효시간(60초)보다 여유있게 재발급
+  pollTimer = setInterval(pollSession, 2000);
+
+  document.querySelector(".btn-back").addEventListener("click", () => {
+    location.href = "/kiosk/qr-download/";
+  });
+</script>
 </body>
 </html>

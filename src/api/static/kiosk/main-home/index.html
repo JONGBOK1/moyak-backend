@@ -131,6 +131,17 @@
     </div>
     <div class="kiosk-footer"></div>
   </div>
-  
+
+<script>
+  document.querySelector(".route-card-1").addEventListener("click", () => {
+    location.href = "/kiosk/qr-download/"; // 본인인증 필요 약품 구매
+  });
+  document.querySelector(".route-card-0").addEventListener("click", () => {
+    location.href = "/kiosk/otc-list/"; // 의약외품 즉시 구매
+  });
+  document.querySelector(".route-card-12").addEventListener("click", () => {
+    location.href = "/kiosk/main-home-guide/"; // 앱 다운로드 및 사용 방법
+  });
+</script>
 </body>
 </html>

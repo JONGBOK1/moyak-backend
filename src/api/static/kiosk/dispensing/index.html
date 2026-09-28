@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./style.css">
+  <title>약품 배출</title>
+</head>
+<body>
+  <div class="kiosk-dispensing">
+    <div class="icon-wrap" id="iconWrap">
+      <div class="spinner"></div>
+    </div>
+    <div class="title" id="title">약품 배출 중입니다...</div>
+    <div class="subtitle" id="subtitle">잠시만 기다려주세요. 자판기 문이 자동으로 열립니다.</div>
+
+    <div class="notice">
+      <div class="notice-title">⚠ 안전 복용 안내</div>
+      <div class="notice-body" id="noticeBody">
+        1. 수령하신 약품의 포장 및 유효기간을 확인해주세요.<br>
+        2. 복용 전 사용설명서를 반드시 확인해주세요.<br>
+        3. 이상 반응이 있으면 즉시 복용을 중단하고 전문가와 상담해주세요.
+      </div>
+    </div>
+
+    <button class="restart-btn" id="restartBtn" style="display:none">처음 화면으로</button>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const machineId = params.get("machine") || "M001";
+  const purchaseId = params.get("purchase");
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  async function runDispense() {
+    if (!purchaseId) {
+      document.getElementById("title").textContent = "잘못된 접근입니다.";
+      document.getElementById("subtitle").textContent = "QR 연동부터 다시 진행해주세요.";
+      document.getElementById("restartBtn").style.display = "inline-block";
+      return;
+    }
+    try {
+      const data = await api("POST", "/vending/dispense", { purchase_id: purchaseId, machine_id: machineId });
+      document.getElementById("iconWrap").innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="#593d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+      document.getElementById("title").textContent = "✅ 수령이 완료되었습니다";
+      document.getElementById("subtitle").textContent =
+        `하단 수령구에서 [${data.drug_item_name}]을(를) 꺼내주세요.`;
+      document.getElementById("restartBtn").style.display = "inline-block";
+      setTimeout(() => {
+        location.href = "/kiosk/start/";
+      }, 8000);
+    } catch (e) {
+      document.getElementById("title").textContent = "배출에 실패했습니다";
+      document.getElementById("subtitle").textContent = e.message;
+      document.getElementById("restartBtn").style.display = "inline-block";
+    }
+  }
+
+  document.getElementById("restartBtn").addEventListener("click", () => {
+    location.href = "/kiosk/start/";
+  });
+
+  runDispense();
+</script>
+</body>
+</html>

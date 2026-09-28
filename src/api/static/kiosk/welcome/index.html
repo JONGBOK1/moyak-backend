@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./style.css">
+  <title>본인인증 완료</title>
+</head>
+<body>
+  <div class="kiosk-welcome">
+    <div class="check-circle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#593d0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <div class="title">본인인증 완료</div>
+    <div class="subtitle" id="subtitle">약사가 승인한 약품을 확인하고 있습니다...</div>
+    <div class="drug-card" id="drugCard" style="display:none">
+      <div class="label">수령할 약품</div>
+      <div class="drug-name" id="drugName"></div>
+    </div>
+    <div class="notice">
+      <div class="notice-title">⏱ 안내 및 보안 사항</div>
+      <div class="notice-body">잠시 후 자동으로 수령 화면으로 이동합니다. 자리를 비우지 말고 기다려주세요.</div>
+    </div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const machineId = params.get("machine") || "M001";
+
+  async function api(method, path) {
+    const res = await fetch(path, { method });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  async function loadSession() {
+    try {
+      const data = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/session`);
+      if (!data.paired || !data.purchase) {
+        document.getElementById("subtitle").textContent = "연동 정보가 만료되었습니다. 처음부터 다시 시도해주세요.";
+        return;
+      }
+      document.getElementById("subtitle").textContent = "아래 약품을 자판기에서 수령하실 수 있습니다.";
+      document.getElementById("drugName").textContent = data.purchase.drug_item_name;
+      document.getElementById("drugCard").style.display = "block";
+      setTimeout(() => {
+        location.href = `/kiosk/dispensing/?machine=${encodeURIComponent(machineId)}&purchase=${encodeURIComponent(data.purchase.id)}`;
+      }, 1800);
+    } catch (e) {
+      document.getElementById("subtitle").textContent = "정보를 불러오지 못했습니다: " + e.message;
+    }
+  }
+
+  loadSession();
+</script>
+</body>
+</html>

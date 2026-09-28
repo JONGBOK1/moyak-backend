@@ -126,9 +126,34 @@ def rotate_qr_token(db: Session, machine_id: str, machine_name: str | None = Non
 
     machine.qr_token = secrets.token_urlsafe(16)
     machine.qr_token_expires_at = _now() + timedelta(seconds=QR_TOKEN_VALID_SECONDS)
+    machine.paired_purchase_id = None  # 새 QR 사이클이 시작되면 이전 페어링은 무효
     db.commit()
     db.refresh(machine)
     return machine
+
+
+def get_machine_session(db: Session, machine_id: str) -> tuple[VendingMachine, ApprovedPurchase | None]:
+    """자판기 화면이 폴링해서 '누군가 QR을 스캔해 로그인했는지'를 확인할 때 쓴다."""
+    machine = db.get(VendingMachine, machine_id)
+    if machine is None:
+        raise NotFoundError(f"자판기를 찾을 수 없습니다: {machine_id}")
+    if machine.paired_purchase_id is None:
+        return machine, None
+
+    purchase = db.get(ApprovedPurchase, machine.paired_purchase_id)
+    if purchase is None:
+        machine.paired_purchase_id = None
+        db.commit()
+        return machine, None
+
+    purchase = _expire_if_needed(db, purchase)
+    if purchase.status != PurchaseStatus.PENDING:
+        # 이미 수령됐거나 만료된 건 더 이상 유효한 페어링이 아니다.
+        machine.paired_purchase_id = None
+        db.commit()
+        return machine, None
+
+    return machine, purchase
 
 
 def _expire_if_needed(db: Session, purchase: ApprovedPurchase) -> ApprovedPurchase:
@@ -156,6 +181,8 @@ def scan_qr(db: Session, machine_id: str, qr_token: str, user_id: str) -> Approv
     for purchase in candidates:
         purchase = _expire_if_needed(db, purchase)
         if purchase.status == PurchaseStatus.PENDING:
+            machine.paired_purchase_id = purchase.id
+            db.commit()
             return purchase
     return None
 
@@ -172,6 +199,11 @@ def dispense(db: Session, purchase_id: str, machine_id: str) -> ApprovedPurchase
     purchase.status = PurchaseStatus.DISPENSED
     purchase.dispensed_machine_id = machine_id
     purchase.dispensed_at = _now()
+
+    machine = db.get(VendingMachine, machine_id)
+    if machine is not None and machine.paired_purchase_id == purchase.id:
+        machine.paired_purchase_id = None
+
     db.commit()
     db.refresh(purchase)
     return purchase

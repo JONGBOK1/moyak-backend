@@ -1,0 +1,67 @@
+@import url("https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Gothic+A1:wght@400;500;700;800&display=swap");
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  font-family: "Gothic A1", "Noto Sans KR", sans-serif;
+  background: #fffde7;
+  color: #593d0d;
+}
+
+.kiosk-welcome {
+  width: 100%;
+  min-width: 1080px;
+  min-height: 1920px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 620px;
+}
+
+.check-circle {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: #fff8e1;
+  border: 3px solid #ffd54f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 36px;
+}
+.check-circle svg { width: 64px; height: 64px; }
+
+.title {
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.subtitle {
+  font-size: 24px;
+  color: #8b6914;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.drug-card {
+  background: #ffffff;
+  border: 2px solid #ffd54f;
+  border-radius: 20px;
+  padding: 28px 48px;
+  margin-bottom: 60px;
+  text-align: center;
+}
+.drug-card .label { font-size: 16px; color: #8b6914; margin-bottom: 8px; }
+.drug-card .drug-name { font-size: 34px; font-weight: 800; }
+
+.notice {
+  background: #fff8e1;
+  border: 1px solid #fff3c4;
+  border-radius: 16px;
+  padding: 20px 36px;
+  max-width: 560px;
+  text-align: center;
+}
+.notice-title { font-weight: 700; font-size: 18px; margin-bottom: 6px; }
+.notice-body { font-size: 15px; color: #8b6914; line-height: 1.6; }

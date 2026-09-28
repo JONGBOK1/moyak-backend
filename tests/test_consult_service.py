@@ -189,6 +189,51 @@ def test_dispense_not_found_raises(db):
         service.dispense(db, purchase_id="nope", machine_id="M1")
 
 
+def test_scan_qr_pairs_machine_to_purchase(db):
+    consultation = approved_consultation(db, user_id="user1")
+    machine = service.rotate_qr_token(db, machine_id="M1")
+
+    service.scan_qr(db, machine_id="M1", qr_token=machine.qr_token, user_id="user1")
+
+    _, purchase = service.get_machine_session(db, machine_id="M1")
+    assert purchase is not None
+    assert purchase.id == consultation.purchase.id
+
+
+def test_get_machine_session_unpaired_by_default(db):
+    service.rotate_qr_token(db, machine_id="M1")
+    machine, purchase = service.get_machine_session(db, machine_id="M1")
+    assert purchase is None
+
+
+def test_get_machine_session_not_found_raises(db):
+    with pytest.raises(service.NotFoundError):
+        service.get_machine_session(db, machine_id="ghost")
+
+
+def test_rotate_qr_token_clears_previous_pairing(db):
+    consultation = approved_consultation(db, user_id="user1")
+    machine = service.rotate_qr_token(db, machine_id="M1")
+    service.scan_qr(db, machine_id="M1", qr_token=machine.qr_token, user_id="user1")
+
+    service.rotate_qr_token(db, machine_id="M1")  # 새 QR 발급 = 이전 페어링 무효화
+
+    _, purchase = service.get_machine_session(db, machine_id="M1")
+    assert purchase is None
+    assert consultation.purchase.status == PurchaseStatus.PENDING  # 구매 건 자체는 그대로
+
+
+def test_dispense_clears_machine_pairing(db):
+    consultation = approved_consultation(db, user_id="user1")
+    machine = service.rotate_qr_token(db, machine_id="M1")
+    service.scan_qr(db, machine_id="M1", qr_token=machine.qr_token, user_id="user1")
+
+    service.dispense(db, purchase_id=consultation.purchase.id, machine_id="M1")
+
+    _, purchase = service.get_machine_session(db, machine_id="M1")
+    assert purchase is None
+
+
 def test_dispense_expired_purchase_raises(db):
     consultation = approved_consultation(db)
     purchase = db.get(ApprovedPurchase, consultation.purchase.id)
