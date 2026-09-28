@@ -754,3 +754,21 @@
   top: -16px;
   overflow: visible;
 }
+
+/* ---- 동적 기능 추가분 ---- */
+.formatted-answer p {
+  margin: 0 0 6px;
+}
+.formatted-answer p:last-child {
+  margin-bottom: 0;
+}
+.formatted-answer ul {
+  margin: 0 0 6px;
+  padding-left: 16px;
+}
+.formatted-answer li {
+  margin-bottom: 3px;
+}
+.formatted-answer strong {
+  font-weight: 800;
+}

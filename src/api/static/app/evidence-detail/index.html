@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; height: 100%; background: #000; }
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
   </style>
   <script src="/static/vendor/app-scale.js"></script>
   <link rel="stylesheet" href="./vars.css">
@@ -165,6 +165,41 @@
     return node;
   }
 
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  // 답변에 섞여 있는 **굵게**, 번호/불릿 목록을 실제 HTML로 바꿔서 가독성 있게 보여준다.
+  function formatAnswer(text) {
+    const escaped = escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    const lines = escaped.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    let html = "";
+    let inList = false;
+    lines.forEach((line) => {
+      const bullet = line.match(/^[-•]\s+(.*)/);
+      const numbered = line.match(/^\d+[.)]\s+(.*)/);
+      if (bullet || numbered) {
+        if (!inList) {
+          html += "<ul>";
+          inList = true;
+        }
+        html += "<li>" + (bullet ? bullet[1] : numbered[1]) + "</li>";
+      } else {
+        if (inList) {
+          html += "</ul>";
+          inList = false;
+        }
+        html += "<p>" + line + "</p>";
+      }
+    });
+    if (inList) html += "</ul>";
+    return html;
+  }
+
+  document.getElementById("summaryCopy").classList.add("formatted-answer");
+
   if (!payload || !payload.evidence || payload.evidence.length === 0) {
     document.getElementById("summaryTitle").textContent = "표시할 원문 근거가 없습니다";
     document.getElementById("summaryCopy").textContent = "챗봇 화면에서 질문에 대한 답변을 먼저 받아주세요.";
@@ -172,7 +207,7 @@
     document.getElementById("updatedText").textContent = "";
   } else {
     document.getElementById("summaryTitle").textContent = payload.question || "질문에 대한 근거 자료";
-    document.getElementById("summaryCopy").textContent = payload.answer || "";
+    document.getElementById("summaryCopy").innerHTML = formatAnswer(payload.answer || "");
     document.getElementById("readingLabel").textContent = "약 " + Math.max(1, Math.round(payload.evidence.length / 2)) + "분";
 
     // item_name별로 근거를 묶어서, 주의/경고성 필드는 caution 박스로, 나머지는 details로 나눈다.
