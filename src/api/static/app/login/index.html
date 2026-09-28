@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="login">
+    <div class="login-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="top-header">
+        <div class="rectangle"></div>
+        <div class="div">로그인</div>
+        <div class="rectangle"></div>
+      </div>
+      <div class="login-body">
+        <div class="login-greeting">
+          <img class="moyak" src="MOYAK.svg" alt="MOYAK" />
+        </div>
+        <div class="login-form">
+          <div class="id-input-field">
+            <div class="div2">아이디</div>
+            <div class="input-wrapper">
+              <input class="div3" id="loginId" type="text" placeholder="아이디를 입력해주세요" />
+            </div>
+          </div>
+          <div class="pw-input-field">
+            <div class="div2">비밀번호</div>
+            <div class="input-wrapper">
+              <input class="div3" id="loginPw" type="password" placeholder="비밀번호를 입력해주세요" />
+              <img class="eye-off" src="eye-off0.svg" id="togglePw" />
+            </div>
+          </div>
+        </div>
+        <div class="primary-button" id="loginBtn">
+          <div class="div4">로그인</div>
+        </div>
+        <div class="login-links">
+          <div class="div5" id="signupLink">회원가입</div>
+          <div class="line"></div>
+          <div class="id-pw">ID·PW 찾기</div>
+        </div>
+        <div class="social-section">
+          <div class="social-header">
+            <div class="line2"></div>
+            <div class="sns">SNS 간편 로그인</div>
+            <div class="line2"></div>
+          </div>
+          <div class="social-buttons">
+            <div class="btn-kakao">
+              <img class="message-circle" src="message-circle0.svg" />
+            </div>
+            <div class="btn-naver">
+              <div class="n">N</div>
+            </div>
+            <div class="btn-google">
+              <img class="circle-x" src="circle-x0.svg" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="home-indicator-area">
+      <div class="home-pill"></div>
+    </div>
+  </div>
+
+<script>
+  // 실제 인증 시스템이 아직 없어서(CLAUDE.md 기준 스텁 구간), 로그인은 값 검증 없이
+  // 기존 chat_test.html 등과 동일한 방식으로 로컬 임시 사용자 ID만 보장하고 다음 화면으로 넘긴다.
+  function makeUserId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  document.getElementById("togglePw").addEventListener("click", () => {
+    const pw = document.getElementById("loginPw");
+    pw.type = pw.type === "password" ? "text" : "password";
+  });
+
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    if (!localStorage.getItem("moyak_user_id")) {
+      localStorage.setItem("moyak_user_id", makeUserId());
+    }
+    location.href = "/app/onboarding-1/";
+  });
+
+  document.getElementById("signupLink").addEventListener("click", () => {
+    location.href = "/app/signup-step1/";
+  });
+</script>
+</body>
+</html>

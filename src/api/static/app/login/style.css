@@ -1,0 +1,402 @@
+.login,
+.login * {
+  box-sizing: border-box;
+}
+.login {
+  background: #f5f5f3;
+  border-radius: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 874px;
+  position: relative;
+  overflow: hidden;
+}
+.login-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.status-bar {
+  padding: 0px 24px 0px 24px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  flex-shrink: 0;
+  height: 44px;
+  position: relative;
+}
+.time {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  position: relative;
+}
+.status-icons {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  position: relative;
+}
+.ios-signal {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.ios-wifi-signal {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.ios-battery-full {
+  flex-shrink: 0;
+  width: 28px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.top-header {
+  padding: 0px 24px 0px 24px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  flex-shrink: 0;
+  height: 56px;
+  position: relative;
+}
+.rectangle {
+  background: rgba(0, 0, 0, 0);
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  position: relative;
+}
+.div {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  position: relative;
+}
+.login-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.login-greeting {
+  padding: 8px 0px 8px 0px;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.moyak {
+  position: relative;
+  width: 200px;
+  height: auto;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.id-input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.div2 {
+  color: #7d6d6a;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  position: relative;
+  align-self: stretch;
+}
+.input-wrapper {
+  background: #ffffff;
+  border-radius: 12px;
+  border-style: solid;
+  border-color: #efebe9;
+  border-width: 1px;
+  padding: 0px 16px 0px 16px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  height: 52px;
+  position: relative;
+}
+.div3 {
+  color: #bcaaa4;
+  text-align: left;
+  font-family: "GothicA1-Regular", sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  position: relative;
+  flex: 1;
+}
+input.div3 {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  outline: none;
+  background: none;
+  color: #3e2723;
+  width: 100%;
+}
+input.div3::placeholder {
+  color: #bcaaa4;
+}
+.pw-input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.eye-off {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.primary-button {
+  background: #ffd54f;
+  border-radius: 28px;
+  padding: 0px 24px 0px 24px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  height: 56px;
+  position: relative;
+}
+.div4 {
+  color: #ffffff;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  position: relative;
+}
+.login-links {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.div5 {
+  color: #7d6d6a;
+  text-align: left;
+  font-family: "GothicA1-Medium", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  position: relative;
+}
+.line {
+  margin-top: -1px;
+  border-style: solid;
+  border-color: #bcaaa4;
+  border-width: 1px 0 0 0;
+  flex-shrink: 0;
+  width: 12px;
+  height: 0px;
+  position: relative;
+  transform-origin: 0 0;
+  transform: rotate(90deg) scale(1, 1);
+}
+.id-pw {
+  color: #7d6d6a;
+  text-align: left;
+  font-family: "GothicA1-Medium", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  position: relative;
+}
+.social-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.social-header {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.line2 {
+  margin-top: -1px;
+  border-style: solid;
+  border-color: #efebe9;
+  border-width: 1px 0 0 0;
+  flex: 1;
+  height: 0px;
+  position: relative;
+}
+.sns {
+  color: #bcaaa4;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  position: relative;
+}
+.social-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  position: relative;
+}
+.btn-kakao {
+  background: #fee500;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  position: relative;
+}
+.message-circle {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  position: relative;
+  overflow: visible;
+}
+.btn-naver {
+  background: #03c75a;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  position: relative;
+}
+.n {
+  color: #ffffff;
+  text-align: left;
+  font-family: "GothicA1-Black", sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  position: relative;
+}
+.btn-google {
+  background: #ffffff;
+  border-radius: 24px;
+  border-style: solid;
+  border-color: #efebe9;
+  border-width: 1px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  position: relative;
+}
+.circle-x {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.home-indicator-area {
+  padding: 20px 0px 8px 0px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.home-pill {
+  background: #3e2723;
+  border-radius: 100px;
+  opacity: 0.3;
+  flex-shrink: 0;
+  width: 134px;
+  height: 5px;
+  position: relative;
+}
