@@ -45,6 +45,7 @@ app.include_router(vending.router)
 app.include_router(shop.router)
 
 app.mount("/kiosk", StaticFiles(directory=STATIC_DIR / "kiosk", html=True), name="kiosk")
+app.mount("/static/vendor", StaticFiles(directory=STATIC_DIR / "vendor"), name="vendor")
 
 
 @app.get("/health")
@@ -72,3 +73,9 @@ def consult_direct_page():
 def pharmacist_page():
     """약사 전용 대시보드: 대기 목록 처리 + 약품 검색 자동완성 + 처리 내역 조회."""
     return (STATIC_DIR / "pharmacist.html").read_text(encoding="utf-8")
+
+
+@app.get("/scan", response_class=HTMLResponse)
+def qr_scan_page():
+    """실제 Flutter 앱이 나오기 전까지, 카메라로 자판기 QR을 스캔하는 웹 데모 (폰 앱 대역)."""
+    return (STATIC_DIR / "qr_scan.html").read_text(encoding="utf-8")
