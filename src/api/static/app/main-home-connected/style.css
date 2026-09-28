@@ -1,0 +1,454 @@
+.main-home-connected,
+.main-home-connected * {
+  box-sizing: border-box;
+}
+.main-home-connected {
+  background: #f2ebdd;
+  border-radius: 40px;
+  height: 874px;
+  min-height: 874px;
+  position: relative;
+  overflow: hidden;
+}
+.screen-content {
+  width: 402px;
+  height: 742px;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+}
+.status-bar {
+  padding: 14px 24px 8px 24px;
+  width: 402px;
+  height: 42px;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+}
+.time {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  position: absolute;
+  left: 24px;
+  top: 15px;
+}
+.status-icons {
+  width: 80px;
+  height: 20px;
+  position: absolute;
+  left: 298px;
+  top: 14px;
+}
+.ios-signal {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  overflow: visible;
+}
+.ios-wifi-signal {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  left: 26px;
+  top: 0px;
+  overflow: visible;
+}
+.ios-battery-full {
+  width: 28px;
+  height: 20px;
+  position: absolute;
+  left: 52px;
+  top: 0px;
+  overflow: visible;
+}
+.home-header {
+  padding: 12px 24px 12px 24px;
+  width: 402px;
+  height: 54px;
+  position: absolute;
+  left: 0px;
+  top: 42px;
+}
+.moyak {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-Black", sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  position: absolute;
+  left: 24px;
+  top: 12px;
+}
+.home-body {
+  padding: 20px;
+  width: 402px;
+  height: 646px;
+  position: absolute;
+  left: 0px;
+  top: 96px;
+}
+.mini-ad-banner {
+  background: #ffffff;
+  border-radius: 16px;
+  border-style: solid;
+  border-color: #efebe9;
+  border-width: 1px;
+  padding: 12px 16px 12px 16px;
+  width: 362px;
+  height: 60px;
+  position: absolute;
+  left: 20px;
+  top: 20px;
+}
+.banner-text {
+  width: 298px;
+  height: 36px;
+  position: absolute;
+  left: 16px;
+  top: 12px;
+}
+.div {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-ExtraBold", sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+}
+.div2 {
+  color: #7d6d6a;
+  text-align: left;
+  font-family: "GothicA1-Regular", sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  position: absolute;
+  left: 0px;
+  top: 22px;
+}
+.pagination-badge {
+  background: #f2ebdd;
+  border-radius: 8px;
+  padding: 4px 8px 4px 8px;
+  width: 32px;
+  height: 21px;
+  position: absolute;
+  left: 314px;
+  top: 19.5px;
+}
+._1-4 {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  position: absolute;
+  left: 8px;
+  top: 4px;
+}
+.content-bg-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
+  width: 362px;
+  height: 526px;
+  position: absolute;
+  left: 20px;
+  top: 100px;
+  box-shadow: 0px 8px 16px 0px rgba(62, 39, 35, 0.08);
+}
+.connection-badge {
+  background: #e8f8ee;
+  border-radius: 100px;
+  border-style: solid;
+  border-color: #a3eac0;
+  border-width: 1px;
+  padding: 6px 12px 6px 12px;
+  width: 169px;
+  height: 27px;
+  position: absolute;
+  left: 96.5px;
+  top: 24px;
+}
+.indicator-dot {
+  background: #03c75a;
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  position: absolute;
+  left: 12px;
+  top: 9.5px;
+}
+._3-2 {
+  color: #03c75a;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  position: absolute;
+  left: 26px;
+  top: 6px;
+}
+.color {
+  width: 240px;
+  height: 240px;
+  position: absolute;
+  left: 61px;
+  top: 75px;
+  aspect-ratio: 1;
+}
+.moyak-1 {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  right: 0%;
+  left: 0%;
+  bottom: 0%;
+  top: 0%;
+  object-fit: cover;
+}
+.status-text {
+  width: 314px;
+  height: 63px;
+  position: absolute;
+  left: 24px;
+  top: 339px;
+}
+.div3 {
+  color: #3e2723;
+  text-align: center;
+  font-family: "GothicA1-ExtraBold", sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  position: absolute;
+  left: 52px;
+  top: 0px;
+}
+.div4 {
+  color: #7d6d6a;
+  text-align: center;
+  font-family: "GothicA1-Regular", sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  position: absolute;
+  left: 0px;
+  top: 31px;
+  width: 314px;
+}
+.line {
+  margin-top: -1px;
+  border-style: solid;
+  border-color: #efebe9;
+  border-width: 1px 0 0 0;
+  width: 314px;
+  height: 0px;
+  position: absolute;
+  left: 24px;
+  top: 426px;
+}
+.btn-purchase {
+  background: #ffd54f;
+  border-radius: 28px;
+  padding: 16px 24px 16px 24px;
+  width: 314px;
+  height: 52px;
+  position: absolute;
+  left: 24px;
+  top: 450px;
+  box-shadow: 0px 8px 16px 0px rgba(62, 39, 35, 0.08);
+}
+.shopping-bag {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  left: 93px;
+  top: 16px;
+  overflow: visible;
+}
+.div5 {
+  color: #ffffff;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  position: absolute;
+  left: 121px;
+  top: 16px;
+}
+.bottom-navbar {
+  background: #ffffff;
+  width: 402px;
+  height: 91px;
+  position: absolute;
+  left: 0px;
+  top: 783px;
+}
+.tabs-container {
+  padding: 12px 16px 4px 16px;
+  width: 402px;
+  height: 58px;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+}
+.nav-tab {
+  width: 60px;
+  height: 42px;
+  position: absolute;
+  left: 16px;
+  top: 12px;
+}
+.home {
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  left: 18px;
+  top: 0px;
+  overflow: visible;
+}
+.div6 {
+  color: #ffd54f;
+  text-align: center;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  position: absolute;
+  left: 19px;
+  top: 28px;
+}
+.nav-tab2 {
+  width: 60px;
+  height: 42px;
+  position: absolute;
+  left: 91.5px;
+  top: 12px;
+}
+.map-pin {
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  left: 18px;
+  top: 0px;
+  overflow: visible;
+}
+.div7 {
+  color: #7d6d6a;
+  text-align: center;
+  font-family: "GothicA1-Medium", sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  position: absolute;
+  left: 19px;
+  top: 28px;
+}
+.qr-fab-container {
+  width: 68px;
+  height: 38px;
+  position: absolute;
+  left: 167px;
+  top: 14px;
+}
+.qr-fab {
+  background: #ffd970;
+  border-radius: 28px;
+  width: 56px;
+  height: 56px;
+  position: absolute;
+  left: 0px;
+  top: -32px;
+  box-shadow: 0px 8px 16px 0px rgba(62, 39, 35, 0.08);
+}
+.scan-qr-code {
+  width: 28px;
+  height: 28px;
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  overflow: visible;
+}
+.frame {
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100px;
+  height: 24px;
+  position: absolute;
+  left: -16px;
+  top: 0px;
+}
+.qr {
+  color: #7d6d6a;
+  text-align: center;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  position: absolute;
+  left: 9px;
+  top: 28px;
+}
+.nav-tab3 {
+  width: 60px;
+  height: 42px;
+  position: absolute;
+  left: 250.5px;
+  top: 12px;
+}
+.message-circle {
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  left: 18px;
+  top: 0px;
+  overflow: visible;
+}
+.div8 {
+  color: #7d6d6a;
+  text-align: center;
+  font-family: "GothicA1-Medium", sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  position: absolute;
+  left: 13.5px;
+  top: 28px;
+}
+.nav-tab4 {
+  width: 60px;
+  height: 42px;
+  position: absolute;
+  left: 326px;
+  top: 12px;
+}
+.user-cog {
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  left: 18px;
+  top: 0px;
+  overflow: visible;
+}
+.home-indicator-area {
+  padding: 20px 0px 8px 0px;
+  width: 402px;
+  height: 33px;
+  position: absolute;
+  left: 0px;
+  top: 58px;
+}
+.home-pill {
+  background: #3e2723;
+  border-radius: 100px;
+  opacity: 0.3;
+  width: 134px;
+  height: 5px;
+  position: absolute;
+  left: 134px;
+  top: 20px;
+}
