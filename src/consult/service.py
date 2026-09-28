@@ -118,6 +118,21 @@ def decide_consultation(
     return consultation
 
 
+def cancel_consultation(db: Session, consultation_id: str) -> ConsultationRequest:
+    """대기 중인 상담 요청을 사용자가 직접 취소할 때 쓴다."""
+    consultation = db.get(ConsultationRequest, consultation_id)
+    if consultation is None:
+        raise NotFoundError(f"상담 요청을 찾을 수 없습니다: {consultation_id}")
+    if consultation.status != ConsultationStatus.PENDING:
+        raise InvalidStateError(f"대기 중인 상담만 취소할 수 있습니다 (현재 상태: {consultation.status})")
+
+    consultation.status = ConsultationStatus.CANCELLED
+    consultation.decided_at = _now()
+    db.commit()
+    db.refresh(consultation)
+    return consultation
+
+
 def rotate_qr_token(db: Session, machine_id: str, machine_name: str | None = None) -> VendingMachine:
     machine = db.get(VendingMachine, machine_id)
     if machine is None:

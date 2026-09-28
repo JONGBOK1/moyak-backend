@@ -28,6 +28,7 @@ class ConsultationStatus:
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    CANCELLED = "cancelled"  # 사용자가 대기 중 직접 취소
 
 
 class PurchaseStatus:

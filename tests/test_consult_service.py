@@ -110,6 +110,24 @@ def test_decide_consultation_reject_creates_no_purchase(db):
     assert decided.purchase is None
 
 
+def test_cancel_consultation_marks_cancelled(db):
+    consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담")
+    cancelled = service.cancel_consultation(db, consultation_id=consultation.id)
+    assert cancelled.status == ConsultationStatus.CANCELLED
+    assert cancelled.decided_at is not None
+
+
+def test_cancel_consultation_already_decided_raises(db):
+    consultation = approved_consultation(db)
+    with pytest.raises(service.InvalidStateError):
+        service.cancel_consultation(db, consultation_id=consultation.id)
+
+
+def test_cancel_consultation_not_found_raises(db):
+    with pytest.raises(service.NotFoundError):
+        service.cancel_consultation(db, consultation_id="nope")
+
+
 def test_decide_consultation_twice_raises(db):
     consultation = service.create_consultation(db, user_id="user1", chat_summary="두통 상담", requested_drug_item_seq="A1", requested_drug_name="약A")
     service.decide_consultation(db, consultation_id=consultation.id, pharmacist_id="pharm1", approve=True)

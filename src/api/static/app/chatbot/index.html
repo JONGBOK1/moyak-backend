@@ -239,90 +239,15 @@
   });
 
   // ---------- 약사 상담 ----------
-  const POLL_INTERVAL_MS = 3000;
-  let pollTimer = null;
-
-  function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  function renderConsultationOutcome(data) {
-    if (data.status === "approved") {
-      conversationEl.appendChild(
-        el("div", {
-          className: "system-note approved",
-          textContent:
-            "🎉 약사가 [" + (data.approved_drug_name || "약") + "]을(를) 처방했습니다. 자판기에서 QR을 스캔하면 받으실 수 있어요.",
-        })
-      );
-    } else if (data.status === "rejected") {
-      const reasonText = data.decision_reason ? "사유: " + data.decision_reason : "사유가 별도로 전달되지 않았습니다.";
-      conversationEl.appendChild(el("div", { className: "system-note rejected", textContent: "상담이 거절되었습니다. " + reasonText }));
-    }
-    conversationEl.scrollTop = conversationEl.scrollHeight;
-  }
-
-  function pollConsultationStatus(consultationId) {
-    stopPolling();
-    pollTimer = setInterval(async () => {
-      try {
-        const res = await fetch("/consultations/" + consultationId);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.status !== "pending") {
-          stopPolling();
-          renderConsultationOutcome(data);
-        }
-      } catch (e) {
-        // 네트워크 순단은 다음 폴링에서 재시도
-      }
-    }, POLL_INTERVAL_MS);
-  }
-
-  async function requestConsultation() {
+  // 실제 요청/대기 상태 폴링은 전용 화면(/app/pharmacist-waiting/)에서 처리한다.
+  function requestConsultation() {
     if (history.length === 0) {
       alert("먼저 챗봇과 증상/약에 대해 대화해주세요. 그 대화 내용이 약사에게 전달됩니다.");
       return;
     }
-    const waiting = el("div", { className: "system-note", textContent: "🩺 약사 상담을 준비하고 있습니다. 잠시만 기다려주세요..." });
-    conversationEl.appendChild(waiting);
-    conversationEl.scrollTop = conversationEl.scrollHeight;
-
-    try {
-      const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
-      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
-
-      let data;
-      const reused = pendingList.length > 0;
-      if (reused) {
-        data = pendingList[0];
-      } else {
-        const chatSummary = history.map((h) => (h.role === "user" ? "사용자: " : "모약이: ") + h.content).join("\n");
-        data = await api("POST", "/consultations", { user_id: userId, chat_summary: chatSummary });
-      }
-
-      waiting.remove();
-
-      if (data.room_url) {
-        const videoCard = el("div", { className: "video-card" });
-        videoCard.innerHTML = `<div class="video-label">약사가 입장하면 화상 상담이 시작됩니다</div>`;
-        const iframe = el("iframe", { src: data.room_url, allow: "camera; microphone; fullscreen; display-capture" });
-        videoCard.appendChild(iframe);
-        conversationEl.appendChild(videoCard);
-      } else {
-        conversationEl.appendChild(
-          el("div", { className: "system-note", textContent: "🩺 약사 상담을 요청했습니다. (요청 ID: " + data.id.slice(0, 8) + "...)" })
-        );
-      }
-      conversationEl.scrollTop = conversationEl.scrollHeight;
-      pollConsultationStatus(data.id);
-    } catch (e) {
-      waiting.remove();
-      alert("상담 요청 실패: " + e.message);
-    }
+    const chatSummary = history.map((h) => (h.role === "user" ? "사용자: " : "모약이: ") + h.content).join("\n");
+    sessionStorage.setItem("moyak_pending_chat_summary", chatSummary);
+    location.href = "/app/pharmacist-waiting/";
   }
 
   // ---------- 상단/하단 네비게이션 ----------

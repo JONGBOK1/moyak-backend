@@ -89,6 +89,18 @@ def get_consultation(consultation_id: str, db: Session = Depends(get_db)) -> Con
     return _to_response(consultation)
 
 
+@router.post("/{consultation_id}/cancel", response_model=ConsultationResponse)
+def cancel_consultation(consultation_id: str, db: Session = Depends(get_db)) -> ConsultationResponse:
+    """사용자가 대기 화면에서 직접 상담 요청을 취소할 때 쓴다."""
+    try:
+        consultation = service.cancel_consultation(db, consultation_id=consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return _to_response(consultation)
+
+
 @router.post("/{consultation_id}/decision", response_model=ConsultationResponse)
 def decide_consultation(
     consultation_id: str, payload: ConsultationDecisionRequest, db: Session = Depends(get_db)

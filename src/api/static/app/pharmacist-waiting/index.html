@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="div">
+    <div class="header">
+      <div class="device-status">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="app-bar">
+        <div class="title-area">
+          <div class="brand-mark">
+            <img class="pill" src="pill0.svg" />
+          </div>
+          <div class="header-copy">
+            <div class="title">약사상담</div>
+            <div class="subtitle">전문 약사와 안전하게 상담해요</div>
+          </div>
+        </div>
+        <div class="qr-scan" id="qrScanBtn">
+          <img class="scan-qr-code" src="scan-qr-code0.svg" />
+          <div class="qr-scan-label">QR 스캔</div>
+        </div>
+      </div>
+    </div>
+    <div class="waiting-content">
+      <div class="connection-status">
+        <div class="status-badge">
+          <img class="radio" src="radio0.svg" />
+          <div class="label" id="statusLabel">약사를 찾고 있어요</div>
+        </div>
+        <div class="wait-time-dial">
+          <div class="wait-time">
+            <div class="estimate-label">대기 시간</div>
+            <div class="estimate" id="elapsedTime">0:00</div>
+          </div>
+        </div>
+        <div class="queue-summary">
+          <div class="queue-number" id="queueNumber">약사 연결을 기다리는 중이에요</div>
+          <div class="request-time" id="requestTime"></div>
+        </div>
+        <div class="progress-rail">
+          <div class="progress"></div>
+        </div>
+        <div class="reassurance">
+          앱을 잠시 벗어나도 이 화면으로 돌아오면 진행 상황이 이어서 보여요.
+        </div>
+      </div>
+      <div class="connection-journey">
+        <div class="section-title">연결 진행 상황</div>
+        <div class="connection-step">
+          <div class="step-icon">
+            <img class="check" src="check0.svg" />
+          </div>
+          <div class="step-copy">
+            <div class="title2">상담 요청 완료</div>
+            <div class="description">증상과 복용 정보를 전달했어요</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="connection-step">
+          <div class="step-icon" id="step2Icon">
+            <img class="headphones" src="headphones0.svg" />
+          </div>
+          <div class="step-copy">
+            <div class="title3">상담 가능한 약사 확인</div>
+            <div class="description">가장 빠른 약사를 연결하고 있어요</div>
+          </div>
+          <div class="status-badge" id="step2Badge">
+            <div class="indicator"></div>
+            <div class="label">진행 중</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="connection-step">
+          <div class="step-icon2" id="step3Icon">
+            <img class="video" src="video0.svg" />
+          </div>
+          <div class="step-copy">
+            <div class="title2">화상 상담 입장</div>
+            <div class="description" id="step3Desc">연결되면 카메라·마이크를 확인해요</div>
+          </div>
+        </div>
+      </div>
+      <div class="video-slot" id="videoSlot" style="display:none"></div>
+      <div class="privacy-note">
+        <img class="shield-check" src="shield-check0.svg" />
+        <div class="privacy-copy">
+          <div class="title4">상담 내용은 안전하게 보호돼요</div>
+          <div class="description2">
+            상담 기록은 서비스 제공 목적 외에는 사용하지 않습니다.
+          </div>
+        </div>
+      </div>
+      <div class="primary-button" id="cancelBtn">
+        <img class="x" src="x0.svg" />
+        <div class="label2">상담 요청 취소</div>
+      </div>
+    </div>
+    <div class="bottom-navigation">
+      <div class="navigation-component">
+        <div class="tabs-container">
+          <div class="nav-tab" id="navHome">
+            <img class="home" src="home0.svg" />
+            <div class="div2">홈</div>
+          </div>
+          <div class="nav-tab2" id="navMap">
+            <img class="map-pin" src="map-pin0.svg" />
+            <div class="div3">주변약국</div>
+          </div>
+          <div class="qr-fab-container" id="navConsult">
+            <div class="qr-fab"></div>
+            <div class="frame"></div>
+            <div class="qr">약사상담</div>
+          </div>
+          <div class="nav-tab3" id="navChatbot">
+            <img class="message-circle" src="message-circle0.svg" />
+            <div class="div4">챗봇</div>
+          </div>
+          <div class="nav-tab4" id="navMypage">
+            <img class="user-cog" src="user-cog0.svg" />
+            <div class="div5">내정보</div>
+          </div>
+        </div>
+        <div class="home-indicator-area">
+          <div class="home-pill"></div>
+        </div>
+      </div>
+      <img class="stethoscope" src="stethoscope0.svg" />
+    </div>
+  </div>
+
+<script>
+  function makeUserId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  let userId = localStorage.getItem("moyak_user_id");
+  if (!userId) {
+    userId = makeUserId();
+    localStorage.setItem("moyak_user_id", userId);
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  let consultationId = null;
+  let requestedAt = null;
+  let pollTimer = null;
+  let clockTimer = null;
+
+  function formatElapsed(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + ":" + String(s).padStart(2, "0");
+  }
+
+  function startClock() {
+    clockTimer = setInterval(() => {
+      if (!requestedAt) return;
+      const elapsed = Math.floor((Date.now() - requestedAt) / 1000);
+      document.getElementById("elapsedTime").textContent = formatElapsed(Math.max(0, elapsed));
+    }, 1000);
+  }
+
+  function applyStatus(data) {
+    document.getElementById("requestTime").textContent =
+      new Date(data.created_at + "Z").toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) + " 신청";
+
+    if (data.status === "pending") return;
+
+    clearInterval(pollTimer);
+    clearInterval(clockTimer);
+
+    if (data.status === "approved") {
+      document.getElementById("statusLabel").textContent = "약사와 연결됐어요";
+      document.getElementById("queueNumber").textContent = "연결 완료";
+      document.getElementById("step2Icon").innerHTML = '<img class="check" src="check0.svg" />';
+      document.getElementById("step2Badge").style.display = "none";
+      document.getElementById("step3Icon").innerHTML = '<img class="check" src="check0.svg" />';
+      document.getElementById("step3Desc").textContent = "아래에서 화상 상담을 시작하세요";
+      document.getElementById("cancelBtn").style.display = "none";
+
+      const slot = document.getElementById("videoSlot");
+      slot.style.display = "block";
+      if (data.room_url) {
+        slot.innerHTML = `<div class="video-label">약사가 입장하면 화상 상담이 시작됩니다</div>`;
+        const iframe = document.createElement("iframe");
+        iframe.src = data.room_url;
+        iframe.allow = "camera; microphone; fullscreen; display-capture";
+        slot.appendChild(iframe);
+      } else {
+        slot.textContent = "처방약: " + (data.approved_drug_name || "-") + " · 화상 연결에 문제가 있어 텍스트로 안내드립니다.";
+      }
+    } else if (data.status === "rejected") {
+      document.getElementById("statusLabel").textContent = "상담이 거절되었어요";
+      document.getElementById("queueNumber").textContent = data.decision_reason || "사유가 별도로 전달되지 않았습니다.";
+      document.getElementById("cancelBtn").innerHTML = `<div class="label2">챗봇으로 돌아가기</div>`;
+      document.getElementById("cancelBtn").onclick = () => (location.href = "/app/chatbot/");
+    } else if (data.status === "cancelled") {
+      location.href = "/app/chatbot/";
+    }
+  }
+
+  function poll() {
+    pollTimer = setInterval(async () => {
+      try {
+        const data = await api("GET", "/consultations/" + consultationId);
+        applyStatus(data);
+      } catch (e) {
+        // 네트워크 순단은 다음 폴링에서 재시도
+      }
+    }, 3000);
+  }
+
+  async function init() {
+    try {
+      const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
+      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
+
+      let data;
+      if (pendingList.length > 0) {
+        data = pendingList[0];
+      } else {
+        const chatSummary = sessionStorage.getItem("moyak_pending_chat_summary") || "";
+        data = await api("POST", "/consultations", { user_id: userId, chat_summary: chatSummary || undefined });
+      }
+      sessionStorage.removeItem("moyak_pending_chat_summary");
+
+      consultationId = data.id;
+      requestedAt = new Date(data.created_at + "Z").getTime();
+      applyStatus(data);
+      startClock();
+      poll();
+    } catch (e) {
+      document.getElementById("statusLabel").textContent = "상담 요청에 실패했습니다";
+      document.getElementById("queueNumber").textContent = e.message;
+    }
+  }
+
+  document.getElementById("cancelBtn").addEventListener("click", async () => {
+    if (!consultationId) {
+      location.href = "/app/chatbot/";
+      return;
+    }
+    if (!confirm("상담 요청을 취소하시겠어요?")) return;
+    try {
+      await api("POST", `/consultations/${consultationId}/cancel`);
+      location.href = "/app/chatbot/";
+    } catch (e) {
+      alert("취소에 실패했습니다: " + e.message);
+    }
+  });
+
+  document.getElementById("qrScanBtn").addEventListener("click", () => {
+    location.href = "/app/qr-camera/";
+  });
+  document.getElementById("navHome").addEventListener("click", () => {
+    location.href = "/app/main-home-disconnected/";
+  });
+  document.getElementById("navMap").addEventListener("click", () => {
+    location.href = "/app/map-screen/";
+  });
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/chatbot/";
+  });
+  document.getElementById("navChatbot").addEventListener("click", () => {
+    location.href = "/app/chatbot/";
+  });
+  document.getElementById("navMypage").addEventListener("click", () => {
+    location.href = "/app/mypage/";
+  });
+
+  init();
+</script>
+</body>
+</html>
