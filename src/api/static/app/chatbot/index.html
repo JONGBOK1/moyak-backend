@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="div">
+    <div class="header">
+      <div class="device-status">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="app-bar">
+        <div class="title-area">
+          <div class="brand-mark">
+            <img class="pill" src="pill0.svg" />
+          </div>
+          <div class="header-copy">
+            <div class="title">모약이 챗봇</div>
+            <div class="subtitle">의약품 정보를 쉽고 안전하게</div>
+          </div>
+        </div>
+        <div class="qr-scan" id="qrScanBtn">
+          <img class="scan-qr-code" src="scan-qr-code0.svg" />
+          <div class="qr-scan-label">QR 스캔</div>
+        </div>
+      </div>
+    </div>
+    <div class="chat-area">
+      <div class="conversation" id="conversation">
+        <div class="trust-line">
+          <div class="status-badge">
+            <img class="shield-check" src="shield-check0.svg" />
+            <div class="label">식품의약품안전처 공식 데이터 기반</div>
+          </div>
+          <div class="updated">오늘 업데이트</div>
+        </div>
+      </div>
+      <div class="message-composer">
+        <div class="question-input">
+          <img class="message-circle" src="message-circle0.svg" />
+          <input class="placeholder" id="questionInput" type="text" placeholder="약이나 증상을 물어보세요" />
+        </div>
+        <div class="send" id="sendBtn">
+          <img class="arrow-up" src="arrow-up0.svg" />
+        </div>
+      </div>
+    </div>
+    <div class="bottom-navigation">
+      <div class="navigation-component">
+        <div class="tabs-container">
+          <div class="nav-tab" id="navHome">
+            <img class="home" src="home0.svg" />
+            <div class="div2">홈</div>
+          </div>
+          <div class="nav-tab2" id="navMap">
+            <img class="map-pin" src="map-pin0.svg" />
+            <div class="div3">주변약국</div>
+          </div>
+          <div class="qr-fab-container" id="navConsult">
+            <div class="qr-fab"></div>
+            <div class="frame"></div>
+            <div class="qr">약사상담</div>
+          </div>
+          <div class="nav-tab3">
+            <img class="message-circle2" src="message-circle1.svg" />
+            <div class="div4">챗봇</div>
+          </div>
+          <div class="nav-tab4" id="navMypage">
+            <img class="user-cog" src="user-cog0.svg" />
+            <div class="div5">내정보</div>
+          </div>
+        </div>
+        <div class="home-indicator-area">
+          <div class="home-pill"></div>
+        </div>
+      </div>
+      <img class="stethoscope2" src="stethoscope1.svg" />
+    </div>
+  </div>
+
+<script>
+  // 아직 실제 로그인/본인인증이 없어서, chat_test.html과 동일한 방식으로 임시 사용자 ID를 유지한다.
+  function makeUserId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+  let userId = localStorage.getItem("moyak_user_id");
+  if (!userId) {
+    userId = makeUserId();
+    localStorage.setItem("moyak_user_id", userId);
+  }
+
+  let history = [];
+  const conversationEl = document.getElementById("conversation");
+  const questionInput = document.getElementById("questionInput");
+
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    Object.assign(node, props || {});
+    (children || []).forEach((c) => node.appendChild(c));
+    return node;
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  function renderTurn(question, data) {
+    const userMsg = el("div", { className: "user-message" }, [
+      el("div", { className: "question-bubble" }, [el("div", { className: "question", textContent: question })]),
+    ]);
+    conversationEl.appendChild(userMsg);
+
+    const answerCard = el("div", { className: "answer-card" });
+    answerCard.innerHTML = `
+      <div class="answer-heading">
+        <div class="bot-identity">
+          <div class="bot-icon"><img class="sparkles" src="sparkles0.svg" /></div>
+          <div class="bot-name">모약이 답변</div>
+        </div>
+        <div class="status-badge2"><div class="indicator"></div><div class="label2">정보 안내</div></div>
+      </div>
+      <div class="summary"></div>
+      <div class="safety-notice">
+        <img class="triangle-alert" src="triangle-alert0.svg" />
+        <div class="notice">정확한 진단과 복용은 약사와 상담하세요.</div>
+      </div>
+      <div class="answer-actions">
+        <div class="evidence-link" style="display:${data.evidence && data.evidence.length ? "flex" : "none"}">
+          <img class="book-open-text" src="book-open-text0.svg" />
+          <div class="label3">원문 근거 보기 (${data.evidence ? data.evidence.length : 0})</div>
+        </div>
+        <div class="helpful"><img class="thumbs-up" src="thumbs-up0.svg" /><div class="label4">도움돼요</div></div>
+      </div>
+      <div class="evidence-detail" style="display:none"></div>
+      <div class="sources-line"></div>
+    `;
+    answerCard.querySelector(".summary").textContent = data.answer;
+    answerCard.querySelector(".sources-line").textContent =
+      "참고 약품: " + (data.sources && data.sources.length ? data.sources.join(", ") : "없음");
+
+    if (data.evidence && data.evidence.length) {
+      const detail = answerCard.querySelector(".evidence-detail");
+      data.evidence.forEach((e) => {
+        const item = el("div", { className: "evidence-item" });
+        item.innerHTML = `<b>${e.item_name} · ${e.field_label}</b><div></div>`;
+        item.querySelector("div").textContent = e.text;
+        detail.appendChild(item);
+      });
+      answerCard.querySelector(".evidence-link").addEventListener("click", () => {
+        detail.style.display = detail.style.display === "none" ? "block" : "none";
+      });
+    }
+    answerCard.querySelector(".helpful").addEventListener("click", (e) => {
+      e.currentTarget.classList.toggle("helpful-active");
+    });
+
+    conversationEl.appendChild(answerCard);
+
+    const consultBtn = el("div", { className: "primary-button" });
+    consultBtn.innerHTML = `<img class="stethoscope" src="stethoscope0.svg" /><div class="label5">약사에게 바로 상담하기</div>`;
+    consultBtn.addEventListener("click", requestConsultation);
+    conversationEl.appendChild(consultBtn);
+
+    conversationEl.scrollTop = conversationEl.scrollHeight;
+  }
+
+  async function ask() {
+    const question = questionInput.value.trim();
+    if (!question) return;
+    questionInput.value = "";
+    questionInput.disabled = true;
+
+    const loading = el("div", { className: "system-note", textContent: "답변을 생성하는 중입니다..." });
+    conversationEl.appendChild(loading);
+    conversationEl.scrollTop = conversationEl.scrollHeight;
+
+    try {
+      const data = await api("POST", "/chat", { question, history });
+      loading.remove();
+      renderTurn(question, data);
+      history.push({ role: "user", content: question });
+      history.push({ role: "assistant", content: data.answer });
+    } catch (e) {
+      loading.remove();
+      conversationEl.appendChild(el("div", { className: "system-note", textContent: "오류: " + e.message }));
+    } finally {
+      questionInput.disabled = false;
+      questionInput.focus();
+    }
+  }
+
+  document.getElementById("sendBtn").addEventListener("click", ask);
+  questionInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") ask();
+  });
+
+  // ---------- 약사 상담 ----------
+  const POLL_INTERVAL_MS = 3000;
+  let pollTimer = null;
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function renderConsultationOutcome(data) {
+    if (data.status === "approved") {
+      conversationEl.appendChild(
+        el("div", {
+          className: "system-note approved",
+          textContent:
+            "🎉 약사가 [" + (data.approved_drug_name || "약") + "]을(를) 처방했습니다. 자판기에서 QR을 스캔하면 받으실 수 있어요.",
+        })
+      );
+    } else if (data.status === "rejected") {
+      const reasonText = data.decision_reason ? "사유: " + data.decision_reason : "사유가 별도로 전달되지 않았습니다.";
+      conversationEl.appendChild(el("div", { className: "system-note rejected", textContent: "상담이 거절되었습니다. " + reasonText }));
+    }
+    conversationEl.scrollTop = conversationEl.scrollHeight;
+  }
+
+  function pollConsultationStatus(consultationId) {
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch("/consultations/" + consultationId);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status !== "pending") {
+          stopPolling();
+          renderConsultationOutcome(data);
+        }
+      } catch (e) {
+        // 네트워크 순단은 다음 폴링에서 재시도
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  async function requestConsultation() {
+    if (history.length === 0) {
+      alert("먼저 챗봇과 증상/약에 대해 대화해주세요. 그 대화 내용이 약사에게 전달됩니다.");
+      return;
+    }
+    const waiting = el("div", { className: "system-note", textContent: "🩺 약사 상담을 준비하고 있습니다. 잠시만 기다려주세요..." });
+    conversationEl.appendChild(waiting);
+    conversationEl.scrollTop = conversationEl.scrollHeight;
+
+    try {
+      const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
+      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
+
+      let data;
+      const reused = pendingList.length > 0;
+      if (reused) {
+        data = pendingList[0];
+      } else {
+        const chatSummary = history.map((h) => (h.role === "user" ? "사용자: " : "모약이: ") + h.content).join("\n");
+        data = await api("POST", "/consultations", { user_id: userId, chat_summary: chatSummary });
+      }
+
+      waiting.remove();
+
+      if (data.room_url) {
+        const videoCard = el("div", { className: "video-card" });
+        videoCard.innerHTML = `<div class="video-label">약사가 입장하면 화상 상담이 시작됩니다</div>`;
+        const iframe = el("iframe", { src: data.room_url, allow: "camera; microphone; fullscreen; display-capture" });
+        videoCard.appendChild(iframe);
+        conversationEl.appendChild(videoCard);
+      } else {
+        conversationEl.appendChild(
+          el("div", { className: "system-note", textContent: "🩺 약사 상담을 요청했습니다. (요청 ID: " + data.id.slice(0, 8) + "...)" })
+        );
+      }
+      conversationEl.scrollTop = conversationEl.scrollHeight;
+      pollConsultationStatus(data.id);
+    } catch (e) {
+      waiting.remove();
+      alert("상담 요청 실패: " + e.message);
+    }
+  }
+
+  // ---------- 상단/하단 네비게이션 ----------
+  document.getElementById("qrScanBtn").addEventListener("click", () => {
+    location.href = "/app/qr-camera/";
+  });
+  document.getElementById("navHome").addEventListener("click", () => {
+    location.href = "/app/main-home-disconnected/";
+  });
+  document.getElementById("navMap").addEventListener("click", () => {
+    location.href = "/app/map-screen/";
+  });
+  document.getElementById("navConsult").addEventListener("click", requestConsultation);
+  document.getElementById("navMypage").addEventListener("click", () => {
+    location.href = "/app/mypage/";
+  });
+</script>
+</body>
+</html>
