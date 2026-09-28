@@ -231,17 +231,16 @@
       document.getElementById("step2Icon").innerHTML = '<img class="check" src="check0.svg" />';
       document.getElementById("step2Badge").style.display = "none";
       document.getElementById("step3Icon").innerHTML = '<img class="check" src="check0.svg" />';
-      document.getElementById("step3Desc").textContent = "아래에서 화상 상담을 시작하세요";
+      document.getElementById("step3Desc").textContent = "화상 상담 입장 화면으로 이동합니다...";
       document.getElementById("cancelBtn").style.display = "none";
 
       const slot = document.getElementById("videoSlot");
       slot.style.display = "block";
       if (data.room_url) {
-        slot.innerHTML = `<div class="video-label">약사가 입장하면 화상 상담이 시작됩니다</div>`;
-        const iframe = document.createElement("iframe");
-        iframe.src = data.room_url;
-        iframe.allow = "camera; microphone; fullscreen; display-capture";
-        slot.appendChild(iframe);
+        sessionStorage.setItem("moyak_video_room_url", data.room_url);
+        setTimeout(() => {
+          location.href = "/app/video-consult-entry/";
+        }, 1200);
       } else {
         slot.textContent = "처방약: " + (data.approved_drug_name || "-") + " · 화상 연결에 문제가 있어 텍스트로 안내드립니다.";
       }
