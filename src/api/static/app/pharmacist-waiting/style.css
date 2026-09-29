@@ -771,3 +771,6 @@
 .primary-button, .qr-scan, .nav-tab, .nav-tab2, .nav-tab3, .nav-tab4, .qr-fab-container {
   cursor: pointer;
 }
+.summary-card { align-self: stretch; background: #fffdf5; border: 1px solid #f1e3b8; border-radius: 14px; padding: 14px 16px; }
+.summary-title { font-size: 15px; font-weight: 800; color: #593d0d; margin-bottom: 8px; }
+.summary-body { font-size: 13px; line-height: 1.6; color: #2b2b2b; white-space: pre-wrap; }

@@ -70,6 +70,17 @@
   }
   button.reject { background: #fff; color: #c0392b; border-color: #c0392b; }
   a.video-link { display: inline-block; margin: 6px 0; }
+  .live-chat { border: 1px solid #cfe3dd; border-radius: 8px; background: #fff; margin: 8px 0; padding: 8px; }
+  .live-chat-head { font-size: 13px; font-weight: bold; color: #176b5b; margin-bottom: 6px; }
+  .live-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .live-empty { color: #999; font-size: 12px; }
+  .live-msg { padding: 5px 9px; border-radius: 10px; max-width: 80%; white-space: pre-wrap; word-break: break-word; }
+  .live-msg.user { background: #e8f0fe; align-self: flex-start; }
+  .live-msg.pharmacist { background: #d9efe8; align-self: flex-end; }
+  .live-input { display: flex; gap: 6px; margin-top: 6px; }
+  .live-input input { flex: 1; padding: 6px 8px; font-size: 13px; }
+  .end-btn { margin-top: 6px; background: #fff; color: #176b5b; border-color: #176b5b; }
+  .summary-box { background: #fffdf5; border: 1px solid #f1e3b8; border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -132,6 +143,109 @@
         return `<div class="${cls}">${escapeHtml(text)}</div>`;
       })
       .join("");
+  }
+
+  // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
+  // 카드가 화면에서 사라지면(승인/거절로 대기 목록에서 빠지는 등) 폴링도 스스로 멈춘다.
+  function attachLiveChat(card, c) {
+    const box = document.createElement("div");
+    box.className = "live-chat";
+    box.innerHTML = `
+      <div class="live-chat-head">💬 화상 상담 채팅 (환자와 실시간)</div>
+      <div class="live-list"><div class="live-empty">아직 메시지가 없습니다.</div></div>
+      <div class="live-input"><input placeholder="환자에게 보낼 메시지" maxlength="1000" /><button>보내기</button></div>
+      <button class="end-btn">상담 종료 및 대화 요약</button>
+      <div class="summary-box" hidden></div>`;
+    card.appendChild(box);
+
+    const list = box.querySelector(".live-list");
+    const input = box.querySelector(".live-input input");
+    const seen = new Set();
+    let timer = null;
+
+    function render(messages) {
+      let added = false;
+      messages.forEach((m) => {
+        if (seen.has(m.id)) return;
+        seen.add(m.id);
+        if (!added && list.querySelector(".live-empty")) list.innerHTML = "";
+        added = true;
+        const div = document.createElement("div");
+        div.className = "live-msg " + m.sender_role;
+        div.textContent = (m.sender_role === "user" ? "환자: " : "나: ") + m.content;
+        list.appendChild(div);
+      });
+      if (added) list.scrollTop = list.scrollHeight;
+    }
+
+    function showSummary(summary) {
+      clearInterval(timer);
+      box.querySelector(".live-input").remove();
+      box.querySelector(".end-btn").remove();
+      const sb = box.querySelector(".summary-box");
+      sb.textContent = "📝 상담 요약\n" + summary;
+      sb.hidden = false;
+    }
+
+    async function refresh() {
+      if (!card.isConnected) return clearInterval(timer);
+      try {
+        const [consultation, messages] = await Promise.all([
+          api("GET", `/consultations/${c.id}`),
+          api("GET", `/consultations/${c.id}/messages`),
+        ]);
+        render(messages);
+        if (consultation.summary) showSummary(consultation.summary);
+      } catch (e) {
+        // 다음 폴링에서 재시도
+      }
+    }
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      if (!pharmacistIdEl.value) {
+        alert("약사 ID를 입력해주세요.");
+        return;
+      }
+      input.value = "";
+      try {
+        render([await api("POST", `/consultations/${c.id}/messages`, {
+          sender_role: "pharmacist",
+          sender_id: pharmacistIdEl.value,
+          content: text,
+        })]);
+      } catch (e) {
+        input.value = text;
+        alert("메시지 전송 실패: " + e.message);
+      }
+    }
+    box.querySelector(".live-input button").addEventListener("click", send);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) send();
+    });
+
+    box.querySelector(".end-btn").addEventListener("click", async (e) => {
+      if (!confirm("화상 상담을 종료하고 대화 내용을 요약할까요? 종료 후에는 채팅을 보낼 수 없습니다.")) return;
+      e.target.disabled = true;
+      e.target.textContent = "요약 생성 중...";
+      try {
+        const data = await api("POST", `/consultations/${c.id}/end`);
+        showSummary(data.summary);
+      } catch (err) {
+        alert("상담 종료 실패: " + err.message);
+        e.target.disabled = false;
+        e.target.textContent = "상담 종료 및 대화 요약";
+      }
+    });
+
+    if (c.summary) {
+      showSummary(c.summary);
+      return;
+    }
+    // 카드가 아직 화면에 붙기 전일 수 있어서 첫 조회는 한 틱 뒤로 미룬다
+    setTimeout(refresh, 0);
+    timer = setInterval(refresh, 3000);
   }
 
   // ---------- 약품 검색 자동완성 ----------
@@ -266,6 +380,9 @@
           </div>
         `;
 
+        attachLiveChat(card, c);
+        card.insertBefore(card.querySelector(".live-chat"), card.querySelector(".decide-row"));
+
         const nameInput = card.querySelector(".drug-name");
         const dropdown = card.querySelector(".drug-dropdown");
         attachDrugSearch(nameInput, dropdown, drugResults);
@@ -354,6 +471,8 @@
           ${c.decision_reason ? `<div>거절 사유: ${escapeHtml(c.decision_reason)}</div>` : ""}
           <div class="chat-log">${renderChatLog(c.chat_summary)}</div>
         `;
+        // 처리(승인/거절) 후에도 화상 상담이 이어질 수 있으니, 아직 종료 전이면 채팅/종료를 계속 제공
+        if (c.status !== "cancelled") attachLiveChat(card, c);
         holder.appendChild(card);
       });
     } catch (e) {

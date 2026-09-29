@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from src.api.limiter import limiter
 from src.consult import service
 from src.consult.db import get_db
 
@@ -42,6 +43,25 @@ class ConsultationResponse(BaseModel):
     decided_at: datetime | None
     approved_purchase_id: str | None = None
     approved_drug_name: str | None = None
+    summary: str | None = None  # 화상 상담 종료 시 생성된 대화 요약
+    ended_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class MessageCreateRequest(BaseModel):
+    sender_role: str = Field(..., pattern="^(user|pharmacist)$")
+    sender_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=1000)
+
+
+class MessageResponse(BaseModel):
+    id: str
+    sender_role: str
+    sender_id: str
+    content: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -117,6 +137,47 @@ def decide_consultation(
             drug_item_name=payload.drug_item_name,
             price=payload.price,
         )
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return _to_response(consultation)
+
+@router.get("/{consultation_id}/messages", response_model=list[MessageResponse])
+def list_messages(consultation_id: str, db: Session = Depends(get_db)) -> list[MessageResponse]:
+    """화상 상담 채팅 목록 — 사용자 앱/약사 콘솔이 3초 간격으로 폴링한다."""
+    try:
+        return service.list_messages(db, consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{consultation_id}/messages", response_model=MessageResponse)
+@limiter.limit("60/minute")
+def send_message(
+    request: Request, consultation_id: str, payload: MessageCreateRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    try:
+        return service.add_message(
+            db,
+            consultation_id=consultation_id,
+            sender_role=payload.sender_role,
+            sender_id=payload.sender_id,
+            content=payload.content,
+        )
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/{consultation_id}/end", response_model=ConsultationResponse)
+@limiter.limit("10/minute;100/day")
+def end_consultation(request: Request, consultation_id: str, db: Session = Depends(get_db)) -> ConsultationResponse:
+    """화상 상담 종료 → 대화 요약 생성(GPT-4o-mini, 실제 비용 발생이라 요청량 제한).
+    사용자/약사 누가 먼저 눌러도 되고, 이미 종료된 상담이면 기존 요약을 그대로 반환한다."""
+    try:
+        consultation = service.end_consultation(db, consultation_id, llm=request.app.state.rewrite_llm)
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except service.InvalidStateError as e:

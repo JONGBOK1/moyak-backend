@@ -27,6 +27,7 @@ def init_db() -> None:
 # 새 컬럼이 반영되도록, 나중에 추가된 nullable 컬럼만 여기서 ALTER TABLE로 보강한다.
 _LATE_COLUMNS = {
     "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},
+    "consultation_requests": {"summary": "VARCHAR", "ended_at": "DATETIME"},
 }
 
 

@@ -23,6 +23,7 @@
   var MATCH_BG = !!(script && script.hasAttribute("data-match-bg"));
 
   function fit() {
+    if (!document.body) return; // <head>에서 처음 호출될 땐 body가 아직 없음 — DOMContentLoaded에서 다시 맞춘다
     var root = document.body.firstElementChild;
     if (!root) return;
 

@@ -1,6 +1,7 @@
 """약사 상담 -> 승인 -> 자판기 수령 흐름의 데이터 모델.
 
 ConsultationRequest: 챗봇 상담 후 사용자가 요청한 약사 상담 건
+ConsultationMessage: 화상 상담 중 사용자-약사 채팅 메시지
 ApprovedPurchase: 약사가 승인한 구매 건 (유효시간 있음, QR 로그인 시 조회 대상)
 VendingMachine: 자판기 1대 = QR 토큰을 발급/보유하는 주체
 """
@@ -59,8 +60,34 @@ class ConsultationRequest(Base):
     decision_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=_now, nullable=False)
     decided_at = Column(DateTime, nullable=True)
+    # 화상 상담 종료 시 생성하는 대화 요약 (챗봇 대화 + 상담 중 채팅 기준, 음성 내용은 포함 안 됨)
+    summary = Column(String, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
 
     purchase = relationship("ApprovedPurchase", back_populates="consultation", uselist=False)
+    messages = relationship(
+        "ConsultationMessage", back_populates="consultation", order_by="ConsultationMessage.created_at"
+    )
+
+
+class MessageSender:
+    USER = "user"
+    PHARMACIST = "pharmacist"
+
+
+class ConsultationMessage(Base):
+    """화상 상담 중 사용자-약사 간 텍스트 채팅 한 건. 상담 종료 시 요약의 재료가 된다."""
+
+    __tablename__ = "consultation_messages"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    consultation_id = Column(String, ForeignKey("consultation_requests.id"), nullable=False, index=True)
+    sender_role = Column(String, nullable=False)  # MessageSender.USER / PHARMACIST
+    sender_id = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+    consultation = relationship("ConsultationRequest", back_populates="messages")
 
 
 class ApprovedPurchase(Base):

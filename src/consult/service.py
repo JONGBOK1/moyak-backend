@@ -10,8 +10,19 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from src.consult import summary as summary_module
 from src.consult import video
-from src.consult.models import ApprovedPurchase, ConsultationRequest, ConsultationStatus, PurchaseStatus, VendingMachine
+from src.consult.models import (
+    ApprovedPurchase,
+    ConsultationMessage,
+    ConsultationRequest,
+    ConsultationStatus,
+    MessageSender,
+    PurchaseStatus,
+    VendingMachine,
+)
+
+MAX_MESSAGE_LENGTH = 1000
 
 PURCHASE_VALID_MINUTES = 60
 QR_TOKEN_VALID_SECONDS = 60
@@ -132,6 +143,52 @@ def cancel_consultation(db: Session, consultation_id: str) -> ConsultationReques
 
     consultation.status = ConsultationStatus.CANCELLED
     consultation.decided_at = _now()
+    db.commit()
+    db.refresh(consultation)
+    return consultation
+
+
+def add_message(
+    db: Session, consultation_id: str, sender_role: str, sender_id: str, content: str
+) -> ConsultationMessage:
+    """화상 상담 중 채팅 한 건 저장. 상담이 종료(요약 생성)된 뒤에는 더 보낼 수 없다."""
+    consultation = get_consultation(db, consultation_id)
+    if sender_role not in (MessageSender.USER, MessageSender.PHARMACIST):
+        raise InvalidStateError(f"알 수 없는 발신자 유형입니다: {sender_role}")
+    if sender_role == MessageSender.USER and sender_id != consultation.user_id:
+        raise InvalidStateError("본인의 상담에만 메시지를 보낼 수 있습니다.")
+    if consultation.ended_at is not None:
+        raise InvalidStateError("이미 종료된 상담입니다.")
+    content = content.strip()
+    if not content:
+        raise InvalidStateError("메시지 내용이 비어 있습니다.")
+    if len(content) > MAX_MESSAGE_LENGTH:
+        raise InvalidStateError(f"메시지는 {MAX_MESSAGE_LENGTH}자 이하로 보내주세요.")
+
+    message = ConsultationMessage(
+        consultation_id=consultation.id, sender_role=sender_role, sender_id=sender_id, content=content
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+def list_messages(db: Session, consultation_id: str) -> list[ConsultationMessage]:
+    return list(get_consultation(db, consultation_id).messages)
+
+
+def end_consultation(db: Session, consultation_id: str, llm) -> ConsultationRequest:
+    """화상 상담 종료 — 대화 요약을 만들어 저장한다. 이미 종료됐으면 기존 요약을 그대로 돌려준다
+    (사용자와 약사가 둘 다 종료를 눌러도 요약은 한 번만 생성)."""
+    consultation = get_consultation(db, consultation_id)
+    if consultation.ended_at is not None:
+        return consultation
+    if consultation.status == ConsultationStatus.CANCELLED:
+        raise InvalidStateError("취소된 상담입니다.")
+
+    consultation.summary = summary_module.summarize(llm, consultation, DIRECT_REQUEST_SUMMARY)
+    consultation.ended_at = _now()
     db.commit()
     db.refresh(consultation)
     return consultation

@@ -366,3 +366,59 @@ def test_pay_purchases_twice_raises(db):
     logged_in_machine(db)
     with pytest.raises(service.InvalidStateError):
         service.pay_purchases(db, machine_id="M1", purchase_ids=[purchase.id])
+
+
+class FakeLLM:
+    """요약 테스트용 — 실제 OpenAI를 부르지 않고, 받은 대화를 기록만 한다."""
+
+    def __init__(self):
+        self.calls = []
+
+    def invoke(self, messages):
+        self.calls.append(messages)
+
+        class R:
+            content = "■ 상담 내용: 두통\n"
+
+        return R()
+
+
+def test_add_and_list_messages(db):
+    c = service.create_consultation(db, user_id="user1")
+    service.add_message(db, c.id, "user", "user1", "머리가 아파요")
+    service.add_message(db, c.id, "pharmacist", "pharm1", "언제부터 아프셨나요?")
+    msgs = service.list_messages(db, c.id)
+    assert [m.sender_role for m in msgs] == ["user", "pharmacist"]
+
+
+def test_add_message_rejects_other_user_and_empty(db):
+    c = service.create_consultation(db, user_id="user1")
+    with pytest.raises(service.InvalidStateError):
+        service.add_message(db, c.id, "user", "user2", "남의 상담")
+    with pytest.raises(service.InvalidStateError):
+        service.add_message(db, c.id, "user", "user1", "   ")
+    with pytest.raises(service.InvalidStateError):
+        service.add_message(db, c.id, "admin", "x", "hi")
+
+
+def test_end_consultation_summarizes_chat_once(db):
+    c = service.create_consultation(db, user_id="user1")
+    service.add_message(db, c.id, "user", "user1", "머리가 아파요")
+    llm = FakeLLM()
+    ended = service.end_consultation(db, c.id, llm=llm)
+    assert ended.summary.startswith("■ 상담 내용")
+    assert ended.ended_at is not None
+    assert "사용자: 머리가 아파요" in llm.calls[0][1].content
+
+    service.end_consultation(db, c.id, llm=llm)  # 두 번째 종료는 기존 요약 재사용
+    assert len(llm.calls) == 1
+    with pytest.raises(service.InvalidStateError):
+        service.add_message(db, c.id, "user", "user1", "종료 후 메시지")
+
+
+def test_end_consultation_without_any_chat_skips_llm(db):
+    c = service.create_consultation(db, user_id="user1")  # 직접 상담 + 채팅 없음
+    llm = FakeLLM()
+    ended = service.end_consultation(db, c.id, llm=llm)
+    assert llm.calls == []
+    assert "요약할 내용이 없습니다" in ended.summary

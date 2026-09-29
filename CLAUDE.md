@@ -168,6 +168,10 @@ moyak-backend/
 - `GET /consultations/{id}` — 단건 조회. 챗봇/상담 페이지가 자신이 만든 상담의 상태를 폴링할 때 쓴다. 없는 id면 404.
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
   - `price`(원, 선택, 0 이상): 약사가 승인 시 안내하는 판매가(e약은요엔 가격 데이터가 없어 약사가 입력). 약사 콘솔(`/pharmacist`)에서는 필수 입력. 가격이 있는 승인 건은 키오스크에서 **결제해야 수령 가능**하고, 가격이 없는 건(가격 도입 전/데모 페이지 승인)은 기존처럼 결제 없이 수령.
+- **화상 상담 중 채팅 + 종료 요약**:
+  - `GET /consultations/{id}/messages` / `POST /consultations/{id}/messages` `{"sender_role": "user"|"pharmacist", "sender_id", "content"}` — 사용자 앱 화상 화면(`/app/video-consult-entry/`)의 "💬 채팅"과 약사 콘솔(`/pharmacist`) 카드의 채팅창이 3초 간격 폴링으로 주고받는다. 사용자는 본인 상담에만 보낼 수 있고(`sender_id == user_id`), 종료된 상담에는 보낼 수 없다(409). IP당 60회/분 제한.
+  - `POST /consultations/{id}/end` — 사용자/약사 누구든 "상담 종료"를 누르면 GPT-4o-mini(`src/consult/summary.py`)가 [상담 전 챗봇 대화 + 상담 중 채팅 + 처방 결과]를 요약해 `summary`/`ended_at`에 저장(한 번만 생성, 재호출 시 기존 요약 반환). 요약할 대화가 없으면 LLM을 부르지 않고 고정 문구를 반환. 실제 비용이 드는 호출이라 IP당 10회/분·100회/일 제한. 응답(`ConsultationResponse`)에 `summary`/`ended_at` 필드 추가.
+  - 요약 프롬프트는 대화에 없는 약 정보(복용량 등)를 새로 만들지 못하게 강제한다. **화상 통화의 음성 내용은 서버가 받지 않아 요약에 포함되지 않는다**(요약 끝에 이 안내 문구가 붙음) — 음성까지 요약하려면 Daily.co 녹음/전사(유료, 별도 설정) 연동이 필요.
 - `POST /vending/purchases/pay` `{"machine_id", "purchase_ids": [...]}` — 키오스크 승인 약(cart2) 결제(모의). 자판기에 QR 로그인한 본인의 대기 중 승인 건만 결제 가능하며, 결제 완료 시 `paid_at` 기록 + **자판기 로그인 자동 해제**(welcome 화면 안내 문구와 일치). 응답 `{"total_amount", "purchases"}`. 승인 건 응답(`PurchaseResponse`)에 `price`/`paid_at` 필드 추가.
 - `POST /vending/machines/{machine_id}/rotate-qr` — 자판기가 주기적으로 새 QR 토큰 발급(기본 60초 유효) → 화면에 QR로 표시
 - `POST /vending/scan` — 앱이 QR 스캔 결과 전송 → 그 사용자의 대기 중인 승인 건 확인
