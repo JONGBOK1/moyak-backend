@@ -31,9 +31,15 @@ MAX_MACHINES = 500
 DB_ERROR = "자판기 위치를 불러오지 못했습니다. DB 연결과 위치 정보를 확인해주세요."
 
 
+def _map_database_url() -> str | None:
+    # 대시보드에 붙여넣을 때 끝에 줄바꿈/공백이 섞이면 DB 이름이 "postgres
+"이 되어 연결이 실패하므로 정리한다
+    return (os.getenv("MAP_DATABASE_URL") or "").strip() or None
+
+
 @lru_cache(maxsize=1)
 def map_engine():
-    url = os.getenv("MAP_DATABASE_URL")
+    url = _map_database_url()
     if url:
         return create_database_engine(url)
     # Supabase 미설정 시 앱 자체 DB(시연용 가상 자판기 + 키오스크 재고)를 쓴다
@@ -84,7 +90,7 @@ _LOCAL_MACHINES = """
 def _query_machines(engine, machine_id: str | None = None):
     params = {"machine_id": machine_id} if machine_id else {}
     with engine.connect() as conn, conn.begin():
-        if engine.dialect.name == "postgresql" and os.getenv("MAP_DATABASE_URL"):
+        if engine.dialect.name == "postgresql" and _map_database_url():
             _begin_read_only(conn)
             extra = "AND m.id::text = :machine_id" if machine_id else ""
             rows = conn.execute(text(_SUPABASE_MACHINES.format(extra=extra)), params).mappings().all()
