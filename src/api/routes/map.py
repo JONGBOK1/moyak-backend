@@ -8,6 +8,7 @@
 
 개인정보·QR 토큰·DB 비밀번호는 응답에 포함하지 않는다.
 """
+import logging
 import math
 import os
 from functools import lru_cache
@@ -24,6 +25,7 @@ from src.map_database import create_database_engine
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 router = APIRouter(prefix="/api/v1/map", tags=["map"])
+logger = logging.getLogger("uvicorn.error")
 
 MAX_MACHINES = 500
 DB_ERROR = "자판기 위치를 불러오지 못했습니다. DB 연결과 위치 정보를 확인해주세요."
@@ -117,8 +119,8 @@ def machines(
         raise HTTPException(422, "lat과 lng는 함께 보내야 합니다.")
     try:
         source, rows = _query_machines(engine)
-    except SQLAlchemyError:
-        raise HTTPException(503, DB_ERROR) from None
+    except SQLAlchemyError as e:
+        raise _db_unavailable(e) from None
     items = [_with_distance(row, lat, lng) for row in rows[:MAX_MACHINES]]
     if lat is not None:
         items.sort(key=lambda m: m["distance_m"])
@@ -158,12 +160,20 @@ def machine_detail(
                     {"machine_id": machine_id},
                 ).mappings().all()
                 items = [dict(r) for r in inventory]
-    except SQLAlchemyError:
-        raise HTTPException(503, DB_ERROR) from None
+    except SQLAlchemyError as e:
+        raise _db_unavailable(e) from None
     machine = _with_distance(rows[0], lat, lng)
     machine["items"] = items
     machine["source"] = source
     return machine
+
+
+def _db_unavailable(e: SQLAlchemyError) -> HTTPException:
+    # 원인 파악용으로 서버 로그엔 오류 종류/메시지를 남기고(엔진이 hide_parameters라 비밀번호·쿼리 값은 안 나옴),
+    # 응답엔 오류 종류 이름만 준다 — DB 주소·비밀번호·SQL은 절대 응답에 넣지 않는다.
+    orig = getattr(e, "orig", None) or e
+    logger.warning("map DB error: %s: %s", type(orig).__name__, str(orig).splitlines()[0][:300] if str(orig) else "")
+    return HTTPException(503, f"{DB_ERROR} ({type(orig).__name__})")
 
 
 def _drug_names() -> dict[str, str]:
