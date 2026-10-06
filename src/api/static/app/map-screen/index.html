@@ -37,9 +37,10 @@
 
     /* 지도 마커 (카카오 CustomOverlay 내용) */
     .pin {
-      background: #ffd54f; color: #3e2723; border: 2px solid #fff; border-radius: 16px; padding: 4px 10px;
-      font-size: 12px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 6px rgba(62, 39, 35, 0.3); cursor: pointer;
-      transform: translateY(-6px);
+      background: #ffd54f; color: #3e2723; border: 2px solid #fff; border-radius: 15px; min-width: 30px; height: 30px;
+      padding: 0 9px; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 6px rgba(62, 39, 35, 0.3); cursor: pointer;
+      transform: translateY(-4px);
     }
     .pin.soldout { background: #d7ccc8; color: #6d5d58; }
     .pin.active { background: #3e2723; color: #ffd54f; }
@@ -162,6 +163,8 @@
   let machines = [];
   let kakaoMap = null;
   let overlays = {};
+  let userMarker = null; // 지도에 표시할 실제 내 위치 (기본 위치로 대체한 경우 null)
+  let focusedId = null; // 상세를 보고 있는 자판기 (지도 핀에 이름 표시)
 
   async function api(path) {
     const res = await fetch(path);
@@ -215,7 +218,8 @@
     $("mapPlaceholder").innerHTML = html;
   }
 
-  function drawMap(userPos) {
+  function drawMap() {
+    const userPos = userMarker;
     if (!kakaoMap) return;
     const kk = window.kakao.maps;
     Object.values(overlays).forEach((o) => o.setMap(null));
@@ -233,14 +237,16 @@
       const pos = new kk.LatLng(m.latitude, m.longitude);
       const el = document.createElement("div");
       el.className = "pin" + (!m.stock_count ? " soldout" : "") + (sel && sel.id === m.id ? " active" : "");
-      el.textContent = `${i + 1} ${m.name.replace("모약 자판기 ", "")}`;
+      // 지도 위엔 목록과 같은 번호만 (이름을 다 쓰면 서로 겹침) — 지금 보고 있는 자판기만 이름까지 표시
+      el.textContent = m.id === focusedId ? `${i + 1} ${m.name.replace("모약 자판기 ", "")}` : `${i + 1}`;
+      el.title = m.name;
       el.addEventListener("click", () => openDetail(m.id));
-      overlays[m.id] = new kk.CustomOverlay({ position: pos, content: el, yAnchor: 1, zIndex: 2 });
+      overlays[m.id] = new kk.CustomOverlay({ position: pos, content: el, yAnchor: 1, zIndex: m.id === focusedId ? 3 : 2 });
       overlays[m.id].setMap(kakaoMap);
       bounds.extend(pos);
     });
     if (userPos) bounds.extend(new kk.LatLng(userPos.lat, userPos.lng));
-    if (machines.length) kakaoMap.setBounds(bounds, 30, 30, 30, 30);
+    if (machines.length && !focusedId) kakaoMap.setBounds(bounds, 45, 40, 30, 40);
   }
 
   async function initMap(center) {
@@ -292,7 +298,11 @@
       $("sheet").innerHTML = `<div class="detail"><div class="empty">자판기 정보를 불러오지 못했어요: ${esc(e.message)}</div></div>`;
       return;
     }
-    if (kakaoMap) kakaoMap.panTo(new window.kakao.maps.LatLng(d.latitude, d.longitude));
+    focusedId = d.id;
+    if (kakaoMap) {
+      drawMap();
+      kakaoMap.panTo(new window.kakao.maps.LatLng(d.latitude, d.longitude));
+    }
 
     const isSelected = (selected() || {}).id === d.id;
     const items = d.items || [];
@@ -327,7 +337,7 @@
       $("unselectBtn").onclick = () => {
         localStorage.removeItem(SELECTED_KEY);
         openDetail(id);
-        drawMap(origin);
+        drawMap();
       };
     } else {
       $("selectBtn").onclick = () => {
@@ -338,6 +348,7 @@
   }
 
   function restoreList() {
+    focusedId = null;
     $("sheet").innerHTML = `
       <div class="sheet-head">
         <div class="sheet-title" id="sheetTitle"></div>
@@ -345,7 +356,7 @@
       </div>
       <div class="machine-list" id="machineList"></div>`;
     renderList();
-    drawMap(origin);
+    drawMap();
   }
 
   async function loadMachines(userPos) {
@@ -374,7 +385,8 @@
 
       await initMap(origin);
       renderList();
-      drawMap(userPos && origin !== fallback ? userPos : null);
+      userMarker = userPos && origin !== fallback ? userPos : null; // 실제 내 위치일 때만 파란 점 표시
+      drawMap();
 
       const fromQuery = new URLSearchParams(location.search).get("machine");
       if (fromQuery) openDetail(fromQuery);
