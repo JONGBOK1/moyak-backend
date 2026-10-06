@@ -13,15 +13,19 @@
 
 ### Supabase에 시연용 자판기 넣기
 
-`scripts/supabase_demo_machines.sql`을 Supabase SQL Editor에서 실행하면 같은 5대 + 재고(실제 e약은요 품목기준코드)가 들어간다.
-지도 API가 읽는 컬럼만 사용했으므로 실제 테이블에 NOT NULL 컬럼이 더 있거나 id가 uuid가 아니면 맞춰 수정한다.
-키오스크와 연결하려면 키오스크 주소에 그 자판기 id를 쓴다 (`/kiosk/start/?machine=00000000-0000-4000-8000-000000000001`).
+`scripts/supabase_demo_machines.sql`을 Supabase SQL Editor에서 실행한다 (2026-10-06 실제 스키마 확인 후 작성).
+- 기존 VM-001(동양미래대학교 학생회관)의 잘못된 경도(126.8495 → 126.8670)를 보정
+- 학교 주변에 VM-006~VM-009(고척스카이돔, 구일역, 개봉역, 구로구청) 추가
+- 재고/가격 추가 (실제 e약은요 품목기준코드, VM-009는 품절 시연용). 여러 번 실행해도 중복되지 않음
+
+`MAP_DATABASE_URL`은 지도 전용이다. **`DATABASE_URL`에 Supabase를 넣으면 안 된다** — 메인 서버가 시작 시
+같은 이름의 `vending_machines` 테이블에 컬럼/행을 추가하려다 실패한다(스키마가 다름).
 
 ## 엔드포인트
 
 - `GET /api/v1/map/config` — 지도 화면 초기화용: `kakao_js_key`(`.env`의 `KAKAO_JS_KEY`, 공개 키·도메인 제한), `default_center`(기본 동양미래대학교)
 
-- `GET /api/v1/map/machines?lat=&lng=` — 운영 중이고 위치가 있는 자판기 최대 500개.
+- `GET /api/v1/map/machines?lat=&lng=` — 운영 중이고 위치가 있는 자판기 최대 500개 (`code`: Supabase 자판기 코드 VM-001 등, 로컬은 id와 동일).
   `lat`/`lng`(내 위치)를 주면 가까운 순 정렬 + `distance_m`. 둘 중 하나만 주면 422.
   `items` 항목: `id`, `name`, `address`, `latitude`, `longitude`, `operating_hours`, `item_count`, `stock_count`, `distance_m`.
   `truncated: true`이면 조회 상한을 초과한 것.

@@ -56,7 +56,7 @@ def _begin_read_only(conn) -> None:
 
 
 _SUPABASE_MACHINES = """
-    SELECT m.id::text AS id, m.name, COALESCE(m.address, '') AS address,
+    SELECT m.id::text AS id, m.code, m.name, COALESCE(m.address, '') AS address,
            ST_Y(m.location::geometry) AS latitude,
            ST_X(m.location::geometry) AS longitude,
            m.operating_hours,
@@ -69,7 +69,7 @@ _SUPABASE_MACHINES = """
 """
 
 _LOCAL_MACHINES = """
-    SELECT m.id, m.name, COALESCE(m.address, '') AS address,
+    SELECT m.id, m.id AS code, m.name, COALESCE(m.address, '') AS address,
            m.latitude, m.longitude, m.operating_hours,
            COUNT(p.id) AS item_count, COALESCE(SUM(p.stock), 0) AS stock_count
     FROM vending_machines m
@@ -141,14 +141,14 @@ def machine_detail(
             if source == "supabase":
                 _begin_read_only(conn)
                 inventory = conn.execute(
-                    text("SELECT i.item_seq, i.stock FROM public.machine_inventory i "
+                    text("SELECT i.item_seq, i.stock, i.price FROM public.machine_inventory i "
                          "WHERE i.machine_id::text = :machine_id ORDER BY i.item_seq"),
                     {"machine_id": machine_id},
                 ).mappings().all()
                 names = _drug_names()
                 items = [
                     {"item_seq": r["item_seq"], "item_name": names.get(str(r["item_seq"]), str(r["item_seq"])),
-                     "stock": r["stock"], "price": None, "category": None}
+                     "stock": r["stock"], "price": int(r["price"]) if r["price"] is not None else None, "category": None}
                     for r in inventory
                 ]
             else:
