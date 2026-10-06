@@ -92,14 +92,14 @@ def test_map_database_errors_do_not_expose_credentials(monkeypatch):
     engine.dispose()
 
 
-def test_seed_demo_machines_places_machines_around_center_once(monkeypatch):
-    monkeypatch.setattr(map_seed.config, "DEMO_MAP_CENTER", "35.0,129.0")
+def test_seed_demo_machines_places_machines_near_dongyang_once():
     engine = _engine()
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     map_seed.seed_demo_machines(db)
     m1 = db.get(VendingMachine, "M001")
-    assert abs(m1.latitude - 35.0) < 0.02 and abs(m1.longitude - 129.0) < 0.02
+    assert "동양미래대학교" in m1.name
+    assert abs(m1.latitude - 37.5011) < 0.001 and abs(m1.longitude - 126.8670) < 0.001
     assert db.query(Product).filter(Product.machine_id == "M001").count() > 0
     assert all(p.stock == 0 for p in db.query(Product).filter(Product.machine_id == "M005"))  # 품절 시연용
 
@@ -107,5 +107,20 @@ def test_seed_demo_machines_places_machines_around_center_once(monkeypatch):
     db.commit()
     map_seed.seed_demo_machines(db)
     assert db.get(VendingMachine, "M001").latitude == 1.0
+
+    # 예전 버전의 임시 위치("시연용 가상 위치")는 새 위치로 교체된다
+    m2 = db.get(VendingMachine, "M002")
+    m2.address, m2.latitude = "시연용 가상 위치", 0.0
+    db.commit()
+    map_seed.seed_demo_machines(db)
+    assert db.get(VendingMachine, "M002").latitude == 37.4982
     db.close()
     engine.dispose()
+
+
+def test_map_config_returns_default_center(monkeypatch):
+    monkeypatch.setattr(routes.config, "KAKAO_JS_KEY", None)
+    with _client(_engine()) as client:
+        body = client.get("/api/v1/map/config").json()
+    assert body["kakao_js_key"] is None
+    assert abs(body["default_center"]["latitude"] - 37.5011) < 0.001

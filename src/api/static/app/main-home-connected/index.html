@@ -123,8 +123,18 @@
   </div>
 
 <script>
+  // 지도(map-screen)에서 고른 자판기를 보여준다. 고른 게 없으면 "연결 안 됨" 홈으로
+  let selectedMachine = null;
+  try { selectedMachine = JSON.parse(localStorage.getItem("moyak_selected_machine") || "null"); } catch (e) {}
+  if (!selectedMachine) {
+    location.replace("/app/main-home-disconnected/");
+  } else {
+    document.querySelector("._3-2").textContent = `${selectedMachine.name.replace("모약 자판기 ", "")} 자판기 연동됨`;
+  }
+
+  // 상품 구매하기 → 선택한 자판기의 재고 화면 (지도 상세)
   document.getElementById("purchaseBtn").addEventListener("click", () => {
-    location.href = "/app/vending-store/";
+    location.href = "/app/map-screen/?machine=" + encodeURIComponent(selectedMachine ? selectedMachine.id : "");
   });
   document.getElementById("navMap").addEventListener("click", () => {
     location.href = "/app/map-screen/";

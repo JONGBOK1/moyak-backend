@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
+  </style>
+  <script src="/static/vendor/app-scale.js"></script>
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+    button { border: none; background: none; font: inherit; cursor: pointer; }
+
+    /* 기존 앱 톤: 배경 #f2ebdd, 본문 #3e2723, 보조 #7d6d6a, 포인트 #ffd54f, 흰 카드 + radius 24 */
+    .map-header { position: absolute; left: 0; right: 0; top: 48px; padding: 8px 24px; }
+    .map-title { color: #3e2723; font-family: "GothicA1-Black", sans-serif; font-size: 22px; font-weight: 900; }
+    .map-sub { color: #7d6d6a; font-size: 12px; margin-top: 2px; }
+
+    .map-box {
+      position: absolute; left: 20px; right: 20px; top: 112px; height: 286px;
+      background: #e9e1d0; border-radius: 24px; overflow: hidden;
+      box-shadow: 0 8px 16px rgba(62, 39, 35, 0.08);
+    }
+    #kakaoMap { width: 100%; height: 100%; }
+    .map-placeholder {
+      position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: 24px; text-align: center; color: #7d6d6a; font-size: 13px; line-height: 1.5;
+    }
+    .map-placeholder[hidden] { display: none; }
+    .map-placeholder b { color: #3e2723; font-size: 15px; }
+    .locate-btn {
+      position: absolute; right: 12px; bottom: 12px; z-index: 5; width: 40px; height: 40px; border-radius: 20px;
+      background: #fff; box-shadow: 0 2px 8px rgba(62, 39, 35, 0.2); font-size: 18px;
+    }
+
+    /* 지도 마커 (카카오 CustomOverlay 내용) */
+    .pin {
+      background: #ffd54f; color: #3e2723; border: 2px solid #fff; border-radius: 16px; padding: 4px 10px;
+      font-size: 12px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 6px rgba(62, 39, 35, 0.3); cursor: pointer;
+      transform: translateY(-6px);
+    }
+    .pin.soldout { background: #d7ccc8; color: #6d5d58; }
+    .pin.active { background: #3e2723; color: #ffd54f; }
+    .me-dot { width: 16px; height: 16px; border-radius: 8px; background: #2f80ed; border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(47, 128, 237, 0.25); }
+
+    .sheet { position: absolute; left: 20px; right: 20px; top: 410px; bottom: 100px; display: flex; flex-direction: column; gap: 10px; }
+    .sheet-head { display: flex; justify-content: space-between; align-items: center; }
+    .sheet-title { color: #3e2723; font-size: 16px; font-weight: 800; }
+    .sheet-note { color: #7d6d6a; font-size: 11px; }
+    .machine-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
+
+    .machine-card {
+      background: #fff; border-radius: 20px; padding: 14px 16px; display: flex; gap: 12px; align-items: center;
+      box-shadow: 0 8px 16px rgba(62, 39, 35, 0.08); cursor: pointer; border: 2px solid transparent;
+    }
+    .machine-card.selected { border-color: #ffd54f; }
+    .machine-card .num {
+      flex-shrink: 0; width: 34px; height: 34px; border-radius: 17px; background: #fff8e1; color: #3e2723;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;
+    }
+    .machine-card .info { flex: 1; min-width: 0; }
+    .machine-card .name { color: #3e2723; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .machine-card .meta { color: #7d6d6a; font-size: 12px; margin-top: 3px; }
+    .stock-badge { flex-shrink: 0; border-radius: 100px; padding: 4px 10px; font-size: 11px; font-weight: 800; }
+    .stock-badge.ok { background: #e8f5e9; color: #2e7d32; }
+    .stock-badge.low { background: #fff3e0; color: #ef6c00; }
+    .stock-badge.out { background: #f5f5f3; color: #9e8f8a; }
+
+    .detail { background: #fff; border-radius: 24px; padding: 18px; flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0;
+      box-shadow: 0 8px 16px rgba(62, 39, 35, 0.08); }
+    .detail-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .back-link { color: #7d6d6a; font-size: 12px; font-weight: 700; }
+    .detail-name { color: #3e2723; font-size: 17px; font-weight: 900; }
+    .detail-meta { color: #7d6d6a; font-size: 12px; line-height: 1.6; }
+    .detail-meta a { color: #8b6914; font-weight: 700; text-decoration: underline; }
+    .stock-list { flex: 1; overflow-y: auto; border-top: 1px solid #f0e8da; }
+    .stock-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 2px; border-bottom: 1px solid #f7f1e6; font-size: 13px; }
+    .stock-row .item { color: #3e2723; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+    .stock-row .qty { color: #2e7d32; font-weight: 800; white-space: nowrap; }
+    .stock-row .qty.out { color: #b0a29d; }
+    .select-btn { border-radius: 28px; padding: 14px; background: #ffd54f; color: #3e2723; font-size: 16px; font-weight: 800; }
+    .select-btn.outline { background: #fff; border: 1.5px solid #ffd54f; color: #8b6914; }
+    .select-btn:disabled { opacity: 0.45; cursor: default; }
+    .empty { color: #7d6d6a; font-size: 13px; text-align: center; padding: 30px 10px; }
+  </style>
+  <title>내 주변 자판기</title>
+</head>
+<body>
+  <div class="main-home-disconnected">
+    <div class="screen-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+    </div>
+
+    <div class="map-header">
+      <div class="map-title">내 주변 자판기</div>
+      <div class="map-sub" id="locationNote">위치를 확인하고 있어요...</div>
+    </div>
+
+    <div class="map-box">
+      <div id="kakaoMap"></div>
+      <div class="map-placeholder" id="mapPlaceholder" hidden></div>
+      <button class="locate-btn" id="locateBtn" title="내 위치로">◎</button>
+    </div>
+
+    <div class="sheet" id="sheet">
+      <div class="sheet-head">
+        <div class="sheet-title" id="sheetTitle">가까운 자판기</div>
+        <div class="sheet-note">재고는 조회 시점 기준</div>
+      </div>
+      <div class="machine-list" id="machineList"><div class="empty">자판기를 불러오는 중...</div></div>
+    </div>
+
+    <div class="bottom-navbar">
+      <div class="tabs-container">
+        <div class="nav-tab" id="navHome">
+          <img class="home" src="home0.svg" />
+          <div class="div8">메인</div>
+        </div>
+        <div class="nav-tab2" id="navMap">
+          <img class="map-pin" src="map-pin0.svg" />
+          <div class="div7">지도</div>
+        </div>
+        <div class="qr-fab-container" id="navQr">
+          <div class="qr-fab">
+            <img class="scan-qr-code" src="scan-qr-code0.svg" />
+          </div>
+          <div class="frame"></div>
+          <div class="qr">QR스캔</div>
+        </div>
+        <div class="nav-tab3" id="navChatbot">
+          <img class="message-circle" src="message-circle0.svg" />
+          <div class="div9">모약이</div>
+        </div>
+        <div class="nav-tab4" id="navMypage">
+          <img class="user-cog" src="user-cog0.svg" />
+          <div class="div8">마이</div>
+        </div>
+      </div>
+      <div class="home-indicator-area">
+        <div class="home-pill"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const SELECTED_KEY = "moyak_selected_machine"; // 앱 전체에서 "선택한 자판기" (main-home-connected가 읽음)
+  const FAR_M = 5000; // 내 위치에서 가장 가까운 자판기가 이보다 멀면 기본 위치(동양미래대) 주변을 보여준다
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  let mapConfig = null;
+  let origin = null; // 거리 계산 기준 {lat, lng}
+  let machines = [];
+  let kakaoMap = null;
+  let overlays = {};
+
+  async function api(path) {
+    const res = await fetch(path);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  function selected() {
+    try { return JSON.parse(localStorage.getItem(SELECTED_KEY) || "null"); } catch (e) { return null; }
+  }
+
+  function fmtDistance(m) {
+    if (m == null) return "";
+    const walk = Math.max(1, Math.round(m / 67)); // 도보 분당 약 67m
+    return (m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`) + ` · 도보 ${walk}분`;
+  }
+
+  function stockBadge(m) {
+    if (!m.stock_count) return '<span class="stock-badge out">품절</span>';
+    if (m.stock_count < 50) return '<span class="stock-badge low">재고 적음</span>';
+    return '<span class="stock-badge ok">재고 있음</span>';
+  }
+
+  // ---------- 위치 ----------
+  function getPosition() {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+      );
+    });
+  }
+
+  // ---------- 카카오 지도 ----------
+  function loadKakao(key) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`;
+      s.onload = () => window.kakao.maps.load(resolve);
+      s.onerror = () => reject(new Error("카카오 지도를 불러오지 못했습니다 (키/등록 도메인 확인)"));
+      document.head.appendChild(s);
+    });
+  }
+
+  function showPlaceholder(html) {
+    $("kakaoMap").hidden = true;
+    $("mapPlaceholder").hidden = false;
+    $("mapPlaceholder").innerHTML = html;
+  }
+
+  function drawMap(userPos) {
+    if (!kakaoMap) return;
+    const kk = window.kakao.maps;
+    Object.values(overlays).forEach((o) => o.setMap(null));
+    overlays = {};
+    const bounds = new kk.LatLngBounds();
+    const sel = selected();
+
+    if (userPos) {
+      const me = document.createElement("div");
+      me.className = "me-dot";
+      overlays.__me = new kk.CustomOverlay({ position: new kk.LatLng(userPos.lat, userPos.lng), content: me, zIndex: 1 });
+      overlays.__me.setMap(kakaoMap);
+    }
+    machines.forEach((m, i) => {
+      const pos = new kk.LatLng(m.latitude, m.longitude);
+      const el = document.createElement("div");
+      el.className = "pin" + (!m.stock_count ? " soldout" : "") + (sel && sel.id === m.id ? " active" : "");
+      el.textContent = `${i + 1} ${m.name.replace("모약 자판기 ", "")}`;
+      el.addEventListener("click", () => openDetail(m.id));
+      overlays[m.id] = new kk.CustomOverlay({ position: pos, content: el, yAnchor: 1, zIndex: 2 });
+      overlays[m.id].setMap(kakaoMap);
+      bounds.extend(pos);
+    });
+    if (userPos) bounds.extend(new kk.LatLng(userPos.lat, userPos.lng));
+    if (machines.length) kakaoMap.setBounds(bounds, 30, 30, 30, 30);
+  }
+
+  async function initMap(center) {
+    if (!mapConfig.kakao_js_key) {
+      showPlaceholder("<b>🗺️ 지도 준비 중</b>카카오 지도 키가 아직 설정되지 않았어요.<br>아래 목록에서 자판기를 선택할 수 있어요.");
+      return;
+    }
+    try {
+      await loadKakao(mapConfig.kakao_js_key);
+      const kk = window.kakao.maps;
+      kakaoMap = new kk.Map($("kakaoMap"), { center: new kk.LatLng(center.lat, center.lng), level: 4 });
+      // 화면 전체를 축소(app-scale.js)해서 보여주므로, 크기가 확정된 뒤 지도 크기를 다시 계산
+      setTimeout(() => kakaoMap.relayout(), 300);
+      window.addEventListener("resize", () => kakaoMap && kakaoMap.relayout());
+    } catch (e) {
+      showPlaceholder(`<b>지도를 불러오지 못했어요</b>${esc(e.message)}<br>아래 목록은 그대로 쓸 수 있어요.`);
+    }
+  }
+
+  // ---------- 목록 / 상세 ----------
+  function renderList() {
+    $("sheetTitle").textContent = `가까운 자판기 ${machines.length}곳`;
+    const sel = selected();
+    if (!machines.length) {
+      $("machineList").innerHTML = '<div class="empty">주변에 운영 중인 자판기가 없어요.</div>';
+      return;
+    }
+    $("machineList").innerHTML = machines
+      .map((m, i) => `
+        <div class="machine-card${sel && sel.id === m.id ? " selected" : ""}" data-id="${esc(m.id)}">
+          <div class="num">${i + 1}</div>
+          <div class="info">
+            <div class="name">${esc(m.name)}</div>
+            <div class="meta">${esc(fmtDistance(m.distance_m))}${m.distance_m != null ? " · " : ""}${esc(m.operating_hours || "운영시간 정보 없음")}</div>
+          </div>
+          ${stockBadge(m)}
+        </div>`)
+      .join("");
+    $("machineList").querySelectorAll(".machine-card").forEach((el) => el.addEventListener("click", () => openDetail(el.dataset.id)));
+  }
+
+  async function openDetail(id) {
+    const q = origin ? `?lat=${origin.lat}&lng=${origin.lng}` : "";
+    $("sheet").innerHTML = '<div class="detail"><div class="empty">재고를 불러오는 중...</div></div>';
+    let d;
+    try {
+      d = await api(`/api/v1/map/machines/${encodeURIComponent(id)}${q}`);
+    } catch (e) {
+      $("sheet").innerHTML = `<div class="detail"><div class="empty">자판기 정보를 불러오지 못했어요: ${esc(e.message)}</div></div>`;
+      return;
+    }
+    if (kakaoMap) kakaoMap.panTo(new window.kakao.maps.LatLng(d.latitude, d.longitude));
+
+    const isSelected = (selected() || {}).id === d.id;
+    const items = d.items || [];
+    const routeUrl = `https://map.kakao.com/link/to/${encodeURIComponent(d.name)},${d.latitude},${d.longitude}`;
+    $("sheet").innerHTML = `
+      <div class="detail">
+        <div class="detail-top">
+          <div>
+            <div class="detail-name">${esc(d.name)}</div>
+            <div class="detail-meta">
+              ${esc(d.address || "")}<br>
+              ${esc(fmtDistance(d.distance_m))}${d.distance_m != null ? " · " : ""}운영 ${esc(d.operating_hours || "정보 없음")}
+              · <a href="${routeUrl}" target="_blank" rel="noopener">길찾기</a>
+            </div>
+          </div>
+          <button class="back-link" id="backToList">목록 ›</button>
+        </div>
+        <div class="stock-list">
+          ${items.length ? items.map((it) => `
+            <div class="stock-row">
+              <span class="item">${esc(it.item_name)}${it.price ? ` <span style="color:#7d6d6a;font-weight:500">· ${it.price.toLocaleString()}원</span>` : ""}</span>
+              <span class="qty${it.stock ? "" : " out"}">${it.stock ? `${it.stock}개` : "품절"}</span>
+            </div>`).join("") : '<div class="empty">등록된 재고가 없어요.</div>'}
+        </div>
+        ${isSelected
+          ? '<button class="select-btn outline" id="unselectBtn">선택됨 ✓ · 선택 해제</button>'
+          : `<button class="select-btn" id="selectBtn">이 자판기 선택</button>`}
+      </div>`;
+
+    $("backToList").onclick = restoreList;
+    if (isSelected) {
+      $("unselectBtn").onclick = () => {
+        localStorage.removeItem(SELECTED_KEY);
+        openDetail(id);
+        drawMap(origin);
+      };
+    } else {
+      $("selectBtn").onclick = () => {
+        localStorage.setItem(SELECTED_KEY, JSON.stringify({ id: d.id, name: d.name, address: d.address }));
+        location.href = "/app/main-home-connected/";
+      };
+    }
+  }
+
+  function restoreList() {
+    $("sheet").innerHTML = `
+      <div class="sheet-head">
+        <div class="sheet-title" id="sheetTitle"></div>
+        <div class="sheet-note">재고는 조회 시점 기준</div>
+      </div>
+      <div class="machine-list" id="machineList"></div>`;
+    renderList();
+    drawMap(origin);
+  }
+
+  async function loadMachines(userPos) {
+    const q = userPos ? `?lat=${userPos.lat}&lng=${userPos.lng}` : `?lat=${origin.lat}&lng=${origin.lng}`;
+    machines = (await api(`/api/v1/map/machines${q}`)).items;
+  }
+
+  async function init() {
+    try {
+      mapConfig = await api("/api/v1/map/config");
+      const fallback = { lat: mapConfig.default_center.latitude, lng: mapConfig.default_center.longitude };
+      const userPos = await getPosition();
+
+      origin = userPos || fallback;
+      await loadMachines(userPos);
+      if (!userPos) {
+        $("locationNote").textContent = "위치 권한이 없어 동양미래대학교 주변을 보여드려요";
+      } else if (!machines.length || machines[0].distance_m > FAR_M) {
+        // 시연 장소와 멀리 있으면 내 위치 대신 기본 위치(동양미래대) 기준으로 보여준다
+        origin = fallback;
+        await loadMachines(null);
+        $("locationNote").textContent = "근처에 자판기가 없어 동양미래대학교 주변을 보여드려요";
+      } else {
+        $("locationNote").textContent = "현재 위치 기준 가까운 순이에요";
+      }
+
+      await initMap(origin);
+      renderList();
+      drawMap(userPos && origin !== fallback ? userPos : null);
+
+      const fromQuery = new URLSearchParams(location.search).get("machine");
+      if (fromQuery) openDetail(fromQuery);
+    } catch (e) {
+      $("machineList").innerHTML = `<div class="empty">자판기 목록을 불러오지 못했어요: ${esc(e.message)}</div>`;
+    }
+  }
+
+  $("locateBtn").addEventListener("click", () => {
+    if (kakaoMap && origin) kakaoMap.panTo(new window.kakao.maps.LatLng(origin.lat, origin.lng));
+  });
+
+  // ---------- 하단 네비게이션 ----------
+  $("navHome").addEventListener("click", () => (location.href = "/app/main-home-disconnected/"));
+  $("navQr").addEventListener("click", () => (location.href = "/app/qr-camera/"));
+  $("navChatbot").addEventListener("click", () => (location.href = "/app/chatbot/"));
+  $("navMypage").addEventListener("click", () => (location.href = "/app/mypage/"));
+
+  init();
+</script>
+</body>
+</html>

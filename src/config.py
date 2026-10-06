@@ -24,9 +24,12 @@ DATA_PROCESSED_DIR = BASE_DIR / "data" / "processed"
 # 상담/자판기 연동용 DB. 기본값은 로컬 SQLite 파일.
 # 배포 환경에서 재시작 시에도 기록을 남기려면 DATABASE_URL을 Postgres 등으로 지정할 것
 # (Render free 인스턴스는 디스크가 휘발성이라 SQLite 파일은 재배포/재시작 시 초기화됨).
-# 지도 시연용 가상 자판기를 배치할 중심 좌표 "위도,경도" (발표 장소 근처로 지정 권장).
-# 기본값은 서울시청. 실제 자판기 데이터는 MAP_DATABASE_URL(Supabase)로 읽는다.
-DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5665,126.9780")
+# 지도 화면의 기본 중심 좌표 "위도,경도" — 위치 권한이 없을 때 이 위치를 보여준다. 기본값: 동양미래대학교
+DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5011,126.8670")
+
+# 카카오 지도 JavaScript 키 (developers.kakao.com > 내 애플리케이션 > 앱 키).
+# 웹페이지에 노출되는 공개 키이고 등록한 도메인에서만 동작한다 — 그래도 코드에 직접 쓰지 않고 .env로만 관리.
+KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'moyak.db'}")
 

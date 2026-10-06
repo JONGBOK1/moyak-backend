@@ -121,9 +121,12 @@
   </div>
 
 <script>
-  // 기기 재탐색 = 실제로는 자판기 QR을 스캔해서 연동하는 흐름으로 안내
+  // 지도에서 자판기를 이미 골랐으면 "연결됨" 홈을 보여준다 (선택 정보는 map-screen이 저장)
+  if (localStorage.getItem("moyak_selected_machine")) location.replace("/app/main-home-connected/");
+
+  // 기기 재탐색 = 지도에서 가까운 자판기를 찾아 선택
   document.getElementById("rescanBtn").addEventListener("click", () => {
-    location.href = "/app/qr-camera/";
+    location.href = "/app/map-screen/";
   });
 
   document.getElementById("navMap").addEventListener("click", () => {

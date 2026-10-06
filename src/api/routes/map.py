@@ -18,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from pathlib import Path
 from dotenv import load_dotenv
+from src import config
 from src.map_database import create_database_engine
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -97,6 +98,13 @@ def _with_distance(row, lat: float | None, lng: float | None) -> dict:
         round(_distance_m(lat, lng, item["latitude"], item["longitude"])) if lat is not None and lng is not None else None
     )
     return item
+
+
+@router.get("/config")
+def map_config():
+    """지도 화면 초기화용 — 카카오 지도 JS 키(공개 키, 도메인 제한)와 기본 중심 좌표(동양미래대학교)."""
+    lat, lng = (float(v) for v in config.DEMO_MAP_CENTER.split(","))
+    return {"kakao_js_key": config.KAKAO_JS_KEY or None, "default_center": {"latitude": lat, "longitude": lng}}
 
 
 @router.get("/machines")
