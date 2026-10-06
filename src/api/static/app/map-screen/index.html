@@ -154,6 +154,7 @@
 
 <script>
   const SELECTED_KEY = "moyak_selected_machine"; // 앱 전체에서 "선택한 자판기" (main-home-connected가 읽음)
+  const FIT_M = 3000; // 첫 화면은 이 거리 안의 자판기만 보이게 확대 (멀리 있는 건 지도를 움직여서 확인)
   const FAR_M = 5000; // 내 위치에서 가장 가까운 자판기가 이보다 멀면 기본 위치(동양미래대) 주변을 보여준다
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -243,7 +244,7 @@
       el.addEventListener("click", () => openDetail(m.id));
       overlays[m.id] = new kk.CustomOverlay({ position: pos, content: el, yAnchor: 1, zIndex: m.id === focusedId ? 3 : 2 });
       overlays[m.id].setMap(kakaoMap);
-      bounds.extend(pos);
+      if (m.distance_m == null || m.distance_m <= FIT_M || !machines.some((x) => x.distance_m <= FIT_M)) bounds.extend(pos);
     });
     if (userPos) bounds.extend(new kk.LatLng(userPos.lat, userPos.lng));
     if (machines.length && !focusedId) kakaoMap.setBounds(bounds, 45, 40, 30, 40);
