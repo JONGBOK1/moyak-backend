@@ -185,7 +185,7 @@
 
   function stockBadge(m) {
     if (!m.stock_count) return '<span class="stock-badge out">품절</span>';
-    if (m.stock_count < 50) return '<span class="stock-badge low">재고 적음</span>';
+    if (m.stock_count < 10) return '<span class="stock-badge low">재고 적음</span>';
     return '<span class="stock-badge ok">재고 있음</span>';
   }
 
