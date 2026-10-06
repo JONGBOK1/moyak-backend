@@ -11,7 +11,9 @@ from slowapi.errors import RateLimitExceeded
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
 from src.api.routes import chat, consultation, drugs, shop, vending
-from src.consult.db import init_db
+from src.api.routes import map as map_routes
+from src.consult.db import SessionLocal, init_db
+from src.consult.map_seed import seed_demo_machines
 from src.rag.chain import get_llm, get_rewrite_llm, get_vector_store
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -20,6 +22,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    with SessionLocal() as db:
+        seed_demo_machines(db)  # 지도 시연용 가상 자판기 (이미 있으면 그대로 둠)
     app.state.vector_store = get_vector_store()
     app.state.llm = get_llm()
     app.state.rewrite_llm = get_rewrite_llm()
@@ -43,6 +47,7 @@ app.include_router(consultation.router)
 app.include_router(drugs.router)
 app.include_router(vending.router)
 app.include_router(shop.router)
+app.include_router(map_routes.router)
 
 app.mount("/kiosk", StaticFiles(directory=STATIC_DIR / "kiosk", html=True), name="kiosk")
 app.mount("/app", StaticFiles(directory=STATIC_DIR / "app", html=True), name="app")

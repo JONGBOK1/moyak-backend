@@ -24,6 +24,10 @@ DATA_PROCESSED_DIR = BASE_DIR / "data" / "processed"
 # 상담/자판기 연동용 DB. 기본값은 로컬 SQLite 파일.
 # 배포 환경에서 재시작 시에도 기록을 남기려면 DATABASE_URL을 Postgres 등으로 지정할 것
 # (Render free 인스턴스는 디스크가 휘발성이라 SQLite 파일은 재배포/재시작 시 초기화됨).
+# 지도 시연용 가상 자판기를 배치할 중심 좌표 "위도,경도" (발표 장소 근처로 지정 권장).
+# 기본값은 서울시청. 실제 자판기 데이터는 MAP_DATABASE_URL(Supabase)로 읽는다.
+DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5665,126.9780")
+
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'moyak.db'}")
 
 if not EYAK_SERVICE_KEY:

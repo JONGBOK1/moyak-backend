@@ -139,6 +139,7 @@ moyak-backend/
 - [x] STEP 7: 테스트 (`tests/test_cleaning.py`, `tests/test_chunking.py` 유닛 테스트 9건 통과 / `tests/check_rag_quality.py` 셀프 체크 통과 — 안전 문구 규칙 자동 검증 + 어투는 수동 확인용)
 - [x] `/chat` 요청량 제한 (IP당 15회/분·200회/일, `slowapi`, `src/api/limiter.py`)
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
+- [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` (지도 화면 프론트/카카오 지도 연동은 아직)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
 
 ## 8. 코딩 시 참고사항

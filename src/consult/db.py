@@ -28,6 +28,13 @@ def init_db() -> None:
 _LATE_COLUMNS = {
     "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},
     "consultation_requests": {"summary": "VARCHAR", "ended_at": "DATETIME"},
+    "vending_machines": {
+        "address": "VARCHAR",
+        "latitude": "FLOAT",
+        "longitude": "FLOAT",
+        "operating_hours": "VARCHAR",
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+    },
 }
 
 

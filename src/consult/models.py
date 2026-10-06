@@ -9,7 +9,7 @@ VendingMachine: 자판기 1대 = QR 토큰을 발급/보유하는 주체
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from src.consult.db import Base
@@ -125,6 +125,12 @@ class VendingMachine(Base):
     paired_user_id = Column(String, nullable=True)
     # 로그인한 사용자에게 마침 승인된 구매 건이 있으면 채워진다 (없을 수도 있음).
     paired_purchase_id = Column(String, ForeignKey("approved_purchases.id"), nullable=True)
+    # 지도(/api/v1/map) 표시용 위치 정보. 좌표가 없는 자판기는 지도에 나오지 않는다.
+    address = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    operating_hours = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
 
 
 class Product(Base):
