@@ -6,20 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from pathlib import Path
-from dotenv import load_dotenv
-from src.map_database import create_database_engine
-
-load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+from src import config
+from src.database.connection import create_database_engine
 
 router = APIRouter(prefix="/api/v1/map", tags=["map"])
 
 
 @lru_cache(maxsize=1)
 def map_engine():
-    url = os.getenv("MAP_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if not url:
-        raise HTTPException(503, "Set MAP_DATABASE_URL on the server.")
+    url = os.getenv("MAP_DATABASE_URL") or config.DATABASE_URL
     return create_database_engine(url)
 
 

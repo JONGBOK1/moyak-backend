@@ -8,9 +8,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from src import config
+from src.database.connection import create_database_engine
 
-connect_args = {"check_same_thread": False} if config.DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(config.DATABASE_URL, connect_args=connect_args)
+engine = create_database_engine(config.DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 Base = declarative_base()
@@ -19,28 +19,33 @@ Base = declarative_base()
 def init_db() -> None:
     from src.consult import models  # noqa: F401  (모델 등록을 위해 임포트)
 
-    Base.metadata.create_all(bind=engine)
-    _add_missing_columns()
+    if engine.dialect.name == "sqlite":
+        _migrate_sqlite_vending_columns()
+        Base.metadata.create_all(bind=engine)
+    else:
+        # Shared databases are migrated explicitly, never mutated by API/worker startup.
+        inspector = inspect(engine)
+        missing = set(Base.metadata.tables) - set(inspector.get_table_names(schema="public"))
+        if missing:
+            raise RuntimeError("DB schema mapping/migration required; missing tables: " + ", ".join(sorted(missing)))
 
 
-# create_all은 이미 있는 테이블에 새 컬럼을 추가하지 않는다. 로컬 SQLite를 지우지 않고도
-# 새 컬럼이 반영되도록, 나중에 추가된 nullable 컬럼만 여기서 ALTER TABLE로 보강한다.
-_LATE_COLUMNS = {
-    "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},
-    "consultation_requests": {"summary": "VARCHAR", "ended_at": "DATETIME"},
-}
-
-
-def _add_missing_columns() -> None:
-    insp = inspect(engine)
-    with engine.begin() as conn:
-        for table, columns in _LATE_COLUMNS.items():
-            if not insp.has_table(table):
-                continue
-            existing = {c["name"] for c in insp.get_columns(table)}
-            for name, sql_type in columns.items():
-                if name not in existing:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+def _migrate_sqlite_vending_columns() -> None:
+    """기존 로컬 SQLite DB에도 자판기 위치 컬럼을 추가한다(간단한 개발용 migration)."""
+    inspector = inspect(engine)
+    if "vending_machines" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("vending_machines")}
+    additions = {
+        "address": "TEXT NOT NULL DEFAULT ''",
+        "latitude": "REAL",
+        "longitude": "REAL",
+        "is_active": "INTEGER NOT NULL DEFAULT 1",
+    }
+    with engine.begin() as connection:
+        for name, definition in additions.items():
+            if name not in columns:
+                connection.execute(text(f"ALTER TABLE vending_machines ADD COLUMN {name} {definition}"))
 
 
 def get_session() -> Session:

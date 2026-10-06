@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>모약이 자판기 찾기</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root { --ink: #17221f; --muted: #687672; --paper: #f4f1e8; --line: #d9ddd4; --mint: #b8e3c8; --orange: #e9784f; --white: #fffdf8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font-family: Georgia, "Noto Serif KR", serif; }
+    header { padding: 28px clamp(20px, 5vw, 72px) 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: end; gap: 20px; }
+    .eyebrow { margin: 0 0 8px; color: var(--orange); font: 700 12px/1.2 ui-sans-serif, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 46px); line-height: 1; letter-spacing: 0; }
+    .location-copy { max-width: 280px; color: var(--muted); font: 14px/1.5 ui-sans-serif, sans-serif; text-align: right; }
+    main { max-width: 1440px; margin: 0 auto; padding: 24px clamp(20px, 5vw, 72px) 56px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .toolbar label { color: var(--muted); font: 700 13px ui-sans-serif, sans-serif; }
+    select, input, button { border: 1px solid var(--line); background: var(--white); color: var(--ink); padding: 10px 12px; font: 14px ui-sans-serif, sans-serif; }
+    button { cursor: pointer; font-weight: 700; }
+    button:hover { border-color: var(--orange); }
+    .status { margin-left: auto; color: var(--muted); font: 13px ui-sans-serif, sans-serif; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); gap: 18px; align-items: start; }
+    #map { min-height: 620px; height: calc(100vh - 230px); max-height: 760px; border: 1px solid var(--line); background: #dfe8df; }
+    .side { min-width: 0; }
+    .panel-title { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 10px; }
+    .panel-title h2 { margin: 0; font-size: 20px; }
+    .panel-title span { color: var(--muted); font: 12px ui-sans-serif, sans-serif; }
+    #machine-list { display: grid; gap: 8px; max-height: 330px; overflow-y: auto; padding-right: 3px; }
+    .machine { width: 100%; padding: 14px; text-align: left; border: 1px solid var(--line); background: var(--white); }
+    .machine.selected { border: 2px solid var(--orange); padding: 13px; }
+    .machine-head, .machine-meta { display: flex; justify-content: space-between; gap: 12px; }
+    .machine-name { font-weight: 700; }
+    .distance { color: var(--orange); white-space: nowrap; font-weight: 700; }
+    .machine-address, .machine-meta { color: var(--muted); font: 12px/1.45 ui-sans-serif, sans-serif; }
+    .machine-address { margin: 7px 0; }
+    .pill { color: #276545; background: var(--mint); padding: 3px 7px; font-weight: 700; }
+    .pill.closed { color: #785245; background: #f1d4c6; }
+    .inventory { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 18px; }
+    #inventory-empty { color: var(--muted); font: 14px/1.5 ui-sans-serif, sans-serif; }
+    .inventory-grid { display: grid; gap: 8px; }
+    .drug { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 13px; background: var(--white); border: 1px solid var(--line); }
+    .drug-name { font-weight: 700; }
+    .drug-price { font-weight: 700; }
+    .drug-info { color: var(--muted); font: 12px ui-sans-serif, sans-serif; }
+    .sold-out { color: #b34b35; font-weight: 700; }
+    .leaflet-popup-content-wrapper { border-radius: 0; }
+    @media (max-width: 850px) {
+      header { align-items: start; flex-direction: column; }
+      .location-copy { text-align: left; }
+      .status { width: 100%; margin-left: 0; }
+      .layout { grid-template-columns: 1fr; }
+      #map { min-height: 390px; height: 52vh; }
+      #machine-list { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div><p class="eyebrow">MOYAK / VENDING MAP</p><h1>가까운 약 자판기</h1></div>
+    <div class="location-copy">내 위치를 기준으로 가까운 자판기와 현재 재고를 확인합니다. 위치 권한이 없으면 가상 위치를 사용합니다.</div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <label for="radius">검색 반경</label>
+      <select id="radius"><option value="1">1 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="10">10 km</option></select>
+      <input id="keyword" type="search" placeholder="자판기명 또는 주소" aria-label="자판기 검색" />
+      <button id="refresh" type="button">현재 위치로 다시 찾기</button>
+      <button id="demo-location" type="button">가상 위치로 보기</button>
+      <span id="status" class="status">위치를 확인하는 중...</span>
+    </div>
+    <div class="layout">
+      <div id="map" aria-label="자판기 지도"></div>
+      <section class="side">
+        <div class="panel-title"><h2>자판기 목록</h2><span id="count">0곳</span></div>
+        <div id="machine-list"></div>
+        <section class="inventory">
+          <div class="panel-title"><h2 id="inventory-title">약 재고</h2><span id="inventory-status"></span></div>
+          <div id="inventory-empty">자판기를 선택하면 재고가 표시됩니다.</div>
+          <div id="inventory-list" class="inventory-grid"></div>
+        </section>
+      </section>
+    </div>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const FALLBACK_LOCATION = { lat: 37.4979, lng: 127.0276, label: "가상 위치(강남역)" };
+    const map = L.map("map").setView([FALLBACK_LOCATION.lat, FALLBACK_LOCATION.lng], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
+    let userMarker;
+    let machineMarkers = [];
+    let currentLocation = FALLBACK_LOCATION;
+    let machines = [];
+
+    const $ = (id) => document.getElementById(id);
+    const won = (value) => new Intl.NumberFormat("ko-KR").format(value) + "원";
+
+    function setUserLocation(location) {
+      currentLocation = location;
+      if (userMarker) userMarker.remove();
+      userMarker = L.circleMarker([location.lat, location.lng], { radius: 8, color: "#e9784f", fillColor: "#e9784f", fillOpacity: .9 }).addTo(map);
+      userMarker.bindPopup("내 위치");
+      map.setView([location.lat, location.lng], 14);
+    }
+
+    function clearMachineMarkers() { machineMarkers.forEach((marker) => marker.remove()); machineMarkers = []; }
+
+    function selectMachine(machine) {
+      document.querySelectorAll(".machine").forEach((node) => node.classList.toggle("selected", node.dataset.id === machine.machine_id));
+      fetch("/api/v1/vending-machines/" + encodeURIComponent(machine.machine_id) + "/inventory")
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok) throw new Error(data.detail || "재고를 불러오지 못했습니다.");
+          $("inventory-title").textContent = machine.machine_name + " · 약 재고";
+          $("inventory-status").textContent = machine.inventory_status;
+          $("inventory-empty").hidden = data.items.length > 0;
+          $("inventory-list").innerHTML = data.items.map((item) => `
+            <article class="drug"><span class="drug-name">${item.drug_name}</span><span class="drug-price">${won(item.price)}</span>
+              <span class="drug-info">${item.category}</span><span class="drug-info ${item.is_sold_out ? "sold-out" : ""}">${item.is_sold_out ? "품절" : "재고 " + item.stock_count + "개"}</span>
+            </article>`).join("");
+        })
+        .catch((error) => { $("inventory-empty").hidden = false; $("inventory-empty").textContent = error.message; });
+    }
+
+    function renderMachines() {
+      clearMachineMarkers();
+      $("count").textContent = machines.length + "곳";
+      $("machine-list").innerHTML = "";
+      machines.forEach((machine) => {
+        const marker = L.marker([machine.latitude, machine.longitude]).addTo(map);
+        marker.bindPopup(`<strong>${machine.machine_name}</strong><br>${machine.address}<br>${machine.distance_km} km`);
+        marker.on("click", () => selectMachine(machine));
+        machineMarkers.push(marker);
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "machine"; button.dataset.id = machine.machine_id;
+        button.innerHTML = `<div class="machine-head"><span class="machine-name">${machine.machine_name}</span><span class="distance">${machine.distance_m < 1000 ? machine.distance_m + " m" : machine.distance_km + " km"}</span></div><div class="machine-address">${machine.address}</div><div class="machine-meta"><span class="pill ${machine.is_active ? "" : "closed"}">${machine.is_active ? "화상상담 가능" : "상담 준비 중"}</span><span>${machine.inventory_status}</span></div>`;
+        button.addEventListener("click", () => { map.setView([machine.latitude, machine.longitude], 16); marker.openPopup(); selectMachine(machine); });
+        $("machine-list").appendChild(button);
+      });
+      if (machines.length) selectMachine(machines[0]);
+      else { $("inventory-empty").hidden = false; $("inventory-empty").textContent = "현재 위치 반경 안에 자판기가 없습니다."; $("inventory-list").innerHTML = ""; }
+    }
+
+    async function loadMachines() {
+      $("status").textContent = "자판기를 찾는 중...";
+      const params = new URLSearchParams({ lat: currentLocation.lat, lng: currentLocation.lng, radius: $("radius").value });
+      if ($("keyword").value.trim()) params.set("keyword", $("keyword").value.trim());
+      const response = await fetch("/api/v1/vending-machines/nearby?" + params);
+      if (!response.ok) throw new Error("자판기 목록을 불러오지 못했습니다.");
+      machines = await response.json(); renderMachines();
+      $("status").textContent = currentLocation.label + " 기준 · 반경 " + $("radius").value + " km";
+    }
+
+    function locateAndLoad() {
+      if (!navigator.geolocation) { setUserLocation(FALLBACK_LOCATION); loadMachines(); return; }
+      navigator.geolocation.getCurrentPosition((position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude, label: "현재 위치" }); loadMachines();
+      }, () => { setUserLocation(FALLBACK_LOCATION); loadMachines(); });
+    }
+
+    $("refresh").addEventListener("click", locateAndLoad);
+    $("demo-location").addEventListener("click", () => { setUserLocation(FALLBACK_LOCATION); loadMachines(); });
+    $("radius").addEventListener("change", loadMachines);
+    let keywordTimer;
+    $("keyword").addEventListener("input", () => { clearTimeout(keywordTimer); keywordTimer = setTimeout(loadMachines, 250); });
+    locateAndLoad();
+  </script>
+</body>
+</html>

@@ -1,12 +1,27 @@
 # 환경변수 / 시크릿
 .env
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.keystore
+**/*.jks
+**/google-services.json
+**/GoogleService-Info.plist
 
 # Python
 __pycache__/
+**/__pycache__/
 *.pyc
 .venv/
+**/.venv/
 venv/
+**/venv/
 *.egg-info/
+.pytest_cache/
+**/.pytest_cache/
 
 # 로그
 *.log
@@ -19,12 +34,28 @@ data/processed/*
 
 # 상담/자판기 연동 로컬 DB (SQLite)
 data/*.db
+**/*.db
+data/database-schema*.json
 
 # 노트북 체크포인트
 .ipynb_checkpoints/
 
+# Flutter / generated files
+**/.git/
+data/map-backend-release/
+data/map-release/
+**/.dart_tool/
+**/build/
+**/coverage/
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/android/local.properties
+**/.flutter-plugins-dependencies
+
 # IDE
 .vscode/
+**/.vscode/
 .idea/
 
 # OS
