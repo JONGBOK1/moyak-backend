@@ -32,8 +32,7 @@ DB_ERROR = "자판기 위치를 불러오지 못했습니다. DB 연결과 위�
 
 
 def _map_database_url() -> str | None:
-    # 대시보드에 붙여넣을 때 끝에 줄바꿈/공백이 섞이면 DB 이름이 "postgres
-"이 되어 연결이 실패하므로 정리한다
+    # 대시보드에 붙여넣을 때 끝에 줄바꿈/공백이 섞이면 DB 이름 뒤에 줄바꿈이 붙어 연결이 실패하므로 정리한다
     return (os.getenv("MAP_DATABASE_URL") or "").strip() or None
 
 
