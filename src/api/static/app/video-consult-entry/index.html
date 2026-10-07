@@ -8,6 +8,7 @@
     html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
   </style>
   <script src="/static/vendor/app-scale.js"></script>
+  <script src="/static/vendor/pharmacist-presence.js"></script>
   <link rel="stylesheet" href="./vars.css">
   <link rel="stylesheet" href="./style.css">
   
@@ -261,6 +262,7 @@
       location.href = "/app/pharmacist-waiting/";
       return;
     }
+    if (stopPresence) stopPresence(); // 입장하면 더는 알림 불필요 (Daily 화면에서 약사가 바로 보임)
     stopPreview();
     const content = document.getElementById("entryContent");
     content.innerHTML = `
@@ -282,6 +284,16 @@
 
   // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
   const consultationId = sessionStorage.getItem("moyak_consultation_id");
+
+  // 미리보기(입장 전) 화면에서도 약사가 화상방에 들어오면 배너 + 알림음으로 알려준다
+  const stopPresence = consultationId
+    ? MoyakPresence.watch({
+        consultationId,
+        onEnter: () => document.getElementById("joinBtn").click(),
+        onJoin: () => (document.getElementById("readyBadge").textContent = "약사 입장 완료"),
+        onLeave: () => (document.getElementById("readyBadge").textContent = "연결 준비됨"),
+      })
+    : null;
   const userId = localStorage.getItem("moyak_user_id");
   let seenIds = new Set();
   let unread = 0;

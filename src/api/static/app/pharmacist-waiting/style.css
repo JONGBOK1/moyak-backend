@@ -774,3 +774,5 @@
 .summary-card { align-self: stretch; background: #fffdf5; border: 1px solid #f1e3b8; border-radius: 14px; padding: 14px 16px; }
 .summary-title { font-size: 15px; font-weight: 800; color: #593d0d; margin-bottom: 8px; }
 .summary-body { font-size: 13px; line-height: 1.6; color: #2b2b2b; white-space: pre-wrap; }
+.join-now-btn.pharmacist-in { background: #3e2723; color: #ffd54f; animation: joinPulse 1.6s infinite; }
+@keyframes joinPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 213, 79, 0.6); } 50% { box-shadow: 0 0 0 8px rgba(255, 213, 79, 0); } }

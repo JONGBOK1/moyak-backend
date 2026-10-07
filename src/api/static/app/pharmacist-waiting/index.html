@@ -8,6 +8,7 @@
     html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
   </style>
   <script src="/static/vendor/app-scale.js"></script>
+  <script src="/static/vendor/pharmacist-presence.js"></script>
   <link rel="stylesheet" href="./vars.css">
   <link rel="stylesheet" href="./style.css">
   
@@ -228,6 +229,38 @@
     }, 1000);
   }
 
+  // ---------- 약사 화상방 입장 알림 (배너 + 알림음 + 지금 입장하기) ----------
+  let stopPresence = null;
+  function goToVideo() {
+    location.href = "/app/video-consult-entry/";
+  }
+  function watchPharmacist(data) {
+    const finished = data.summary || data.status === "cancelled" || !data.room_url;
+    if (finished) {
+      if (stopPresence) stopPresence();
+      stopPresence = null;
+      return;
+    }
+    if (stopPresence) return;
+    const joinBtn = document.getElementById("joinNowBtn");
+    const step3 = document.getElementById("step3Desc");
+    const before = { btn: joinBtn.textContent, step3: step3.textContent };
+    stopPresence = MoyakPresence.watch({
+      consultationId: data.id,
+      onEnter: goToVideo,
+      onJoin: () => {
+        joinBtn.textContent = "🔔 약사가 들어왔어요 — 지금 입장하기";
+        joinBtn.classList.add("pharmacist-in");
+        step3.textContent = "약사가 화상 상담방에서 기다리고 있어요";
+      },
+      onLeave: () => {
+        joinBtn.textContent = before.btn;
+        joinBtn.classList.remove("pharmacist-in");
+        step3.textContent = before.step3;
+      },
+    });
+  }
+
   function applyStatus(data) {
     document.getElementById("requestTime").textContent =
       new Date(data.created_at + "Z").toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" }) + " 신청";
@@ -243,10 +276,9 @@
     } else if (data.room_url) {
       sessionStorage.setItem("moyak_video_room_url", data.room_url);
       document.getElementById("joinNowRow").style.display = "block";
-      document.getElementById("joinNowBtn").onclick = () => {
-        location.href = "/app/video-consult-entry/";
-      };
+      document.getElementById("joinNowBtn").onclick = goToVideo;
     }
+    watchPharmacist(data);
 
     if (data.status === "pending") return;
 

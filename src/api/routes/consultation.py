@@ -183,3 +183,24 @@ def end_consultation(request: Request, consultation_id: str, db: Session = Depen
     except service.InvalidStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return _to_response(consultation)
+
+
+class PresenceResponse(BaseModel):
+    available: bool  # 화상방이 없거나 Daily 조회 실패 시 False (화면은 알림만 생략)
+    participants: int  # 지금 화상방 접속 인원
+    pharmacist_in_room: bool
+
+
+@router.get("/{consultation_id}/presence", response_model=PresenceResponse)
+def room_presence(consultation_id: str, db: Session = Depends(get_db)) -> PresenceResponse:
+    """사용자 대기/화상 입장 화면이 폴링 — 약사가 화상방에 들어오면 배너+알림음으로 알려주기 위함.
+    사용자가 아직 방에 들어가기 전(대기/미리보기 화면)에만 쓰므로, 방에 누가 있으면 그 사람이 약사다
+    (방 최대 인원 2명)."""
+    try:
+        consultation = service.get_consultation(db, consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    count = service.video.room_participant_count(consultation.room_url)
+    if count is None:
+        return PresenceResponse(available=False, participants=0, pharmacist_in_room=False)
+    return PresenceResponse(available=True, participants=count, pharmacist_in_room=count > 0)
