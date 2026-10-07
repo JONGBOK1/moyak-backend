@@ -154,17 +154,19 @@
 
 <script>
   const SELECTED_KEY = "moyak_selected_machine"; // 이번 앱 사용 동안 "선택한 자판기" (sessionStorage — 새로 들어오면 연결 없음부터)
+  const SERVICE_AREA_M = 3000; // 서비스(시연) 지역: 동양미래대 반경 — 이 밖의 자판기는 목록/지도에서 제외
   const FIT_M = 3000; // 첫 화면은 이 거리 안의 자판기만 보이게 확대 (멀리 있는 건 지도를 움직여서 확인)
-  const FAR_M = 5000; // 내 위치에서 가장 가까운 자판기가 이보다 멀면 기본 위치(동양미래대) 주변을 보여준다
+  const FAR_M = 5000; // 가장 가까운 자판기가 이보다 멀면, 거리는 내 위치 기준 그대로 두고 지도만 동양미래대 주변을 보여준다
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let mapConfig = null;
-  let origin = null; // 거리 계산 기준 {lat, lng}
+  let origin = null; // 거리 계산 기준 {lat, lng} — 위치 권한이 있으면 항상 실제 내 위치
+  let viewCenter = null; // 지도가 처음 보여줄 지역 (내 근처에 자판기가 없으면 동양미래대)
   let machines = [];
   let kakaoMap = null;
   let overlays = {};
-  let userMarker = null; // 지도에 표시할 실제 내 위치 (기본 위치로 대체한 경우 null)
+  let userMarker = null; // 지도에 표시할 실제 내 위치 (위치 권한 없으면 null)
   let focusedId = null; // 상세를 보고 있는 자판기 (지도 핀에 이름 표시)
 
   async function api(path) {
@@ -180,8 +182,16 @@
 
   function fmtDistance(m) {
     if (m == null) return "";
-    const walk = Math.max(1, Math.round(m / 67)); // 도보 분당 약 67m
-    return (m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`) + ` · 도보 ${walk}분`;
+    if (m < 1000) return `${m}m · 도보 ${Math.max(1, Math.round(m / 67))}분`; // 도보 분당 약 67m
+    if (m < 2000) return `${(m / 1000).toFixed(1)}km · 도보 ${Math.round(m / 67)}분`;
+    return m < 100000 ? `${(m / 1000).toFixed(1)}km` : `${Math.round(m / 1000)}km`;
+  }
+
+  function distM(a, b) {
+    const r = 6371000, rad = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * r * Math.asin(Math.sqrt(h));
   }
 
   function stockBadge(m) {
@@ -244,9 +254,10 @@
       el.addEventListener("click", () => openDetail(m.id));
       overlays[m.id] = new kk.CustomOverlay({ position: pos, content: el, yAnchor: 1, zIndex: m.id === focusedId ? 3 : 2 });
       overlays[m.id].setMap(kakaoMap);
-      if (m.distance_m == null || m.distance_m <= FIT_M || !machines.some((x) => x.distance_m <= FIT_M)) bounds.extend(pos);
+      const nearView = (x) => distM(viewCenter, { lat: x.latitude, lng: x.longitude }) <= FIT_M;
+      if (nearView(m) || !machines.some(nearView)) bounds.extend(pos);
     });
-    if (userPos) bounds.extend(new kk.LatLng(userPos.lat, userPos.lng));
+    if (userPos && distM(userPos, viewCenter) <= FIT_M) bounds.extend(new kk.LatLng(userPos.lat, userPos.lng));
     if (machines.length && !focusedId) kakaoMap.setBounds(bounds, 45, 40, 30, 40);
   }
 
@@ -361,7 +372,8 @@
   }
 
   async function loadMachines(userPos) {
-    const q = userPos ? `?lat=${userPos.lat}&lng=${userPos.lng}` : `?lat=${origin.lat}&lng=${origin.lng}`;
+    // 시연용 자판기는 동양미래대 주변에만 있으므로, 그 지역(반경 3km) 자판기만 보여준다
+    const q = `?lat=${origin.lat}&lng=${origin.lng}&area_radius_m=${SERVICE_AREA_M}`;
     machines = (await api(`/api/v1/map/machines${q}`)).items;
   }
 
@@ -371,22 +383,27 @@
       const fallback = { lat: mapConfig.default_center.latitude, lng: mapConfig.default_center.longitude };
       const userPos = await getPosition();
 
+      // 거리는 항상 실제 내 위치 기준. 자판기(가상)는 동양미래대 주변에만 있으므로,
+      // 내 근처에 자판기가 없으면 지도만 동양미래대 주변을 보여주고 거리는 실제 거리(예: 12.4km)를 그대로 표시한다.
       origin = userPos || fallback;
       await loadMachines(userPos);
+      const nearest = machines[0];
       if (!userPos) {
-        $("locationNote").textContent = "위치 권한이 없어 동양미래대학교 주변을 보여드려요";
-      } else if (!machines.length || machines[0].distance_m > FAR_M) {
-        // 시연 장소와 멀리 있으면 내 위치 대신 기본 위치(동양미래대) 기준으로 보여준다
-        origin = fallback;
-        await loadMachines(null);
-        $("locationNote").textContent = "근처에 자판기가 없어 동양미래대학교 주변을 보여드려요";
+        viewCenter = fallback;
+        $("locationNote").textContent = "위치 권한이 없어 동양미래대학교 기준 거리로 보여드려요";
+      } else if (!nearest || nearest.distance_m > FAR_M) {
+        viewCenter = fallback;
+        $("locationNote").textContent = nearest
+          ? `내 위치에서 가장 가까운 자판기까지 ${fmtDistance(nearest.distance_m)} · 지도는 동양미래대 주변`
+          : "주변에 운영 중인 자판기가 없어요";
       } else {
+        viewCenter = userPos;
         $("locationNote").textContent = "현재 위치 기준 가까운 순이에요";
       }
 
-      await initMap(origin);
+      await initMap(viewCenter);
       renderList();
-      userMarker = userPos && origin !== fallback ? userPos : null; // 실제 내 위치일 때만 파란 점 표시
+      userMarker = userPos; // 위치 권한이 있으면 실제 내 위치에 파란 점
       drawMap();
 
       const fromQuery = new URLSearchParams(location.search).get("machine");
@@ -397,7 +414,8 @@
   }
 
   $("locateBtn").addEventListener("click", () => {
-    if (kakaoMap && origin) kakaoMap.panTo(new window.kakao.maps.LatLng(origin.lat, origin.lng));
+    const target = userMarker || viewCenter;
+    if (kakaoMap && target) kakaoMap.panTo(new window.kakao.maps.LatLng(target.lat, target.lng));
   });
 
   // ---------- 하단 네비게이션 ----------

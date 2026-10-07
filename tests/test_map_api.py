@@ -124,3 +124,15 @@ def test_map_config_returns_default_center(monkeypatch):
         body = client.get("/api/v1/map/config").json()
     assert body["kakao_js_key"] is None
     assert abs(body["default_center"]["latitude"] - 37.5011) < 0.001
+
+
+def test_area_radius_filters_to_service_area(monkeypatch):
+    monkeypatch.delenv("MAP_DATABASE_URL", raising=False)
+    monkeypatch.setattr(routes.config, "DEMO_MAP_CENTER", "37.1,127.0")  # "far" 자판기 위치를 서비스 지역 중심으로
+    engine = _engine()
+    _seed_basic(engine)
+    with _client(engine) as client:
+        ids = [m["id"] for m in client.get("/api/v1/map/machines", params={"area_radius_m": 1000}).json()["items"]]
+        assert ids == ["far"]  # 중심에서 11km 떨어진 "a"는 제외
+        assert len(client.get("/api/v1/map/machines").json()["items"]) == 2  # 파라미터 없으면 전체
+    engine.dispose()

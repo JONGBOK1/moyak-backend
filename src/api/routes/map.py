@@ -118,6 +118,10 @@ def map_config():
 def machines(
     lat: float | None = Query(None, ge=-90, le=90, description="내 위치 위도 — 주면 가까운 순 정렬 + distance_m"),
     lng: float | None = Query(None, ge=-180, le=180, description="내 위치 경도"),
+    area_radius_m: int | None = Query(
+        None, gt=0, le=50_000,
+        description="지정하면 서비스 지역 중심(DEMO_MAP_CENTER, 기본 동양미래대) 반경 안의 자판기만 반환 — 시연 지역 한정용",
+    ),
     engine=Depends(map_engine),
 ):
     if (lat is None) != (lng is None):
@@ -127,6 +131,9 @@ def machines(
     except SQLAlchemyError as e:
         raise _db_unavailable(e) from None
     items = [_with_distance(row, lat, lng) for row in rows[:MAX_MACHINES]]
+    if area_radius_m:
+        c_lat, c_lng = (float(v) for v in config.DEMO_MAP_CENTER.split(","))
+        items = [m for m in items if _distance_m(c_lat, c_lng, m["latitude"], m["longitude"]) <= area_radius_m]
     if lat is not None:
         items.sort(key=lambda m: m["distance_m"])
     return {"source": source, "truncated": len(rows) > MAX_MACHINES, "items": items}
