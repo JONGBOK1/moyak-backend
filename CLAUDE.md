@@ -160,7 +160,7 @@ moyak-backend/
   - **진입점 두 곳**이 같은 API를 쓴다(회의 결과: 챗봇을 강제로 거치게 하지 않기 위해 분리):
     - `GET /chat-test` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
     - `GET /consult` (`consult_direct.html`) — 네비게이션바/메뉴에서 바로 진입하는 용도. 텍스트 입력 없이 버튼 하나로 즉시 상담 요청(= `chat_summary` 생략) → 바로 화상 화면으로 전환
-    - 앱(`/app/...`) 하단 네비바 "약사상담" 버튼 — 챗봇 대화 없이 `/app/pharmacist-waiting/?direct=1`로 이동해 `chat_summary` 없이 상담 생성(또는 대기 중 상담 재사용) 후 바로 화상 입장 화면(`/app/video-consult-entry/`)으로 전환. 챗봇 대화 중 나오는 "약사에게 바로 상담하기" 버튼은 기존처럼 대화 내용을 함께 전달
+    - 앱(`/app/...`) 모든 화면 하단 가운데 "상담하기" 버튼(🩺) — 챗봇 대화 없이 `/app/pharmacist-waiting/?direct=1`로 이동해 `chat_summary` 없이 상담 생성(또는 대기 중 상담 재사용) 후 바로 화상 입장 화면(`/app/video-consult-entry/`)으로 전환. 챗봇 대화 중 나오는 "약사에게 바로 상담하기" 버튼은 기존처럼 대화 내용을 함께 전달
   - 두 진입점 다 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`, 두 페이지가 같은 키를 써서 동일 브라우저면 ID가 이어진다).
   - **상담 생성 전에 항상 `GET /consultations?status=pending&user_id=`로 먼저 조회**해서, 이미 대기 중인 상담이 있으면 새로 만들지 않고 그걸 재사용한다(중복 상담 방지 — 사용자가 버튼을 여러 번 누르거나 페이지를 새로고침해도 상담이 중복 생성되지 않음).
   - 상담 생성/재사용 이후 두 페이지 모두 **3초 간격으로 `GET /consultations/{id}`를 폴링**해서 상태 변화를 실시간 반영한다: `approved`가 되면 처방된 약 이름(`approved_drug_name`)과 "자판기에서 QR 스캔" 안내 배너를, `rejected`가 되면 약사가 입력한 `decision_reason`(없으면 기본 안내 문구)을 화면에 표시하고 폴링을 멈춘다.

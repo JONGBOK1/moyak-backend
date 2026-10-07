@@ -71,12 +71,12 @@
           <img class="map-pin" src="map-pin0.svg" />
           <div class="div7">지도</div>
         </div>
-        <div class="qr-fab-container" id="navQr">
+        <div class="qr-fab-container" id="navConsult">
           <div class="qr-fab">
-            <img class="scan-qr-code" src="scan-qr-code0.svg" />
+            <img class="scan-qr-code" src="fab-stethoscope.svg" />
           </div>
           <div class="frame"></div>
-          <div class="qr">QR스캔</div>
+          <div class="qr">상담하기</div>
         </div>
         <div class="nav-tab3" id="navChatbot">
           <img class="message-circle" src="message-circle0.svg" />
@@ -167,8 +167,9 @@
   document.getElementById("navMap").addEventListener("click", () => {
     location.href = "/app/map-screen/";
   });
-  document.getElementById("navQr").addEventListener("click", () => {
-    location.href = "/app/qr-camera/";
+  // 하단 가운데 "상담하기": 챗봇 대화 없이 바로 약사 화상 상담으로
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/pharmacist-waiting/?direct=1";
   });
   document.getElementById("navChatbot").addEventListener("click", () => {
     location.href = "/app/chatbot/";
