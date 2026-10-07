@@ -154,15 +154,14 @@
 
 <script>
   const SELECTED_KEY = "moyak_selected_machine"; // 이번 앱 사용 동안 "선택한 자판기" (sessionStorage — 새로 들어오면 연결 없음부터)
-  const SERVICE_AREA_M = 3000; // 서비스(시연) 지역: 동양미래대 반경 — 이 밖의 자판기는 목록/지도에서 제외
   const FIT_M = 3000; // 첫 화면은 이 거리 안의 자판기만 보이게 확대 (멀리 있는 건 지도를 움직여서 확인)
-  const FAR_M = 5000; // 가장 가까운 자판기가 이보다 멀면, 거리는 내 위치 기준 그대로 두고 지도만 동양미래대 주변을 보여준다
+  const FAR_M = 5000; // 가장 가까운 자판기가 이보다 멀면, 거리는 내 위치 기준 그대로 두고 지도만 그 자판기 주변을 보여준다
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let mapConfig = null;
   let origin = null; // 거리 계산 기준 {lat, lng} — 위치 권한이 있으면 항상 실제 내 위치
-  let viewCenter = null; // 지도가 처음 보여줄 지역 (내 근처에 자판기가 없으면 동양미래대)
+  let viewCenter = null; // 지도가 처음 보여줄 지역 (내 근처에 자판기가 없으면 가장 가까운 자판기 주변)
   let machines = [];
   let kakaoMap = null;
   let overlays = {};
@@ -258,7 +257,11 @@
       if (nearView(m) || !machines.some(nearView)) bounds.extend(pos);
     });
     if (userPos && distM(userPos, viewCenter) <= FIT_M) bounds.extend(new kk.LatLng(userPos.lat, userPos.lng));
-    if (machines.length && !focusedId) kakaoMap.setBounds(bounds, 45, 40, 30, 40);
+    if (machines.length && !focusedId) {
+      kakaoMap.setBounds(bounds, 45, 40, 30, 40);
+      // 범위 안 자판기가 1곳뿐이면 골목 단위(30m)까지 확대되므로 동네 단위로 제한 (카카오 레벨: 숫자가 작을수록 확대)
+      if (kakaoMap.getLevel() < 4) kakaoMap.setLevel(4);
+    }
   }
 
   async function initMap(center) {
@@ -372,8 +375,8 @@
   }
 
   async function loadMachines(userPos) {
-    // 시연용 자판기는 동양미래대 주변에만 있으므로, 그 지역(반경 3km) 자판기만 보여준다
-    const q = `?lat=${origin.lat}&lng=${origin.lng}&area_radius_m=${SERVICE_AREA_M}`;
+    // 등록된 자판기 전부를 실제 내 위치 기준 거리로 (지역 필터 없음)
+    const q = `?lat=${origin.lat}&lng=${origin.lng}`;
     machines = (await api(`/api/v1/map/machines${q}`)).items;
   }
 
@@ -383,8 +386,8 @@
       const fallback = { lat: mapConfig.default_center.latitude, lng: mapConfig.default_center.longitude };
       const userPos = await getPosition();
 
-      // 거리는 항상 실제 내 위치 기준. 자판기(가상)는 동양미래대 주변에만 있으므로,
-      // 내 근처에 자판기가 없으면 지도만 동양미래대 주변을 보여주고 거리는 실제 거리(예: 12.4km)를 그대로 표시한다.
+      // 거리/정렬은 항상 실제 내 위치 기준. 내 근처(5km)에 자판기가 없으면
+      // 지도만 가장 가까운 자판기 주변을 보여주고, 거리는 실제 거리(예: 12.4km)를 그대로 표시한다.
       origin = userPos || fallback;
       await loadMachines(userPos);
       const nearest = machines[0];
@@ -392,10 +395,10 @@
         viewCenter = fallback;
         $("locationNote").textContent = "위치 권한이 없어 동양미래대학교 기준 거리로 보여드려요";
       } else if (!nearest || nearest.distance_m > FAR_M) {
-        viewCenter = fallback;
+        viewCenter = nearest ? { lat: nearest.latitude, lng: nearest.longitude } : fallback;
         $("locationNote").textContent = nearest
-          ? `내 위치에서 가장 가까운 자판기까지 ${fmtDistance(nearest.distance_m)} · 지도는 동양미래대 주변`
-          : "주변에 운영 중인 자판기가 없어요";
+          ? `가장 가까운 자판기(${nearest.name})까지 ${fmtDistance(nearest.distance_m)}`
+          : "등록된 자판기가 없어요";
       } else {
         viewCenter = userPos;
         $("locationNote").textContent = "현재 위치 기준 가까운 순이에요";

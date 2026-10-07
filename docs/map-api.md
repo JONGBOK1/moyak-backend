@@ -25,7 +25,7 @@
 
 - `GET /api/v1/map/config` — 지도 화면 초기화용: `kakao_js_key`(`.env`의 `KAKAO_JS_KEY`, 공개 키·도메인 제한), `default_center`(기본 동양미래대학교)
 
-- `GET /api/v1/map/machines?lat=&lng=&area_radius_m=` — `area_radius_m`을 주면 서비스 지역 중심(`DEMO_MAP_CENTER`) 반경 안의 자판기만 (앱 지도는 3000 = 동미대 주변만). 운영 중이고 위치가 있는 자판기 최대 500개 (`code`: Supabase 자판기 코드 VM-001 등, 로컬은 id와 동일).
+- `GET /api/v1/map/machines?lat=&lng=&area_radius_m=` — `area_radius_m`을 주면 서비스 지역 중심(`DEMO_MAP_CENTER`) 반경 안의 자판기만 (선택 옵션 — 앱 지도는 지역 제한 없이 전체 표시) 운영 중이고 위치가 있는 자판기 최대 500개 (`code`: Supabase 자판기 코드 VM-001 등, 로컬은 id와 동일).
   `lat`/`lng`(내 위치)를 주면 가까운 순 정렬 + `distance_m`. 둘 중 하나만 주면 422.
   `items` 항목: `id`, `name`, `address`, `latitude`, `longitude`, `operating_hours`, `item_count`, `stock_count`, `distance_m`.
   `truncated: true`이면 조회 상한을 초과한 것.
