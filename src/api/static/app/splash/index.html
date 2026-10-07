@@ -61,6 +61,9 @@
   </div>
 
 <script>
+  // 앱을 새로 시작하면 자판기 연결은 항상 해제된 상태에서 시작 (지도에서 다시 선택)
+  sessionStorage.removeItem("moyak_selected_machine");
+  localStorage.removeItem("moyak_selected_machine");
   setTimeout(() => {
     location.href = "/app/permissions/";
   }, 1800);

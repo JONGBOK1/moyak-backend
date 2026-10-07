@@ -125,7 +125,7 @@
 <script>
   // 지도(map-screen)에서 고른 자판기를 보여준다. 고른 게 없으면 "연결 안 됨" 홈으로
   let selectedMachine = null;
-  try { selectedMachine = JSON.parse(localStorage.getItem("moyak_selected_machine") || "null"); } catch (e) {}
+  try { selectedMachine = JSON.parse(sessionStorage.getItem("moyak_selected_machine") || "null"); } catch (e) {}
   if (!selectedMachine) {
     location.replace("/app/main-home-disconnected/");
   } else {

@@ -121,8 +121,9 @@
   </div>
 
 <script>
-  // 지도에서 자판기를 이미 골랐으면 "연결됨" 홈을 보여준다 (선택 정보는 map-screen이 저장)
-  if (localStorage.getItem("moyak_selected_machine")) location.replace("/app/main-home-connected/");
+  // 이번 앱 사용 중 지도에서 자판기를 골랐으면 "연결됨" 홈을 보여준다 (map-screen이 sessionStorage에 저장)
+  localStorage.removeItem("moyak_selected_machine"); // 예전 버전이 영구 저장해 둔 선택값 정리
+  if (sessionStorage.getItem("moyak_selected_machine")) location.replace("/app/main-home-connected/");
 
   // 기기 재탐색 = 지도에서 가까운 자판기를 찾아 선택
   document.getElementById("rescanBtn").addEventListener("click", () => {

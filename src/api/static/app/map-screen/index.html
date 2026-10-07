@@ -153,7 +153,7 @@
   </div>
 
 <script>
-  const SELECTED_KEY = "moyak_selected_machine"; // 앱 전체에서 "선택한 자판기" (main-home-connected가 읽음)
+  const SELECTED_KEY = "moyak_selected_machine"; // 이번 앱 사용 동안 "선택한 자판기" (sessionStorage — 새로 들어오면 연결 없음부터)
   const FIT_M = 3000; // 첫 화면은 이 거리 안의 자판기만 보이게 확대 (멀리 있는 건 지도를 움직여서 확인)
   const FAR_M = 5000; // 내 위치에서 가장 가까운 자판기가 이보다 멀면 기본 위치(동양미래대) 주변을 보여준다
   const $ = (id) => document.getElementById(id);
@@ -175,7 +175,7 @@
   }
 
   function selected() {
-    try { return JSON.parse(localStorage.getItem(SELECTED_KEY) || "null"); } catch (e) { return null; }
+    try { return JSON.parse(sessionStorage.getItem(SELECTED_KEY) || "null"); } catch (e) { return null; }
   }
 
   function fmtDistance(m) {
@@ -336,13 +336,13 @@
     $("backToList").onclick = restoreList;
     if (isSelected) {
       $("unselectBtn").onclick = () => {
-        localStorage.removeItem(SELECTED_KEY);
+        sessionStorage.removeItem(SELECTED_KEY);
         openDetail(id);
         drawMap();
       };
     } else {
       $("selectBtn").onclick = () => {
-        localStorage.setItem(SELECTED_KEY, JSON.stringify({ id: d.id, name: d.name, address: d.address }));
+        sessionStorage.setItem(SELECTED_KEY, JSON.stringify({ id: d.id, name: d.name, address: d.address }));
         location.href = "/app/main-home-connected/";
       };
     }
