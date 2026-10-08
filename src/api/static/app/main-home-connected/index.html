@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/moyak-unified.js"></script>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
+  </style>
+  <script src="/static/vendor/app-scale.js"></script>
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="main-home-connected">
+    <div class="screen-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="home-header">
+        <div class="moyak">MOYAK</div>
+        <div id="qrScanBtn" style="position:absolute;right:24px;top:9px;display:flex;align-items:center;gap:6px;height:36px;padding:0 12px;background:#fff;border:1px solid #e4ddd2;border-radius:999px;box-shadow:0 6px 18px rgba(73,56,47,0.08);cursor:pointer;">
+          <img src="scan-qr-code0.svg" style="position:static;width:18px;height:18px;" alt="" />
+          <span style="position:static;color:#342521;font-size:12px;font-weight:700;">QR 스캔</span>
+        </div>
+      </div>
+      <div class="home-body">
+        <div class="mini-ad-banner">
+          <div class="banner-text">
+            <div class="div">급한 의약품이 있다면? 자판기에서 바로!</div>
+            <div class="div2">
+              약품 정보부터 비대면 의약품 화상 상담까지 스마트하게
+            </div>
+          </div>
+          <div class="pagination-badge">
+            <div class="_1-4">1/4</div>
+          </div>
+        </div>
+        <div class="content-bg-card">
+          <div class="connection-badge">
+            <div class="indicator-dot"></div>
+            <div class="_3-2">3호관 2층 자판기 연동됨</div>
+          </div>
+          <div class="color">
+            <img class="moyak-1" src="moyak-10.png" />
+          </div>
+          <div class="status-text">
+            <div class="div3">안전하게 연결되었습니다!</div>
+            <div class="div4">
+              원하는 상비의약품을 자판기 스토어에서 직접 조회하고 간편하게 바로
+              구매해보세요.
+            </div>
+          </div>
+          <div class="line"></div>
+          <div class="btn-purchase" id="purchaseBtn">
+            <img class="shopping-bag" src="shopping-bag0.svg" />
+            <div class="div5">상품 구매하기</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-navbar">
+      <div class="tabs-container">
+        <div class="nav-tab" id="navHome">
+          <img class="home" src="home0.svg" />
+          <div class="div6">메인</div>
+        </div>
+        <div class="nav-tab2" id="navMap">
+          <img class="map-pin" src="map-pin0.svg" />
+          <div class="div7">지도</div>
+        </div>
+        <div class="qr-fab-container" id="navConsult">
+          <div class="qr-fab">
+            <img class="scan-qr-code" src="fab-stethoscope.svg" />
+          </div>
+          <div class="frame"></div>
+          <div class="qr">상담하기</div>
+        </div>
+        <div class="nav-tab3" id="navChatbot">
+          <img class="message-circle" src="message-circle0.svg" />
+          <div class="div8">모약이</div>
+        </div>
+        <div class="nav-tab4" id="navMypage">
+          <img class="user-cog" src="user-cog0.svg" />
+          <div class="div7">마이</div>
+        </div>
+      </div>
+      <div class="home-indicator-area">
+        <div class="home-pill"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // 지도(map-screen)에서 고른 자판기를 보여준다. 고른 게 없으면 "연결 안 됨" 홈으로
+  let selectedMachine = null;
+  try { selectedMachine = JSON.parse(sessionStorage.getItem("moyak_selected_machine") || "null"); } catch (e) {}
+  if (!selectedMachine) {
+    location.replace("/app/main-home-disconnected/");
+  } else {
+    document.querySelector("._3-2").textContent = `${selectedMachine.name.replace("모약 자판기 ", "")} 자판기 연동됨`;
+  }
+
+  // 상품 구매하기 → 선택한 자판기의 재고 화면 (지도 상세)
+  document.getElementById("purchaseBtn").addEventListener("click", () => {
+    location.href = "/app/map-screen/?machine=" + encodeURIComponent(selectedMachine ? selectedMachine.id : "");
+  });
+  document.getElementById("navMap").addEventListener("click", () => {
+    location.href = "/app/map-screen/";
+  });
+  // 오른쪽 위 QR 스캔: 자판기 QR을 찍어 키오스크 로그인 (하단 가운데 버튼이 상담하기로 바뀌어 여기로 이동)
+  document.getElementById("qrScanBtn").addEventListener("click", () => {
+    location.href = "/app/qr-camera/";
+  });
+  // 하단 가운데 "상담하기": 챗봇 대화 없이 바로 약사 화상 상담으로
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/pharmacist-waiting/?direct=1";
+  });
+  document.getElementById("navChatbot").addEventListener("click", () => {
+    location.href = "/app/chatbot/";
+  });
+  document.getElementById("navMypage").addEventListener("click", () => {
+    location.href = "/app/mypage/";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/moyak-unified.js"></script>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
+  </style>
+  <script src="/static/vendor/app-scale.js"></script>
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="splash">
+    <div class="status-bar">
+      <div class="time">9:41</div>
+      <div class="status-icons">
+        <img class="ios-signal" src="ios-signal0.svg" />
+        <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+        <img class="ios-battery-full" src="ios-battery-full0.svg" />
+      </div>
+    </div>
+    <img
+      class="chat-gpt-image-2026-9-13-09-44-55-2"
+      src="chat-gpt-image-2026-9-13-09-44-55-20.png"
+    />
+    <div class="home-indicator-area">
+      <div class="home-pill"></div>
+    </div>
+  </div>
+
+<script>
+  // 앱을 새로 시작하면 자판기 연결은 항상 해제된 상태에서 시작 (지도에서 다시 선택)
+  sessionStorage.removeItem("moyak_selected_machine");
+  localStorage.removeItem("moyak_selected_machine");
+  setTimeout(() => {
+    location.href = "/app/login/";
+  }, 1800);
+</script>
+</body>
+</html>

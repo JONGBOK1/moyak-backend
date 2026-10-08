@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/moyak-unified.js"></script>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
+  </style>
+  <script src="/static/vendor/app-scale.js"></script>
+  <script src="/static/vendor/pharmacist-presence.js"></script>
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="div">
+    <div class="header">
+      <div class="device-status">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="app-bar">
+        <div class="title-area">
+          <div class="back" id="backBtn">
+            <img class="chevron-left" src="chevron-left0.svg" />
+          </div>
+          <div class="header-copy">
+            <div class="title">화상 상담 입장</div>
+            <div class="subtitle">입장 전 화면과 소리를 확인해 주세요</div>
+          </div>
+        </div>
+        <div class="qr-scan" id="qrScanBtn">
+          <img class="scan-qr-code" src="scan-qr-code0.svg" />
+          <div class="qr-scan-label">QR 스캔</div>
+        </div>
+      </div>
+    </div>
+    <div class="video-entry-content" id="entryContent">
+      <div class="camera-preview" id="cameraPreview">
+        <video id="previewVideo" autoplay muted playsinline></video>
+        <div class="preview-top">
+          <div class="preview-label">
+            <div class="live-indicator"></div>
+            <div class="label">상담 화면 미리보기</div>
+          </div>
+          <div class="flip-camera" id="flipCameraBtn">
+            <img class="switch-camera" src="switch-camera0.svg" />
+          </div>
+        </div>
+        <div class="preview-controls">
+          <div class="camera-control" id="cameraToggleBtn">
+            <img class="video" src="video0.svg" />
+          </div>
+          <div class="microphone-control" id="micToggleBtn">
+            <img class="mic" src="mic0.svg" />
+          </div>
+        </div>
+      </div>
+      <div class="ready-message" id="readyMessage">
+        <img class="circle-check" src="circle-check0.svg" />
+        <div class="message" id="readyText">카메라 권한을 확인하는 중이에요...</div>
+      </div>
+      <div class="device-checks">
+        <div class="device-check">
+          <div class="device-icon">
+            <img class="video2" src="video1.svg" />
+          </div>
+          <div class="device-copy">
+            <div class="title2">카메라</div>
+            <div class="state" id="cameraState">확인 중...</div>
+          </div>
+          <div class="device-status2" id="cameraStatus">
+            <div class="toggle"></div>
+          </div>
+        </div>
+        <div class="device-check">
+          <div class="device-icon">
+            <img class="mic2" src="mic1.svg" />
+          </div>
+          <div class="device-copy">
+            <div class="title2">마이크</div>
+            <div class="state" id="micState">확인 중...</div>
+          </div>
+          <div class="device-status2" id="micStatus">
+            <div class="toggle"></div>
+          </div>
+        </div>
+        <div class="device-check">
+          <div class="device-icon">
+            <img class="volume-2" src="volume-20.svg" />
+          </div>
+          <div class="device-copy">
+            <div class="title2">스피커</div>
+            <div class="state">눌러서 소리를 테스트해보세요</div>
+          </div>
+          <div class="device-status2" id="speakerStatus">
+            <div class="toggle"></div>
+          </div>
+        </div>
+      </div>
+      <div class="join-information">
+        <div class="pharmacist-info">
+          <div class="pharmacist-avatar">
+            <img class="user-round" src="user-round0.svg" />
+          </div>
+          <div class="pharmacist-copy">
+            <div class="name">약사 상담실</div>
+            <div class="status">약사가 입장하면 자동으로 연결돼요</div>
+          </div>
+        </div>
+        <div class="status-badge">
+          <div class="indicator"></div>
+          <div class="label2" id="readyBadge">준비 중</div>
+        </div>
+      </div>
+      <div class="join-button" id="joinBtn">
+        <img class="video3" src="video2.svg" />
+        <div class="label3">화상 상담 입장하기</div>
+      </div>
+    </div>
+    <div class="bottom-navigation">
+      <div class="navigation-component">
+        <div class="tabs-container">
+          <div class="nav-tab" id="navHome">
+            <img class="home" src="home0.svg" />
+            <div class="div2">홈</div>
+          </div>
+          <div class="nav-tab2" id="navMap">
+            <img class="map-pin" src="map-pin0.svg" />
+            <div class="div3">주변약국</div>
+          </div>
+          <div class="qr-fab-container" id="navConsult">
+            <div class="qr-fab"></div>
+            <div class="frame"></div>
+            <div class="qr">상담하기</div>
+          </div>
+          <div class="nav-tab3" id="navChatbot">
+            <img class="message-circle" src="message-circle0.svg" />
+            <div class="div4">챗봇</div>
+          </div>
+          <div class="nav-tab4" id="navMypage">
+            <img class="user-cog" src="user-cog0.svg" />
+            <div class="div5">내정보</div>
+          </div>
+        </div>
+        <div class="home-indicator-area">
+          <div class="home-pill"></div>
+        </div>
+      </div>
+      <img class="stethoscope" src="stethoscope0.svg" />
+    </div>
+  </div>
+
+<script>
+  const roomUrl = sessionStorage.getItem("moyak_video_room_url");
+  const video = document.getElementById("previewVideo");
+  let stream = null;
+  let cameraOn = true;
+  let micOn = true;
+
+  function setToggle(elId, on) {
+    const el = document.getElementById(elId);
+    el.style.background = on ? "#176b5b" : "#c9c1b6";
+    el.style.justifyContent = on ? "flex-end" : "flex-start";
+  }
+
+  async function startPreview() {
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      document.getElementById("readyText").textContent = "카메라 미리보기에는 HTTPS 연결이 필요합니다.";
+      document.getElementById("cameraState").textContent = "HTTPS 필요";
+      document.getElementById("micState").textContent = "HTTPS 필요";
+      setToggle("cameraStatus", false);
+      setToggle("micStatus", false);
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      video.srcObject = stream;
+      document.getElementById("readyText").textContent = "카메라와 마이크가 정상적으로 연결됐어요.";
+      document.getElementById("cameraState").textContent = "정상 작동 중";
+      document.getElementById("micState").textContent = "입력 감지됨";
+      document.getElementById("readyBadge").textContent = "연결 준비됨";
+      setToggle("cameraStatus", true);
+      setToggle("micStatus", true);
+    } catch (e) {
+      document.getElementById("readyText").textContent = "카메라/마이크 접근에 실패했습니다: " + e.message;
+      document.getElementById("cameraState").textContent = "접근 실패";
+      document.getElementById("micState").textContent = "접근 실패";
+      setToggle("cameraStatus", false);
+      setToggle("micStatus", false);
+    }
+  }
+
+  function stopPreview() {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+  }
+
+  document.getElementById("cameraToggleBtn").addEventListener("click", () => {
+    if (!stream) return;
+    cameraOn = !cameraOn;
+    stream.getVideoTracks().forEach((t) => (t.enabled = cameraOn));
+    setToggle("cameraStatus", cameraOn);
+    document.getElementById("cameraState").textContent = cameraOn ? "정상 작동 중" : "꺼짐";
+  });
+  document.getElementById("micToggleBtn").addEventListener("click", () => {
+    if (!stream) return;
+    micOn = !micOn;
+    stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
+    setToggle("micStatus", micOn);
+    document.getElementById("micState").textContent = micOn ? "입력 감지됨" : "꺼짐";
+  });
+  document.getElementById("speakerStatus").addEventListener("click", () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      osc.frequency.value = 880;
+      osc.connect(ctx.destination);
+      osc.start();
+      setTimeout(() => osc.stop(), 250);
+    } catch (e) {
+      // 오디오 API 미지원 브라우저는 조용히 무시
+    }
+  });
+
+  document.getElementById("joinBtn").addEventListener("click", () => {
+    if (!roomUrl) {
+      alert("화상 상담방 정보를 찾을 수 없습니다. 대기 화면으로 돌아갑니다.");
+      location.href = "/app/pharmacist-waiting/";
+      return;
+    }
+    if (stopPresence) stopPresence(); // 입장하면 더는 알림 불필요 (Daily 화면에서 약사가 바로 보임)
+    stopPreview();
+    const content = document.getElementById("entryContent");
+    content.innerHTML = `
+      <div class="call-frame"><iframe src="${roomUrl}" allow="camera; microphone; fullscreen; display-capture"></iframe></div>
+      <div class="call-toolbar">
+        <button class="call-btn chat" id="chatToggleBtn">💬 채팅<span class="unread" id="unreadBadge" hidden></span></button>
+        <button class="call-btn end" id="endCallBtn">상담 종료</button>
+      </div>
+      <div class="chat-panel" id="chatPanel" hidden>
+        <div class="chat-head"><span>약사와 채팅</span><button class="chat-close" id="chatCloseBtn">✕</button></div>
+        <div class="chat-list" id="chatList"><div class="chat-empty">약사에게 궁금한 점을 글로 남겨보세요.</div></div>
+        <div class="chat-input-row">
+          <input id="chatInput" placeholder="메시지를 입력하세요" maxlength="1000" autocomplete="off" />
+          <button id="chatSendBtn">보내기</button>
+        </div>
+      </div>`;
+    setupChat();
+  });
+
+  // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
+  const consultationId = sessionStorage.getItem("moyak_consultation_id");
+
+  // 미리보기(입장 전) 화면에서도 약사가 화상방에 들어오면 배너 + 알림음으로 알려준다
+  const stopPresence = consultationId
+    ? MoyakPresence.watch({
+        consultationId,
+        onEnter: () => document.getElementById("joinBtn").click(),
+        onJoin: () => (document.getElementById("readyBadge").textContent = "약사 입장 완료"),
+        onLeave: () => (document.getElementById("readyBadge").textContent = "연결 준비됨"),
+      })
+    : null;
+  const userId = localStorage.getItem("moyak_user_id");
+  let seenIds = new Set();
+  let unread = 0;
+  let chatTimer = null;
+  let stopMessages = null;
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function renderMessages(messages) {
+    const list = document.getElementById("chatList");
+    if (!list) return;
+    const panelOpen = !document.getElementById("chatPanel").hidden;
+    let added = false;
+    messages.forEach((m) => {
+      if (seenIds.has(m.id)) return;
+      seenIds.add(m.id);
+      if (!added && list.querySelector(".chat-empty")) list.innerHTML = "";
+      added = true;
+      const mine = m.sender_role === "user";
+      const time = new Date(m.created_at + "Z").toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+      const row = document.createElement("div");
+      row.className = "chat-msg " + (mine ? "mine" : "theirs");
+      row.innerHTML = `${mine ? "" : '<div class="who">약사</div>'}<div class="bubble">${esc(m.content)}</div><div class="time">${time}</div>`;
+      list.appendChild(row);
+      if (!mine && !panelOpen) unread++;
+    });
+    if (added) list.scrollTop = list.scrollHeight;
+    const badge = document.getElementById("unreadBadge");
+    badge.hidden = unread === 0;
+    badge.textContent = unread;
+  }
+
+  function showSummary(summary) {
+    clearInterval(chatTimer);
+    document.getElementById("entryContent").innerHTML = `
+      <div class="summary-view">
+        <div class="summary-title">📝 상담이 종료되었어요</div>
+        <div class="summary-sub">오늘 상담 내용을 요약했어요</div>
+        <div class="summary-text">${esc(summary)}</div>
+        <button class="call-btn chat" id="toWaitingBtn">상담 결과 화면으로</button>
+      </div>`;
+    document.getElementById("toWaitingBtn").onclick = () => (location.href = "/app/pharmacist-waiting/");
+  }
+
+  async function refresh() {
+    try {
+      const consultation = await api("GET", `/consultations/${consultationId}`);
+      // 약사가 먼저 상담을 종료했으면 요약 화면으로 전환
+      if (consultation.summary) showSummary(consultation.summary);
+    } catch (e) {
+      // 네트워크 순단은 다음 폴링에서 재시도
+    }
+  }
+
+  function setupChat() {
+    if (!consultationId) {
+      document.getElementById("chatToggleBtn").disabled = true;
+      document.getElementById("endCallBtn").disabled = true;
+      return;
+    }
+    const panel = document.getElementById("chatPanel");
+    MoyakUnified.attachPanel(consultationId, document.body);
+    stopMessages?.();
+    stopMessages = MoyakUnified.watchMessages(consultationId, renderMessages);
+    const input = document.getElementById("chatInput");
+    document.getElementById("chatToggleBtn").onclick = () => {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) {
+        unread = 0;
+        document.getElementById("unreadBadge").hidden = true;
+        input.focus();
+      }
+    };
+    document.getElementById("chatCloseBtn").onclick = () => (panel.hidden = true);
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      try {
+        const m = await api("POST", `/consultations/${consultationId}/messages`, {
+          sender_role: "user",
+          sender_id: userId,
+          content: text,
+        });
+        renderMessages([m]);
+      } catch (e) {
+        input.value = text;
+        alert("메시지를 보내지 못했습니다: " + e.message);
+      }
+    }
+    document.getElementById("chatSendBtn").onclick = send;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) send();
+    });
+
+    document.getElementById("endCallBtn").onclick = async () => {
+      if (!confirm("녹음 중이라면 먼저 중지하고 업로드해주세요. 통화 화면에서 나갈까요? 요약은 약사 검토 후 공개됩니다.")) return;
+      stopMessages?.();
+      stopPreview();
+      location.href = "/app/pharmacist-waiting/";
+    };
+
+    refresh();
+    chatTimer = setInterval(refresh, 3000);
+  }
+
+  document.getElementById("backBtn").addEventListener("click", () => {
+    stopPreview();
+    location.href = "/app/pharmacist-waiting/";
+  });
+  document.getElementById("qrScanBtn").addEventListener("click", () => {
+    location.href = "/app/qr-camera/";
+  });
+  document.getElementById("navHome").addEventListener("click", () => {
+    location.href = "/app/main-home-disconnected/";
+  });
+  document.getElementById("navMap").addEventListener("click", () => {
+    location.href = "/app/map-screen/";
+  });
+  // 하단 "약사상담" 버튼: 챗봇 대화 없이 바로 약사 화상 상담으로
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/pharmacist-waiting/?direct=1";
+  });
+  document.getElementById("navChatbot").addEventListener("click", () => {
+    location.href = "/app/chatbot/";
+  });
+  document.getElementById("navMypage").addEventListener("click", () => {
+    location.href = "/app/mypage/";
+  });
+
+  startPreview();
+</script>
+</body>
+</html>

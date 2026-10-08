@@ -16,7 +16,9 @@
 .\venv\Scripts\python.exe scripts/run_unified_local.py --flutter
 ```
 
-사용자 앱 화면은 Flutter로 대체하므로 팀 HTML 사용자 화면(`static/app`)은 가져오지 않았다. `/`는 `/chat-test`로 이동한다.
+팀 master `86e718c`의 HTML 사용자 화면을 테스트용으로 `static/app`에 추가했다. `/app/splash/`에서 시작하며 Flutter와 별도로 사용할 수 있다. `/`는 기존처럼 `/chat-test`로 이동한다. 공통 API 어댑터를 연결하고 영상상담 화면에 WebSocket 채팅과 녹음·동의·요약 패널을 연결했다. 사용자 통화 종료 버튼은 결과 화면으로 이동하며, 서버 상담 종료와 요약 공개는 약사가 수행한다.
+
+다른 서버가 실행 중이면 `python scripts/run_unified_local.py --local-map --port 8010`으로 실행하고 `http://127.0.0.1:8010/app/splash/`에 접속한다. 이 경우 약사·키오스크도 같은 8010 포트를 사용한다. 실제 두 기기 통화와 마이크 녹음은 별도 수동 확인이 필요하다.
 
 - 약사: http://127.0.0.1:8000/pharmacist
 - 키오스크: http://127.0.0.1:8000/kiosk/start/

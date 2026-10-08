@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/moyak-unified.js"></script>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
+  </style>
+  <script src="/static/vendor/app-scale.js"></script>
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="mypage">
+    <div class="screen-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="profile-header">
+        <div class="user-row">
+          <img class="user-avatar" src="user-avatar0.png" />
+          <div class="user-info-text">
+            <div class="name-badge-row">
+              <div class="user-name">게스트 사용자</div>
+            </div>
+            <div class="user-email" id="userIdLabel">-</div>
+          </div>
+        </div>
+        <div class="profile-divider"></div>
+        <div class="payment-indicator-card">
+          <img class="credit-card" src="credit-card0.svg" />
+          <div class="card-details">
+            <div class="div2">등록된 결제 수단이 없어요</div>
+            <div class="_1294">실제 결제 연동은 아직 준비 중입니다</div>
+          </div>
+        </div>
+      </div>
+      <div class="mypage-actions-grid">
+        <div class="action-card-permit" id="permitCard">
+          <div class="card-icon-round">
+            <img class="file-check" src="file-check0.svg" />
+          </div>
+          <div class="card-meta">
+            <div class="div3">전자 구매 허가서</div>
+            <div class="div4">약사 발급 처방장 열람</div>
+          </div>
+        </div>
+        <div class="action-card-inventory" id="inventoryCard">
+          <div class="card-icon-round2">
+            <img class="shopping-cart" src="shopping-cart0.svg" />
+          </div>
+          <div class="card-meta">
+            <div class="div3">재고 신청하기</div>
+            <div class="div4">없는 약품 수급 요청</div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-list-column">
+        <div class="setting-item-0" id="settingNotice">
+          <div class="div5">공지사항 및 서비스 안내</div>
+          <img class="chevron-right2" src="chevron-right1.svg" />
+        </div>
+        <div class="setting-item-1" id="settingSupport">
+          <div class="div5">고객 지원</div>
+          <img class="chevron-right3" src="chevron-right2.svg" />
+        </div>
+        <div class="setting-item-2" id="settingApp">
+          <div class="div5">앱 설정</div>
+          <img class="chevron-right4" src="chevron-right3.svg" />
+        </div>
+        <div class="setting-item-3" id="settingSecurity">
+          <div class="div5">계정 보안</div>
+          <img class="chevron-right5" src="chevron-right4.svg" />
+        </div>
+        <div class="setting-item-4" id="settingLogout">
+          <div class="div6">로그아웃</div>
+          <img class="chevron-right6" src="chevron-right5.svg" />
+        </div>
+      </div>
+    </div>
+    <div class="bottom-navbar">
+      <div class="tabs-container">
+        <div class="nav-tab" id="navHome">
+          <img class="home" src="home0.svg" />
+          <div class="div7">메인</div>
+        </div>
+        <div class="nav-tab2" id="navMap">
+          <img class="map-pin" src="map-pin0.svg" />
+          <div class="div8">지도</div>
+        </div>
+        <div class="qr-fab-container" id="navConsult">
+          <div class="qr-fab">
+            <img class="scan-qr-code" src="fab-stethoscope.svg" />
+          </div>
+          <div class="frame"></div>
+          <div class="qr">상담하기</div>
+        </div>
+        <div class="nav-tab3" id="navChatbot">
+          <img class="message-circle" src="message-circle0.svg" />
+          <div class="div9">모약이</div>
+        </div>
+        <div class="nav-tab4">
+          <img class="user-cog" src="user-cog0.svg" />
+          <div class="div8">마이</div>
+        </div>
+      </div>
+      <div class="home-indicator-area">
+        <div class="home-pill"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const userId = localStorage.getItem("moyak_user_id");
+  document.getElementById("userIdLabel").textContent = userId ? "ID " + userId.slice(0, 8) + "..." : "로그인 정보 없음";
+
+  document.getElementById("permitCard").addEventListener("click", () => {
+    location.href = "/app/permit-list/";
+  });
+  document.getElementById("inventoryCard").addEventListener("click", () => {
+    location.href = "/app/inventory-request/";
+  });
+
+  ["settingNotice", "settingSupport", "settingApp", "settingSecurity"].forEach((id) => {
+    document.getElementById(id).addEventListener("click", () => {
+      alert("아직 준비 중인 화면입니다.");
+    });
+  });
+
+  document.getElementById("settingLogout").addEventListener("click", () => {
+    if (!confirm("로그아웃 하시겠어요?")) return;
+    localStorage.removeItem("moyak_user_id");
+    location.href = "/app/login/";
+  });
+
+  document.getElementById("navHome").addEventListener("click", () => {
+    location.href = "/app/main-home-disconnected/";
+  });
+  document.getElementById("navMap").addEventListener("click", () => {
+    location.href = "/app/map-screen/";
+  });
+  // 하단 가운데 "상담하기": 챗봇 대화 없이 바로 약사 화상 상담으로
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/pharmacist-waiting/?direct=1";
+  });
+  document.getElementById("navChatbot").addEventListener("click", () => {
+    location.href = "/app/chatbot/";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+.qr-camera,
+.qr-camera * {
+  box-sizing: border-box;
+}
+.qr-camera {
+  background: #000000;
+  border-radius: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 874px;
+  position: relative;
+  overflow: hidden;
+}
+.bottom-action-bar {
+  padding: 0px 0px 32px 0px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.btn-flash {
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 100px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.2);
+  border-width: 1px;
+  padding: 16px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  position: relative;
+}
+.lightbulb-off {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  position: relative;
+  overflow: visible;
+}
+.home-indicator-area {
+  padding: 20px 0px 8px 0px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.home-pill {
+  background: #ffffff;
+  border-radius: 100px;
+  opacity: 0.3;
+  flex-shrink: 0;
+  width: 134px;
+  height: 5px;
+  position: relative;
+}
+.screen-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.status-bar {
+  padding: 0px 24px 0px 24px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  flex-shrink: 0;
+  height: 44px;
+  position: relative;
+}
+.time {
+  color: #ffffff;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  position: relative;
+}
+.status-icons {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  position: relative;
+}
+.ios-signal {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.ios-wifi-signal {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.ios-battery-full {
+  flex-shrink: 0;
+  width: 28px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.camera-header {
+  padding: 12px 24px 12px 24px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.chevron-left {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  position: relative;
+  overflow: visible;
+}
+.header-title {
+  color: #ffffff;
+  text-align: center;
+  font-family: "GothicA1-ExtraBold", sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  position: relative;
+  flex: 1;
+}
+.spacer {
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  position: relative;
+}
+.camera-body {
+  padding: 40px 24px 40px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.instruction-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  flex-shrink: 0;
+  position: relative;
+}
+.qr {
+  color: #ffffff;
+  text-align: center;
+  font-family: "GothicA1-ExtraBold", sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  position: relative;
+  align-self: stretch;
+}
+.qr2 {
+  color: #bbbbbb;
+  text-align: center;
+  font-family: "GothicA1-Regular", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  position: relative;
+  align-self: stretch;
+}
+.scan-guideline-wrapper {
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 260px;
+  height: 260px;
+  position: relative;
+}
+.simulated-viewfinder {
+  border-radius: 24px;
+  border-style: solid;
+  border-color: #ffffff;
+  border-width: 4px;
+  flex-shrink: 0;
+  width: 240px;
+  height: 240px;
+  position: relative;
+  object-fit: cover;
+  background: #000;
+}
+.laser-scan-line {
+  background: #ffd970;
+  opacity: 0.8;
+  flex-shrink: 0;
+  width: 220px;
+  height: 2px;
+  position: absolute;
+  left: 20px;
+  top: 130px;
+}

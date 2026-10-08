@@ -1,0 +1,92 @@
+.splash,
+.splash * {
+  box-sizing: border-box;
+}
+.splash {
+  background: #fffde7;
+  border-radius: 40px;
+  height: 874px;
+  position: relative;
+  overflow: hidden;
+}
+.status-bar {
+  padding: 0px 24px 0px 24px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  position: absolute;
+  right: 0px;
+  left: 0px;
+  top: 0px;
+}
+.time {
+  color: #3e2723;
+  text-align: left;
+  font-family: "GothicA1-Bold", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  position: relative;
+}
+.status-icons {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  position: relative;
+}
+.ios-signal {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.ios-wifi-signal {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.ios-battery-full {
+  flex-shrink: 0;
+  width: 28px;
+  height: 20px;
+  position: relative;
+  overflow: visible;
+}
+.chat-gpt-image-2026-9-13-09-44-55-2 {
+  width: 411px;
+  height: 292px;
+  position: absolute;
+  left: 24px;
+  top: 291px;
+  object-fit: cover;
+  aspect-ratio: 411/292;
+}
+.home-indicator-area {
+  padding: 20px 0px 8px 0px;
+  display: flex;
+  flex-direction: row;
+  gap: 0px;
+  align-items: flex-end;
+  justify-content: center;
+  height: 33px;
+  position: absolute;
+  right: 0px;
+  left: 0px;
+  top: 841px;
+}
+.home-pill {
+  background: #3e2723;
+  border-radius: 100px;
+  opacity: 0.3;
+  flex-shrink: 0;
+  width: 134px;
+  height: 5px;
+  position: relative;
+}

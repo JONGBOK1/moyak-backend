@@ -43,7 +43,7 @@ def identity(role, subject):
 def test_web_audio_chat_summary_and_purchase(integrated, monkeypatch):
     client, factory, _ = integrated
     user, pharma = identity('user', 'u'), identity('pharmacist', 'p')
-    for url in ['/chat-test', '/pharmacist', '/kiosk/start/', '/scan', '/moyak-unified.js']:
+    for url in ['/app/splash/', '/app/chatbot/', '/app/video-consult-entry/', '/app/map-screen/style.css', '/chat-test', '/pharmacist', '/kiosk/start/', '/scan', '/moyak-unified.js']:
         assert client.get(url).status_code == 200
     assert client.get('/client-config').json()['local_identity'] is True
     r = client.post('/consultations', headers=user, json={'user_id': 'u', 'chat_summary': 'prior chatbot record'})

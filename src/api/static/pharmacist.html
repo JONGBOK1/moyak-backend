@@ -3,6 +3,7 @@
 <head>
 <script src="/moyak-unified.js"></script>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>모약이 — 약사 전용</title>
 <style>
   :root { color-scheme: light; }
@@ -82,6 +83,17 @@
   .live-input input { flex: 1; padding: 6px 8px; font-size: 13px; }
   .end-btn { margin-top: 6px; background: #fff; color: #176b5b; border-color: #176b5b; }
   .summary-box { background: #fffdf5; border: 1px solid #f1e3b8; border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+  .queue-overview { background: #eef8f4; border: 1px solid #cfe3dd; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .queue-title { font-size: 17px; font-weight: 700; color: #176b5b; }
+  .queue-title strong { font-size: 28px; margin: 0 5px; }
+  .queue-help { font-size: 13px; color: #526760; margin: 8px 0; line-height: 1.5; }
+  .queue-update { font-size: 12px; color: #526760; }
+  .patient-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .patient-heading b { overflow-wrap: anywhere; }
+  .queue-order { background: #176b5b; color: white; border-radius: 6px; padding: 5px 9px; font-size: 13px; }
+  .wait-time { font-size: 13px; color: #856404; font-weight: 700; margin-top: 6px; }
+  #pendingTab .card { border-left: 4px solid #d6b85b; padding: 16px; }
+  #pendingTab .card:first-of-type { border-left-color: #176b5b; }
 </style>
 </head>
 <body>
@@ -96,6 +108,11 @@
     <button class="tab-btn" data-tab="history">처리 내역</button>
   </div>
 
+  <section class="queue-overview" aria-label="상담 대기 현황">
+    <div class="queue-title">확인할 상담 <strong id="pendingCount">—</strong>건</div>
+    <p class="queue-help">먼저 요청한 환자부터 표시합니다. 상담 중이어도 처방 승인·거절 전까지 목록에 남습니다.<br>환자 ID를 확인한 뒤 상담 연결 및 화상 상담 입장을 진행해주세요.</p>
+    <div id="queueUpdate" class="queue-update" role="status">대기 목록을 확인하고 있습니다.</div>
+  </section>
   <div id="pendingTab"></div>
   <div id="historyTab" style="display:none"></div>
 
@@ -113,8 +130,18 @@
   }
 
   function formatDate(isoString) {
-    const date = new Date(isoString + "Z");
+    const date = parseDate(isoString);
     return date.toLocaleString();
+  }
+  function parseDate(value) {
+    return new Date(/[zZ]$|[+-]\d{2}:\d{2}$/.test(value || '') ? value : value + 'Z');
+  }
+  function updateQueueCard(card, c, index) {
+    card.querySelector('.queue-order').textContent = `접수 순서 ${index + 1}`;
+    const minutes = Math.max(0, Math.floor((Date.now() - parseDate(c.created_at).getTime()) / 60000));
+    card.querySelector('.wait-time').textContent = Number.isFinite(minutes)
+      ? `요청 후 ${minutes < 1 ? '1분 미만' : minutes < 60 ? minutes + '분' : Math.floor(minutes / 60) + '시간 ' + minutes % 60 + '분'} 경과`
+      : '요청 시간 확인 필요';
   }
 
   async function api(method, path, body) {
@@ -335,6 +362,10 @@
     const holder = document.getElementById("pendingTab");
     try {
       const items = await api("GET", "/consultations?status=pending");
+      items.sort((a, b) => parseDate(a.created_at) - parseDate(b.created_at) || a.id.localeCompare(b.id));
+      document.getElementById('pendingCount').textContent = items.length;
+      document.querySelector('[data-tab="pending"]').textContent = `대기 목록 (${items.length})`;
+      document.getElementById('queueUpdate').textContent = `마지막 확인 ${new Date().toLocaleTimeString('ko-KR')} · 5초마다 자동 갱신`;
 
       const emptyNote = holder.querySelector("p.note");
       if (emptyNote) emptyNote.remove();
@@ -352,8 +383,9 @@
         if (!currentIds.has(el.dataset.id)) el.remove();
       });
 
-      items.forEach((c) => {
-        if (holder.querySelector(`.card[data-id="${c.id}"]`)) return; // 이미 떠있는 카드는 그대로 둠 (입력 중인 값 보존)
+      items.forEach((c, index) => {
+        const existing = holder.querySelector(`.card[data-id="${c.id}"]`);
+        if (existing) { updateQueueCard(existing, c, index); return; }
 
         const card = document.createElement("div");
         card.className = "card";
@@ -361,8 +393,9 @@
 
         const drugResults = { items: [], selectedSeq: "" };
         card.innerHTML = `
-          <div><b>${escapeHtml(c.user_id)}</b> <span class="badge pending">대기중</span></div>
+          <div class="patient-heading"><span class="queue-order"></span><b>환자 ID: ${escapeHtml(c.user_id)}</b><span class="badge pending">승인·거절 전</span></div>
           <div class="note">신청 시각: ${formatDate(c.created_at)}</div>
+          <div class="wait-time"></div>
           <div class="chat-log">${renderChatLog(c.chat_summary)}</div>
           ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank">🎥 화상 상담 입장</a>` : ""}
           <div class="decide-row">
@@ -438,9 +471,14 @@
         });
 
         holder.appendChild(card);
+        updateQueueCard(card, c, index);
+      });
+      items.forEach((c, index) => {
+        const card = holder.querySelector(`.card[data-id="${c.id}"]`);
+        if (holder.children[index] !== card) holder.insertBefore(card, holder.children[index] || null);
       });
     } catch (e) {
-      holder.innerHTML = "오류: " + e.message;
+      document.getElementById('queueUpdate').textContent = '목록 갱신 실패: ' + e.message + ' · 기존 목록은 마지막 조회 결과입니다.';
     }
   }
 
@@ -482,7 +520,7 @@
 
   loadPending();
   setInterval(() => {
-    if (document.getElementById("pendingTab").style.display !== "none") loadPending();
+    loadPending();
   }, 5000);
 </script>
 </body>

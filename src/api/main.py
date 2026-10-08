@@ -73,7 +73,8 @@ app.include_router(shop.router)
 app.include_router(vending_machines.router)
 app.include_router(map_routes.router)
 
-# 사용자 앱 화면은 Flutter로 대체 (팀 HTML 사용자 화면은 가져오지 않음)
+# Team HTML screens are available alongside the separate Flutter client.
+app.mount('/app', StaticFiles(directory=STATIC_DIR / 'app', html=True), name='user-app')
 app.mount('/kiosk', StaticFiles(directory=STATIC_DIR / 'kiosk', html=True), name='kiosk')
 app.mount('/static/vendor', StaticFiles(directory=STATIC_DIR / 'vendor'), name='vendor')
 
