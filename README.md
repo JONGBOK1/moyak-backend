@@ -204,4 +204,6 @@ moyak-backend/
 
 ---
 
+📱 **Flutter 앱 개발 인수인계(화면별 명세)**: [docs/flutter-handoff.md](./docs/flutter-handoff.md)
+
 개발 배경, 상세 설계 원칙, API 스펙 변경 이력은 [`CLAUDE.md`](./CLAUDE.md)를 참고하세요.
