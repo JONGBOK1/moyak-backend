@@ -269,6 +269,7 @@
     // 화상방은 승인 여부와 무관하게 "상담 요청" 시점에 이미 만들어져 있다 — 약사가
     // 승인하기 전에 먼저 화상으로 얘기를 나눌 수 있는 구조라, 대기 중이어도 입장 가능해야 한다.
     sessionStorage.setItem("moyak_consultation_id", data.id); // 화상 화면의 채팅/상담 종료에서 사용
+    MoyakUnified.api(`/consultations/${encodeURIComponent(data.id)}/heartbeat`, {}).catch(() => {});
     if (data.summary) {
       // 화상 상담이 끝나 요약이 만들어졌으면 보여주고, 입장 버튼은 숨긴다
       document.getElementById("summaryBody").textContent = data.summary;
@@ -281,7 +282,13 @@
     }
     watchPharmacist(data);
 
-    if (data.status === "pending") return;
+    if (data.status === "pending") {
+      const assigned = !!data.pharmacist_id;
+      document.getElementById('statusLabel').textContent = data.ended_at ? '상담이 종료되었어요' : assigned ? '담당 약사가 연결되었어요' : '약사의 상담 수락을 기다리고 있어요';
+      document.getElementById('queueNumber').textContent = data.ended_at ? '요약은 약사 검토 후 공개됩니다.' : !data.room_url ? '영상방 생성에 실패했습니다. 요청을 취소하고 다시 신청해주세요.' : assigned ? '아래 입장 버튼으로 영상방에 들어가주세요. 약사도 같은 방에 입장해야 통화가 시작됩니다.' : '약사 화면에서 이 상담의 상담 연결 버튼을 눌러주세요. 자동 배정되는 방식은 아닙니다.';
+      if (data.ended_at) document.getElementById('joinNowRow').style.display = 'none';
+      return;
+    }
 
     // 약사 결정 후에도 상담 종료(요약 생성)까지는 계속 폴링해서 요약이 나오면 바로 보여준다
     if (data.ended_at || data.status === "cancelled") clearInterval(pollTimer);
@@ -311,7 +318,7 @@
         const data = await api("GET", "/consultations/" + consultationId);
         applyStatus(data);
       } catch (e) {
-        // 네트워크 순단은 다음 폴링에서 재시도
+        document.getElementById('queueNumber').textContent = '상담 상태를 확인하지 못했습니다. 연결을 재시도하고 있습니다: ' + e.message;
       }
     }, 3000);
   }
@@ -319,7 +326,8 @@
   async function init() {
     try {
       const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
-      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
+      if (!pendingRes.ok) throw new Error('상담 목록 조회에 실패했습니다 (' + pendingRes.status + ')');
+      const pendingList = (await pendingRes.json()).filter(c => !c.ended_at);
 
       let data;
       if (pendingList.length > 0) {

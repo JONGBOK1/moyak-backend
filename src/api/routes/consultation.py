@@ -8,6 +8,7 @@ from src.consult import service
 from src.consult.auth import Actor, legacy_actor, current_actor, claimed_actor
 from src.consult.db import get_db
 from src.consult import conversation, video
+from src.consult import patient_presence
 from src.consult.models import ConsultationSession, ConsultationSummary
 
 router = APIRouter(prefix="/consultations", tags=["consultation"])
@@ -48,6 +49,8 @@ class ConsultationResponse(BaseModel):
     summary: str | None = None
     ended_at: datetime | None = None
     summary_status: str = 'not_requested'
+    patient_online: bool = False
+    patient_queue_state: str = 'offline'
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -63,6 +66,9 @@ def _to_response(consultation) -> ConsultationResponse:
         room = db.get(ConsultationSession, consultation.id)
         result = db.get(ConsultationSummary, consultation.id)
         response.ended_at = room.ended_at if room else None
+        response.patient_online = patient_presence.online(consultation.id)
+        response.patient_queue_state = ('ended' if response.ended_at else
+            'offline' if not response.patient_online else 'assigned' if room else 'waiting')
         if result:
             response.summary_status = result.status
             # Never expose an unreviewed draft through the legacy endpoint.
@@ -72,6 +78,17 @@ def _to_response(consultation) -> ConsultationResponse:
                 response.summary = '\n\n'.join(label + '\n' + '\n'.join(result.published.get(key, []))
                                                for key, label in labels.items())
     return response
+
+
+@router.post('/{consultation_id}/heartbeat')
+def heartbeat(consultation_id: str, db: Session = Depends(get_db), actor: Actor = Depends(current_actor)):
+    row = get_consultation(consultation_id, db, actor)
+    if actor.role != 'user' or actor.id != row.user_id:
+        raise HTTPException(403, '환자 본인만 접속 상태를 갱신할 수 있습니다.')
+    if row.ended_at or row.status == 'cancelled':
+        return {'active': False}
+    patient_presence.touch(consultation_id)
+    return {'active': True}
 
 
 @router.get('/{consultation_id}/presence')

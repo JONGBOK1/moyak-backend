@@ -40,6 +40,29 @@ def identity(role, subject):
     return {'X-Moyak-User-Id': subject, 'X-Moyak-Role': role}
 
 
+def test_patient_presence_owner_expiry_and_assignment(integrated, monkeypatch):
+    from src.consult import patient_presence
+    client, _, _ = integrated
+    now = [100.0]
+    monkeypatch.setattr(patient_presence, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(patient_presence, '_seen', {})
+    user, pharma = identity('user', 'presence-user'), identity('pharmacist', 'presence-pharma')
+    cid = client.post('/consultations', headers=user, json={'user_id': 'presence-user'}).json()['id']
+    path = '/consultations/' + cid
+    assert client.get(path, headers=user).json()['patient_queue_state'] == 'offline'
+    assert client.post(path+'/heartbeat', headers=pharma).status_code == 403
+    assert client.post(path+'/heartbeat', headers=identity('user', 'other')).status_code == 403
+    assert client.post(path+'/heartbeat', headers=user).status_code == 200
+    assert client.get(path, headers=user).json()['patient_queue_state'] == 'waiting'
+    assert client.post(path+'/session/claim', headers=pharma).status_code == 200
+    assert client.get(path, headers=user).json()['patient_queue_state'] == 'assigned'
+    now[0] += 61
+    assert client.get(path, headers=user).json()['patient_online'] is False
+    assert client.get(path, headers=user).json()['status'] == 'pending'
+    client.post(path+'/heartbeat', headers=user)
+    assert client.get(path, headers=user).json()['patient_online'] is True
+
+
 def test_web_audio_chat_summary_and_purchase(integrated, monkeypatch):
     client, factory, _ = integrated
     user, pharma = identity('user', 'u'), identity('pharmacist', 'p')

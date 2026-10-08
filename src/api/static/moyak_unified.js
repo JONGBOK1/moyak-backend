@@ -209,6 +209,17 @@
     window.addEventListener('pagehide',()=>{clearInterval(poll);stream?.getTracks().forEach(t=>t.stop());},{once:true});
   }
   window.MoyakUnified={api,watchMessages,attachPanel};
+  // Only patient waiting/video pages keep a consultation in the live queue.
+  if (role === 'user' && /^\/app\/(pharmacist-waiting|video-consult-entry)\/$/.test(location.pathname)) {
+    let heartbeatTimer;
+    const pulse = async () => {
+      const cid = sessionStorage.getItem('moyak_consultation_id');
+      if (!cid || !identity().sender_id) return;
+      try { await api('/consultations/' + encodeURIComponent(cid) + '/heartbeat', {}); } catch (_) {}
+    };
+    window.addEventListener('pageshow', () => { clearInterval(heartbeatTimer); pulse(); heartbeatTimer = setInterval(pulse, 15000); });
+    window.addEventListener('pagehide', () => clearInterval(heartbeatTimer));
+  }
   config.then(c=>{
     if(role==='pharmacist' && !localStorage.getItem('moyak_pharmacist_id')) {
       const input=document.querySelector('#pharmacistId');
