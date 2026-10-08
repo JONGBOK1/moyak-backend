@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>모약이 — 자판기 QR 스캔</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: sans-serif; background: #17130c; color: #f6ecce;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  }
+  header { padding: 16px; text-align: center; }
+  header h1 { font-size: 18px; margin: 0 0 4px; }
+  header p { font-size: 12px; color: #b6a98f; margin: 0; }
+
+  .scan-frame {
+    position: relative; width: 90vw; max-width: 360px; aspect-ratio: 1 / 1;
+    border-radius: 20px; overflow: hidden; background: #000;
+    border: 3px solid #ffd54f;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; }
+  .scan-hint {
+    position: absolute; bottom: 12px; left: 0; right: 0; text-align: center;
+    font-size: 13px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+
+  .status {
+    margin-top: 20px; padding: 14px 20px; border-radius: 12px; background: #2a2116;
+    font-size: 14px; text-align: center; max-width: 360px; width: 90vw; line-height: 1.6;
+  }
+  .status.error { background: #3a211d; color: #e88f83; }
+  .status.success { background: #1c3327; color: #6fcf9a; }
+
+  .result-card {
+    margin-top: 16px; padding: 20px; border-radius: 14px; background: #2a2116;
+    border: 1px solid #4a3c22; max-width: 360px; width: 90vw; text-align: center; display: none;
+  }
+  .result-card .drug { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+  .result-card .note { font-size: 12px; color: #b6a98f; }
+
+  button {
+    margin-top: 20px; padding: 12px 24px; border-radius: 10px; border: none;
+    background: #ffd54f; color: #241900; font-weight: 700; font-size: 14px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>📷 자판기 QR 스캔</h1>
+    <p>자판기 화면에 뜬 QR을 카메라에 비춰주세요</p>
+  </header>
+
+  <div class="scan-frame">
+    <video id="video" playsinline autoplay muted></video>
+    <div class="scan-hint" id="scanHint">카메라를 준비하는 중...</div>
+  </div>
+  <canvas id="canvas" style="display:none"></canvas>
+
+  <div class="status" id="status" style="display:none"></div>
+  <div class="result-card" id="resultCard">
+    <div class="drug" id="resultDrug"></div>
+    <div class="note">자판기 화면에서 수령을 진행해주세요</div>
+  </div>
+  <button id="retryBtn" style="display:none">다시 스캔하기</button>
+
+<script src="/static/vendor/jsQR.js"></script>
+<script>
+  // crypto.randomUUID()와 마찬가지로 이 페이지의 카메라 접근도 보안 컨텍스트(HTTPS/localhost)에서만 동작한다.
+  let identity = {};
+  try { identity = JSON.parse(sessionStorage.getItem('moyak-flutter-session') || '{}'); } catch (_) {}
+  const userId = identity.user_id;
+
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const scanHint = document.getElementById("scanHint");
+  const statusEl = document.getElementById("status");
+  const resultCard = document.getElementById("resultCard");
+  const retryBtn = document.getElementById("retryBtn");
+
+  let scanning = false;
+  let rafId = null;
+  let stream = null;
+
+  function showStatus(text, cls) {
+    statusEl.style.display = "block";
+    statusEl.className = "status" + (cls ? " " + cls : "");
+    statusEl.textContent = text;
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + identity.user_token },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  async function startCamera() {
+    if (!userId || !identity.user_token) {
+      scanHint.textContent = '';
+      showStatus('Flutter 앱에서 상담을 시작한 뒤 QR 화면을 열어주세요.', 'error');
+      return;
+    }
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      scanHint.textContent = "";
+      showStatus(
+        "카메라 접근에는 HTTPS 연결이 필요합니다. localhost나 http://192.168.x.x 같은 일반 HTTP 주소에서는 브라우저가 카메라를 막습니다. Render에 배포된 https 주소로 접속해주세요.",
+        "error"
+      );
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+      await video.play();
+      scanHint.textContent = "QR을 화면 중앙에 맞춰주세요";
+      scanning = true;
+      tick();
+    } catch (e) {
+      scanHint.textContent = "";
+      showStatus("카메라를 사용할 수 없습니다: " + e.message, "error");
+    }
+  }
+
+  function stopCamera() {
+    scanning = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+  }
+
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code) {
+        onDecoded(code.data);
+        return;
+      }
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  async function onDecoded(text) {
+    stopCamera();
+    scanHint.textContent = "";
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (e) {
+      showStatus("자판기 QR이 아닙니다. 다시 시도해주세요.", "error");
+      retryBtn.style.display = "inline-block";
+      return;
+    }
+
+    showStatus("연동 확인 중...");
+    try {
+      const data = await api("POST", "/vending/scan", {
+        machine_id: payload.machine_id,
+        qr_token: payload.qr_token,
+        user_id: userId,
+      });
+      if (data.has_pending_purchase) {
+        statusEl.style.display = "none";
+        resultCard.style.display = "block";
+        document.getElementById("resultDrug").textContent = data.purchase.drug_item_name;
+      } else {
+        showStatus("승인된 구매 건이 없습니다. 먼저 약사 상담 승인을 받아주세요.", "error");
+        retryBtn.style.display = "inline-block";
+      }
+    } catch (e) {
+      showStatus("스캔에 실패했습니다: " + e.message, "error");
+      retryBtn.style.display = "inline-block";
+    }
+  }
+
+  retryBtn.addEventListener("click", () => {
+    retryBtn.style.display = "none";
+    resultCard.style.display = "none";
+    statusEl.style.display = "none";
+    startCamera();
+  });
+
+  window.addEventListener('pagehide', stopCamera);
+  startCamera();
+</script>
+</body>
+</html>

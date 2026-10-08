@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from src.consult import conversation as service
-from src.consult.auth import Actor, current_actor, verify_token
+from src.consult.auth import Actor, current_actor, optional_actor, verify_token, claimed_actor
 from src.consult.db import get_db, SessionLocal
 from src.consult.models import ConsultationAudio
 from src.consult.schemas import ClientID, MessageCreate, SummaryContent
@@ -36,13 +38,16 @@ def consent(cid: str, actor: Actor = Depends(current_actor), db: Session = Depen
 
 
 @router.post("/messages", status_code=201)
-def send(cid: str, payload: MessageCreate, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+def send(cid: str, payload: MessageCreate, actor: Actor | None = Depends(optional_actor),
+         db: Session = Depends(get_db)):
+    # 팀 규격: 헤더 없이 바디의 sender_id/sender_role로 보낼 수 있다.
+    actor = actor or claimed_actor(payload.sender_id, payload.sender_role)
     return service.send(db, cid, actor, payload)
 
 
 @router.get("/messages")
 def messages(cid: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200),
-             actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+             actor: Actor | None = Depends(optional_actor), db: Session = Depends(get_db)):
     return service.messages(db, cid, actor, after, limit)
 
 
@@ -111,7 +116,16 @@ def retry(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends
 
 @router.websocket("/messages/ws")
 async def socket(websocket: WebSocket, cid: str):
-    """First frame authenticates; DB-backed fanout works across API processes."""
+    """First frame authenticates; DB-backed fanout works across API processes.
+    Flutter 모바일은 Origin을 보내지 않고, Flutter 웹은 CORS_ORIGINS에 등록된 출처만 허용한다."""
+    origin = websocket.headers.get('origin')
+    expected = ('https' if websocket.url.scheme == 'wss' else 'http') + '://' + websocket.headers.get('host', '')
+    allowed = {value.strip() for value in os.getenv('CORS_ORIGINS', '').split(',') if value.strip()}
+    pattern = os.getenv('CORS_ORIGIN_REGEX')
+    if (origin and origin != expected and origin not in allowed
+            and not (pattern and re.fullmatch(pattern, origin))):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
@@ -119,8 +133,8 @@ async def socket(websocket: WebSocket, cid: str):
             await websocket.close(code=1009)
             return
         hello = json.loads(raw)
-        token = hello["token"]
-        actor = verify_token(token)
+        token = hello.get("token")
+        actor = verify_token(token) if token else claimed_actor(hello.get('sender_id'), hello.get('sender_role'))
         cursor = hello.get("after", 0)
         if type(cursor) is not int or cursor < 0:
             raise ValueError()
@@ -134,7 +148,8 @@ async def socket(websocket: WebSocket, cid: str):
                 return service.send(db, cid, actor, payload)
 
         while True:
-            verify_token(token)  # Expired credentials also terminate existing sockets.
+            if token:
+                verify_token(token)  # Expired credentials terminate existing sockets.
             rows = await run_in_threadpool(fetch, cursor)
             if rows:
                 await websocket.send_json(jsonable_encoder({"type": "messages", "items": rows}))

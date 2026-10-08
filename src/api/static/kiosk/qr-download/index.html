@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  <script src="/static/vendor/app-scale.js" data-width="1080" data-height="1920" data-match-bg></script>
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>Document</title>
+</head>
+<body>
+  <div class="kiosk-qr-download">
+    <div class="kiosk-header">
+      <div class="header-left">
+        <div class="step-row">
+          <div class="div">앱 연동 및 다운로드</div>
+          <div class="qr">| 본인인증을 위한 QR 코드 안내</div>
+        </div>
+        <div class="logo-row">
+          <div class="logo-badge">
+            <div class="div2">모두의 약</div>
+          </div>
+          <div class="div3">모약</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="lang-button">
+          <div class="div4">한국어</div>
+          <img class="chevron-down" src="chevron-down0.svg" />
+        </div>
+      </div>
+    </div>
+    <div class="qr-instructions">
+      <div class="intro-block">
+        <div class="qr2">QR 다운로드</div>
+      </div>
+      <div class="qr3">
+        아래 QR코드를 스마트폰 카메라로 스캔하여 전용 앱을 설치해주세요.
+      </div>
+      <div class="qr-plate">
+        <img class="qr-code" src="qr-code0.png" />
+        <div class="div5">스마트폰 전용 앱 다운로드</div>
+      </div>
+      <div class="steps-container">
+        <div class="step-box-0">
+          <div class="step-badge">
+            <div class="_1">1</div>
+          </div>
+          <div class="qr4">QR 스캔 &amp; 설치</div>
+          <div class="_24">
+            카메라로 스캔하여 마켓에서 &#039;메디24&#039; 앱을 설치하세요.
+          </div>
+        </div>
+        <div class="step-box-1">
+          <div class="step-badge">
+            <div class="_2">2</div>
+          </div>
+          <div class="div6">본인인증 완료</div>
+          <div class="_12">
+            앱 설치 후, 회원가입과 1회성 간편 본인인증을 마쳐주세요.
+          </div>
+        </div>
+        <div class="step-box-2">
+          <div class="step-badge">
+            <div class="_3">3</div>
+          </div>
+          <div class="div6">자판기 연동</div>
+          <div class="qr5">
+            인증이 끝나면 다음 화면의
+            <br />
+            자판기 QR 코드를 스캔하세요.
+          </div>
+        </div>
+      </div>
+      <div class="btn-next-pair">
+        <div class="div7">설치를 완료했습니다 (자판기 연동하기)</div>
+      </div>
+    </div>
+    <div class="kiosk-footer">
+      <div class="footer-left">
+        <div class="btn-back">
+          <img class="arrow-left" src="arrow-left0.svg" />
+          <div class="div8">이전으로</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.querySelector(".btn-next-pair").addEventListener("click", () => {
+    location.href = "/kiosk/pairing/";
+  });
+  document.querySelector(".btn-back").addEventListener("click", () => {
+    location.href = "/kiosk/main-home/";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<script src="/moyak-unified.js"></script>
+<meta charset="utf-8" />
+<title>모약이 — 약사 전용</title>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: sans-serif; max-width: 720px; margin: 30px auto; padding: 0 16px; color: #222; background: #fff; }
+  h1 { font-size: 20px; }
+  .note { color: #888; font-size: 13px; }
+  .id-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .id-row input { flex: 1; padding: 6px 8px; font-size: 14px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #ddd; }
+  .tab-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    border-radius: 0;
+    background: #fff;
+    color: #222;
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { border-bottom-color: #222; font-weight: bold; }
+  .card { border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: #fafafa; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .badge.pending { background: #fff3cd; color: #856404; }
+  .badge.approved { background: #d4edda; color: #155724; }
+  .badge.rejected { background: #f8d7da; color: #721c24; }
+  .chat-log { background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; max-height: 160px; overflow-y: auto; }
+  .chat-user, .chat-bot, .chat-plain { padding: 4px 8px; border-radius: 10px; margin: 3px 0; max-width: 85%; white-space: pre-wrap; }
+  .chat-user { background: #e8f0fe; margin-left: auto; text-align: right; }
+  .chat-bot { background: #fff3cd; }
+  .chat-plain { color: #888; }
+  .decide-row { display: flex; gap: 6px; margin-top: 8px; }
+  .decide-row input { flex: 1; padding: 6px 8px; font-size: 13px; }
+  .drug-search { position: relative; flex: 1; }
+  .drug-search input { width: 100%; }
+  .drug-dropdown {
+    display: none;
+    position: absolute; left: 0; right: 0; top: calc(100% + 2px);
+    background: #fff; border: 1px solid #ccc; border-radius: 6px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    max-height: 200px; overflow-y: auto; z-index: 5;
+  }
+  .drug-dropdown.open { display: block; }
+  .drug-option { padding: 7px 10px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .drug-option:hover, .drug-option.hover { background: #f2f2f2; }
+  .drug-option .company { color: #888; font-size: 12px; white-space: nowrap; }
+  input, textarea {
+    -webkit-appearance: none;
+    appearance: none;
+    background: #fff;
+    color: #222;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  button {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #222;
+    color: #fff;
+  }
+  button.reject { background: #fff; color: #c0392b; border-color: #c0392b; }
+  a.video-link { display: inline-block; margin: 6px 0; }
+  .live-chat { border: 1px solid #cfe3dd; border-radius: 8px; background: #fff; margin: 8px 0; padding: 8px; }
+  .live-chat-head { font-size: 13px; font-weight: bold; color: #176b5b; margin-bottom: 6px; }
+  .live-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .live-empty { color: #999; font-size: 12px; }
+  .live-msg { padding: 5px 9px; border-radius: 10px; max-width: 80%; white-space: pre-wrap; word-break: break-word; }
+  .live-msg.user { background: #e8f0fe; align-self: flex-start; }
+  .live-msg.pharmacist { background: #d9efe8; align-self: flex-end; }
+  .live-input { display: flex; gap: 6px; margin-top: 6px; }
+  .live-input input { flex: 1; padding: 6px 8px; font-size: 13px; }
+  .end-btn { margin-top: 6px; background: #fff; color: #176b5b; border-color: #176b5b; }
+  .summary-box { background: #fffdf5; border: 1px solid #f1e3b8; border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>🩺 모약이 약사 대시보드</h1>
+  <div class="id-row">
+    <label>약사 ID</label>
+    <input id="pharmacistId" />
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="pending">대기 목록</button>
+    <button class="tab-btn" data-tab="history">처리 내역</button>
+  </div>
+
+  <div id="pendingTab"></div>
+  <div id="historyTab" style="display:none"></div>
+
+<script>
+  const pharmacistIdEl = document.getElementById("pharmacistId");
+  pharmacistIdEl.value = localStorage.getItem("moyak_pharmacist_id") || "";
+  pharmacistIdEl.addEventListener("change", () => {
+    localStorage.setItem("moyak_pharmacist_id", pharmacistIdEl.value);
+  });
+
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function formatDate(isoString) {
+    const date = new Date(isoString + "Z");
+    return date.toLocaleString();
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    return data;
+  }
+
+  function renderChatLog(summary) {
+    return summary
+      .split("\n")
+      .map((line) => {
+        let cls = "chat-plain";
+        let text = line;
+        if (line.startsWith("사용자: ")) {
+          cls = "chat-user";
+          text = line.slice(5);
+        } else if (line.startsWith("모약이: ")) {
+          cls = "chat-bot";
+          text = line.slice(5);
+        }
+        return `<div class="${cls}">${escapeHtml(text)}</div>`;
+      })
+      .join("");
+  }
+
+  // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
+  // 카드가 화면에서 사라지면(승인/거절로 대기 목록에서 빠지는 등) 폴링도 스스로 멈춘다.
+  function attachLiveChat(card, c) {
+    const box = document.createElement("div");
+    box.className = "live-chat";
+    box.innerHTML = `
+      <div class="live-chat-head">💬 화상 상담 채팅 (환자와 실시간)</div>
+      <div class="live-list"><div class="live-empty">아직 메시지가 없습니다.</div></div>
+      <div class="live-input"><input placeholder="환자에게 보낼 메시지" maxlength="1000" /><button>보내기</button></div>
+      <button class="end-btn">상담 종료 및 대화 요약</button>
+      <div class="summary-box" hidden></div>`;
+    card.appendChild(box);
+    MoyakUnified.attachPanel(c.id, card);
+
+    const list = box.querySelector(".live-list");
+    const input = box.querySelector(".live-input input");
+    const seen = new Set();
+    let timer = null;
+
+    const stopSocket = MoyakUnified.watchMessages(c.id, render);
+    function render(messages) {
+      let added = false;
+      messages.forEach((m) => {
+        if (seen.has(m.id)) return;
+        seen.add(m.id);
+        if (!added && list.querySelector(".live-empty")) list.innerHTML = "";
+        added = true;
+        const div = document.createElement("div");
+        div.className = "live-msg " + m.sender_role;
+        div.textContent = (m.sender_role === "user" ? "환자: " : "나: ") + m.content;
+        list.appendChild(div);
+      });
+      if (added) list.scrollTop = list.scrollHeight;
+    }
+
+    function showSummary(summary) {
+      clearInterval(timer);
+      box.querySelector(".live-input")?.remove();
+      box.querySelector(".end-btn")?.remove();
+      const sb = box.querySelector(".summary-box");
+      sb.textContent = "📝 상담 요약\n" + summary;
+      sb.hidden = false;
+    }
+
+    async function refresh() {
+      if (!card.isConnected) { stopSocket(); return clearInterval(timer); }
+      try {
+        const consultation = await api("GET", `/consultations/${c.id}`);
+        if (consultation.summary) showSummary(consultation.summary);
+      } catch (e) {
+        // 다음 폴링에서 재시도
+      }
+    }
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      if (!pharmacistIdEl.value) {
+        alert("약사 ID를 입력해주세요.");
+        return;
+      }
+      input.value = "";
+      try {
+        render([await api("POST", `/consultations/${c.id}/messages`, {
+          sender_role: "pharmacist",
+          sender_id: pharmacistIdEl.value,
+          content: text,
+        })]);
+      } catch (e) {
+        input.value = text;
+        alert("메시지 전송 실패: " + e.message);
+      }
+    }
+    box.querySelector(".live-input button").addEventListener("click", send);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) send();
+    });
+
+    box.querySelector(".end-btn").addEventListener("click", async (e) => {
+      if (!confirm("화상 상담을 종료하고 대화 내용을 요약할까요? 종료 후에는 채팅을 보낼 수 없습니다.")) return;
+      e.target.disabled = true;
+      e.target.textContent = "요약 생성 중...";
+      try {
+        const data = await api("POST", `/consultations/${c.id}/end`);
+        if(data.summary) showSummary(data.summary);
+        else alert("상담이 종료되었습니다. 음성 기록·AI 요약 패널에서 생성 상태를 확인하고 검토 후 공개해주세요.");
+      } catch (err) {
+        alert("상담 종료 실패: " + err.message);
+        e.target.disabled = false;
+        e.target.textContent = "상담 종료 및 대화 요약";
+      }
+    });
+
+    if (c.summary) {
+      showSummary(c.summary);
+      return;
+    }
+    // 카드가 아직 화면에 붙기 전일 수 있어서 첫 조회는 한 틱 뒤로 미룬다
+    setTimeout(refresh, 0);
+    timer = setInterval(refresh, 3000);
+  }
+
+  // ---------- 약품 검색 자동완성 ----------
+  function debounce(fn, ms) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  // 네이티브 <input list>+<datalist> 조합은 크롬 계열 브라우저에서 한글 IME 조합 중에
+  // datalist 옵션을 갱신하면 입력 중이던 글자가 통째로 지워지는 버그가 있다
+  // (예: "타이레"까지만 남고 사라짐). 그래서 직접 만든 드롭다운으로 대체한다.
+  function attachDrugSearch(nameInput, dropdown, resultsHolder) {
+    const closeDropdown = () => {
+      dropdown.classList.remove("open");
+      dropdown.innerHTML = "";
+    };
+
+    const search = debounce(async () => {
+      const q = nameInput.value.trim();
+      resultsHolder.selectedSeq = ""; // 사용자가 다시 타이핑하면 이전 선택은 무효화
+      if (!q) {
+        closeDropdown();
+        return;
+      }
+      try {
+        const results = await api("GET", `/drugs/search?q=${encodeURIComponent(q)}`);
+        resultsHolder.items = results;
+        if (results.length === 0) {
+          dropdown.innerHTML = '<div class="drug-option" style="color:#888;cursor:default">검색 결과가 없습니다</div>';
+          dropdown.classList.add("open");
+          return;
+        }
+        dropdown.innerHTML = results
+          .map(
+            (r, i) =>
+              `<div class="drug-option" data-index="${i}"><span class="name">${escapeHtml(r.item_name)}</span><span class="company">${escapeHtml(r.company)}</span></div>`
+          )
+          .join("");
+        dropdown.classList.add("open");
+      } catch (e) {
+        dropdown.innerHTML = '<div class="drug-option" style="color:#c0392b;cursor:default">약품 검색에 실패했습니다: ' + escapeHtml(e.message) + "</div>";
+        dropdown.classList.add("open");
+      }
+    }, 250);
+
+    nameInput.addEventListener("input", search);
+
+    dropdown.addEventListener("mousedown", (e) => {
+      // click 대신 mousedown: input의 blur보다 먼저 실행되게 해서 드롭다운이 닫히기 전에 선택을 잡는다.
+      const opt = e.target.closest(".drug-option");
+      if (!opt || opt.dataset.index === undefined) return; // 안내 문구 줄은 선택 대상 아님
+      const item = resultsHolder.items[Number(opt.dataset.index)];
+      nameInput.value = item.item_name;
+      resultsHolder.selectedSeq = item.item_seq;
+      closeDropdown();
+    });
+
+    nameInput.addEventListener("blur", () => setTimeout(closeDropdown, 150));
+  }
+
+  function resolveDrugSeq(resultsHolder, name) {
+    if (resultsHolder.selectedSeq) return resultsHolder.selectedSeq;
+    const match = (resultsHolder.items || []).find((r) => r.item_name === name);
+    return match ? match.item_seq : "";
+  }
+
+  // ---------- 탭 전환 ----------
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const isPending = btn.dataset.tab === "pending";
+      document.getElementById("pendingTab").style.display = isPending ? "block" : "none";
+      document.getElementById("historyTab").style.display = isPending ? "none" : "block";
+      if (!isPending) loadHistory();
+    });
+  });
+
+  // ---------- 대기 목록 ----------
+  // 5초마다 자동 새로고침되는데, 매번 카드를 통째로 새로 그리면 약사가 입력 중이던
+  // 약품명이 계속 지워지는 문제가 있었다. 그래서 이미 화면에 있는 카드는 건드리지 않고
+  // 새로 들어온 상담만 추가, 더 이상 대기 중이 아닌 상담만 제거하는 방식으로 바꿨다.
+  async function loadPending() {
+    const holder = document.getElementById("pendingTab");
+    try {
+      const items = await api("GET", "/consultations?status=pending");
+
+      const emptyNote = holder.querySelector("p.note");
+      if (emptyNote) emptyNote.remove();
+
+      if (items.length === 0) {
+        holder.querySelectorAll(".card[data-id]").forEach((el) => el.remove());
+        if (!holder.querySelector("p.note")) {
+          holder.innerHTML = '<p class="note">대기 중인 상담이 없습니다.</p>';
+        }
+        return;
+      }
+
+      const currentIds = new Set(items.map((c) => c.id));
+      holder.querySelectorAll(".card[data-id]").forEach((el) => {
+        if (!currentIds.has(el.dataset.id)) el.remove();
+      });
+
+      items.forEach((c) => {
+        if (holder.querySelector(`.card[data-id="${c.id}"]`)) return; // 이미 떠있는 카드는 그대로 둠 (입력 중인 값 보존)
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.id = c.id;
+
+        const drugResults = { items: [], selectedSeq: "" };
+        card.innerHTML = `
+          <div><b>${escapeHtml(c.user_id)}</b> <span class="badge pending">대기중</span></div>
+          <div class="note">신청 시각: ${formatDate(c.created_at)}</div>
+          <div class="chat-log">${renderChatLog(c.chat_summary)}</div>
+          ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank">🎥 화상 상담 입장</a>` : ""}
+          <div class="decide-row">
+            <div class="drug-search">
+              <input class="drug-name" placeholder="처방할 약품명 검색" value="${escapeHtml(c.requested_drug_name || "")}" autocomplete="off" />
+              <div class="drug-dropdown"></div>
+            </div>
+          </div>
+          <div class="decide-row">
+            <input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="판매가 (원) — 키오스크 결제 금액" />
+          </div>
+          <div class="decide-row">
+            <button class="approve-btn">처방 승인</button>
+            <button class="reject reject-btn">거절</button>
+          </div>
+        `;
+
+        attachLiveChat(card, c);
+        card.insertBefore(card.querySelector(".live-chat"), card.querySelector(".decide-row"));
+
+        const nameInput = card.querySelector(".drug-name");
+        const dropdown = card.querySelector(".drug-dropdown");
+        attachDrugSearch(nameInput, dropdown, drugResults);
+
+        card.querySelector(".approve-btn").addEventListener("click", async () => {
+          const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || c.requested_drug_item_seq;
+          if (!itemSeq) {
+            alert("목록에서 약품을 선택해주세요 (검색 후 자동완성에서 골라야 정확한 코드가 지정됩니다).");
+            return;
+          }
+          const priceText = card.querySelector(".drug-price").value.trim();
+          const price = Number(priceText);
+          if (priceText === "" || !Number.isInteger(price) || price < 0) {
+            alert("판매가를 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제됩니다).");
+            return;
+          }
+          if (!pharmacistIdEl.value) {
+            alert("약사 ID를 입력해주세요.");
+            return;
+          }
+          try {
+            const data = await api("POST", `/consultations/${c.id}/decision`, {
+              pharmacist_id: pharmacistIdEl.value,
+              approve: true,
+              drug_item_seq: itemSeq,
+              drug_item_name: nameInput.value,
+              price,
+            });
+            alert(`승인 완료 — 처방약: ${data.approved_drug_name} (${price.toLocaleString()}원)`);
+            loadPending();
+          } catch (e) {
+            alert("오류: " + e.message);
+          }
+        });
+
+        card.querySelector(".reject-btn").addEventListener("click", async () => {
+          if (!pharmacistIdEl.value) {
+            alert("약사 ID를 입력해주세요.");
+            return;
+          }
+          const reason = prompt("거절 사유를 입력해주세요.");
+          if (reason === null) return;
+          try {
+            await api("POST", `/consultations/${c.id}/decision`, {
+              pharmacist_id: pharmacistIdEl.value,
+              approve: false,
+              reason,
+            });
+            loadPending();
+          } catch (e) {
+            alert("오류: " + e.message);
+          }
+        });
+
+        holder.appendChild(card);
+      });
+    } catch (e) {
+      holder.innerHTML = "오류: " + e.message;
+    }
+  }
+
+  // ---------- 처리 내역 ----------
+  async function loadHistory() {
+    const holder = document.getElementById("historyTab");
+    if (!pharmacistIdEl.value) {
+      holder.innerHTML = '<p class="note">약사 ID를 입력하면 본인이 처리한 내역을 볼 수 있습니다.</p>';
+      return;
+    }
+    holder.innerHTML = "불러오는 중...";
+    try {
+      const items = await api("GET", `/consultations?pharmacist_id=${encodeURIComponent(pharmacistIdEl.value)}`);
+      if (items.length === 0) {
+        holder.innerHTML = '<p class="note">처리한 내역이 없습니다.</p>';
+        return;
+      }
+      holder.innerHTML = "";
+      items.forEach((c) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const badgeClass = c.status === "approved" ? "approved" : "rejected";
+        const badgeText = c.status === "approved" ? "승인" : "거절";
+        card.innerHTML = `
+          <div><b>${escapeHtml(c.user_id)}</b> <span class="badge ${badgeClass}">${badgeText}</span></div>
+          <div class="note">처리 시각: ${formatDate(c.decided_at)}</div>
+          ${c.approved_drug_name ? `<div>처방약: ${escapeHtml(c.approved_drug_name)}</div>` : ""}
+          ${c.decision_reason ? `<div>거절 사유: ${escapeHtml(c.decision_reason)}</div>` : ""}
+          <div class="chat-log">${renderChatLog(c.chat_summary)}</div>
+        `;
+        // 처리(승인/거절) 후에도 화상 상담이 이어질 수 있으니, 아직 종료 전이면 채팅/종료를 계속 제공
+        if (c.status !== "cancelled") attachLiveChat(card, c);
+        holder.appendChild(card);
+      });
+    } catch (e) {
+      holder.innerHTML = "오류: " + e.message;
+    }
+  }
+
+  loadPending();
+  setInterval(() => {
+    if (document.getElementById("pendingTab").style.display !== "none") loadPending();
+  }, 5000);
+</script>
+</body>
+</html>

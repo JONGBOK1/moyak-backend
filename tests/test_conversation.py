@@ -63,7 +63,9 @@ def decision(client):
 
 def test_auth_and_participant_isolation(setup):
     client, _ = setup
-    assert client.get("/consultations/c1/messages").status_code == 401
+    # 팀 규격 호환: 신원 없는 목록 폴링은 허용, 신원을 밝히면 참여자 검사
+    assert client.get("/consultations/c1/messages").status_code == 200
+    assert client.get("/consultations/c1/session").status_code == 401
     assert client.get("/consultations/c1/messages", headers=headers(Actor("u2", "user"))).status_code == 403
     assert client.get("/consultations/c1/messages", headers=headers(Actor("p2", "pharmacist"))).status_code == 403
     assert client.post("/consultations/c1/session/claim", headers=headers(Actor("p2", "pharmacist"))).status_code == 409

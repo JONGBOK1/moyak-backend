@@ -33,9 +33,22 @@ def test_read_only_inventory_reports_schema_not_user_records():
 def test_postgresql_startup_never_creates_tables(monkeypatch):
     from src.consult import db
     import pytest
+    statements = []
     class FakeEngine:
         class dialect:
             name = "postgresql"
+        def connect(self):
+            return self
+        def begin(self):
+            return self
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def execute(self, statement):
+            sql = str(statement)
+            assert sql.startswith('SET '), 'Startup attempted a database mutation'
+            statements.append(sql)
     class Inspector:
         def get_table_names(self, schema):
             return []
@@ -44,3 +57,4 @@ def test_postgresql_startup_never_creates_tables(monkeypatch):
     monkeypatch.setattr(db.Base.metadata, "create_all", lambda **kwargs: pytest.fail("Unexpected schema mutation"))
     with pytest.raises(RuntimeError, match="mapping/migration required"):
         db.init_db()
+    assert statements[0] == 'SET TRANSACTION READ ONLY'

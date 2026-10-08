@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+  <script src="/static/vendor/app-scale.js" data-width="1080" data-height="1920" data-match-bg></script>
+  
+  
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+   
+       -webkit-font-smoothing: antialiased;
+   }
+   
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>본인인증 완료</title>
+</head>
+<body>
+  <div class="kiosk-welcome">
+    <div class="kiosk-header">
+      <div class="header-left">
+        <div class="step-row">
+          <div class="div">본인인증 완료</div>
+          <div class="div2">| 본인인증이 안전하게 완료되었습니다</div>
+        </div>
+        <div class="logo-row">
+          <div class="logo-badge">
+            <div class="div3">모두의 약</div>
+          </div>
+          <div class="div4">모약</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="lang-button">
+          <div class="div5">한국어</div>
+          <img class="chevron-down" src="chevron-down0.svg" />
+        </div>
+      </div>
+    </div>
+    <div class="welcome-body">
+      <div class="success-circle">
+        <img class="check-circle" src="check-circle0.svg" />
+      </div>
+      <div class="welcome-msg">
+        <div class="div6">지*민님 환영합니다</div>
+        <div class="div7">본인 연동 및 안전 거래 한도가 활성화되었습니다.</div>
+      </div>
+      <div class="security-card">
+        <div class="alert-row">
+          <img class="alert-triangle" src="alert-triangle0.svg" />
+          <div class="div8">안내 및 보안 주의 사항</div>
+        </div>
+        <div class="div9">
+          - 약품 결제가 완료되면 회원 정보가 안전을 위해 자동 로그아웃됩니다.
+        </div>
+      </div>
+      <div class="actions"></div>
+    </div>
+    <div class="kiosk-footer"></div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const machineId = params.get("machine") || "M001";
+  const q = (s) => document.querySelector(s);
+  let nextUrl = null;
+  const next = () => { if (nextUrl) location.href = nextUrl; };
+
+  async function loadSession() {
+    try {
+      const res = await fetch(`/vending/machines/${encodeURIComponent(machineId)}/session`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+      if (!data.paired) {
+        // 로그인 자체가 안 된 상태 (QR 만료 등) — 처음부터 다시 진행해야 한다.
+        q(".div6").textContent = "연동 정보가 없습니다";
+        q(".div7").textContent = "화면을 터치하면 처음 화면으로 돌아갑니다.";
+        nextUrl = "/kiosk/start/";
+        return;
+      }
+
+      // 실명 데이터가 없어서 디자인의 "지*민님" 대신 일반 호칭을 쓴다.
+      q(".div6").textContent = "회원님 환영합니다";
+      // 승인 건 유무에 따라 로그인 홈이 다르다 (main-home2: 승인 약 있음 / main-home3: 없음)
+      const home = data.purchase ? "main-home2" : "main-home3";
+      nextUrl = `/kiosk/${home}/?machine=${encodeURIComponent(machineId)}`;
+      setTimeout(next, 2500);
+    } catch (e) {
+      q(".div7").textContent = "정보를 불러오지 못했습니다: " + e.message;
+    }
+  }
+
+  document.body.style.cursor = "pointer";
+  document.body.addEventListener("click", next);
+  loadSession();
+</script>
+</body>
+</html>

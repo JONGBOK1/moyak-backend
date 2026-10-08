@@ -22,12 +22,40 @@ def init_db() -> None:
     if engine.dialect.name == "sqlite":
         _migrate_sqlite_vending_columns()
         Base.metadata.create_all(bind=engine)
+        _migrate_sqlite_scenario_columns()
     else:
         # Shared databases are migrated explicitly, never mutated by API/worker startup.
-        inspector = inspect(engine)
-        missing = set(Base.metadata.tables) - set(inspector.get_table_names(schema="public"))
-        if missing:
-            raise RuntimeError("DB schema mapping/migration required; missing tables: " + ", ".join(sorted(missing)))
+        with engine.connect() as connection, connection.begin():
+            connection.execute(text('SET TRANSACTION READ ONLY'))
+            connection.execute(text("SET LOCAL statement_timeout='15s'"))
+            problems = schema_problems(connection)
+        if problems:
+            raise RuntimeError('DB schema mapping/migration required: ' + '; '.join(problems))
+
+
+def schema_problems(connection):
+    """Validate table/column presence and identifier types; never run DDL."""
+    from sqlalchemy import String, Integer
+    inspector = inspect(connection)
+    schema = 'public' if connection.dialect.name == 'postgresql' else None
+    existing = set(inspector.get_table_names(schema=schema))
+    problems = []
+    for name, model in Base.metadata.tables.items():
+        if name not in existing:
+            problems.append('missing table ' + name)
+            continue
+        columns = {c['name']: c for c in inspector.get_columns(name, schema=schema)}
+        for column in model.columns:
+            actual = columns.get(column.name)
+            label = name + '.' + column.name
+            if actual is None:
+                problems.append('missing column ' + label)
+            elif column.primary_key or column.foreign_keys:
+                if isinstance(column.type, String) and not isinstance(actual['type'], String):
+                    problems.append('identifier type mismatch ' + label)
+                elif isinstance(column.type, Integer) and not isinstance(actual['type'], Integer):
+                    problems.append('identifier type mismatch ' + label)
+    return problems
 
 
 def _migrate_sqlite_vending_columns() -> None:
@@ -38,6 +66,8 @@ def _migrate_sqlite_vending_columns() -> None:
     columns = {column["name"] for column in inspector.get_columns("vending_machines")}
     additions = {
         "address": "TEXT NOT NULL DEFAULT ''",
+        "operating_hours": "VARCHAR",
+        "operating_hours": "VARCHAR",
         "latitude": "REAL",
         "longitude": "REAL",
         "is_active": "INTEGER NOT NULL DEFAULT 1",
@@ -46,6 +76,20 @@ def _migrate_sqlite_vending_columns() -> None:
         for name, definition in additions.items():
             if name not in columns:
                 connection.execute(text(f"ALTER TABLE vending_machines ADD COLUMN {name} {definition}"))
+
+
+def _migrate_sqlite_scenario_columns():
+    inspector = inspect(engine)
+    additions = {
+        "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},
+        "vending_machines": {"paired_user_id": "VARCHAR", "paired_purchase_id": "VARCHAR"},
+    }
+    with engine.begin() as connection:
+        for table, fields in additions.items():
+            columns = {column["name"] for column in inspector.get_columns(table)}
+            for name, definition in fields.items():
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
 
 
 def get_session() -> Session:

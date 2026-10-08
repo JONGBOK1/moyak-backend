@@ -78,12 +78,18 @@ def consent(db, cid, actor):
 
 
 def message_view(message):
-    return {key: getattr(message, key) for key in (
-        "id", "consultation_id", "sender_id", "sender_role", "client_id", "text", "created_at")}
+    return {**{key: getattr(message, key) for key in (
+        "id", "consultation_id", "sender_id", "sender_role", "client_id", "text", "created_at")},
+        "content": message.text}
 
 
 def messages(db, cid, actor, after=0, limit=100):
-    participant(db, cid, actor)
+    if actor is None:
+        # 팀 규격(신원 없이 폴링) 호환: 상담 존재 여부만 확인한다.
+        if not db.get(ConsultationRequest, cid):
+            raise HTTPException(404, "상담을 찾을 수 없습니다.")
+    else:
+        participant(db, cid, actor)
     rows = db.query(ConsultationMessage).filter(
         ConsultationMessage.consultation_id == cid, ConsultationMessage.id > after,
     ).order_by(ConsultationMessage.id).limit(limit).all()
@@ -91,6 +97,11 @@ def messages(db, cid, actor, after=0, limit=100):
 
 
 def send(db, cid, actor, payload: MessageCreate):
+    if ((payload.sender_id is not None and payload.sender_id != actor.id)
+            or (payload.sender_role is not None and payload.sender_role != actor.role)):
+        raise HTTPException(403, '메시지 발신자가 인증 사용자와 다릅니다.')
+    if actor.role == "pharmacist" and not db.get(ConsultationSession, cid):
+        assign(db, cid, actor)  # 팀 흐름: 약사가 채팅을 시작하면 그 상담을 맡은 것으로 본다.
     _, room = participant(db, cid, actor, lock=True)
     existing = db.query(ConsultationMessage).filter_by(
         consultation_id=cid, sender_id=actor.id, sender_role=actor.role, client_id=payload.client_id,
@@ -103,7 +114,7 @@ def send(db, cid, actor, payload: MessageCreate):
         return result
     active(room)
     message = ConsultationMessage(consultation_id=cid, sender_id=actor.id,
-                                  sender_role=actor.role, **payload.model_dump())
+                                  sender_role=actor.role, **payload.model_dump(include={'client_id', 'text'}))
     db.add(message)
     db.commit()
     return message_view(message)
@@ -166,6 +177,8 @@ def finish(db, cid, actor):
         if not audio and not chat:
             raise HTTPException(409, "요약할 상담 내용이 없습니다.")
         source = {
+            "prior_chat": consultation.chat_summary if consultation.chat_summary !=
+                "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)" else "",
             "transcript": [{"speaker": a.sender_role, "start_ms": a.start_ms, "text": a.transcript} for a in audio],
             "chat": [{"speaker": m.sender_role, "text": m.text, "time": m.created_at.isoformat()} for m in chat],
             "decision": {"status": consultation.status, "reason": consultation.decision_reason,

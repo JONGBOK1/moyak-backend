@@ -25,3 +25,6 @@ psycopg[binary]==3.3.6
 
 # STEP 7: 테스트
 pytest==8.3.3
+
+# Kiosk QR rendering
+qrcode==8.0

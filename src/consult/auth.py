@@ -4,9 +4,10 @@ import hashlib
 import hmac
 import json
 import time
+import os
 from dataclasses import dataclass
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 from src import config
 
@@ -54,13 +55,46 @@ def verify_token(token: str) -> Actor:
         raise HTTPException(401, "유효한 상담 인증 토큰이 필요합니다.") from None
 
 
-def current_actor(authorization: str = Header(default="")) -> Actor:
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer":
-        raise HTTPException(401, "Bearer 인증이 필요합니다.")
-    return verify_token(token)
+def local_identity_allowed(connection) -> bool:
+    """MOYAK_LOCAL_IDENTITY=1 로 켜는 '이 PC 전용' 시연 경계 (main.py 미들웨어에서만 사용)."""
+    return (os.getenv('MOYAK_LOCAL_IDENTITY') == '1'
+            and config.DATABASE_URL.startswith('sqlite:')
+            and connection.client is not None
+            and connection.client.host in {'127.0.0.1', '::1'})
 
 
-def legacy_actor(authorization: str = Header(default="")) -> Actor | None:
-    # Preserve existing demos only when the new feature has not been configured.
-    return current_actor(authorization) if config.CONSULT_AUTH_SECRET else None
+def claimed_actor(subject, role) -> Actor:
+    """팀 방식: 요청이 보낸 사용자 ID·역할을 그대로 신뢰한다 (실제 로그인 연동 전 임시).
+    누구나 다른 ID·약사 역할을 주장할 수 있으므로, 로그인이 붙으면 Bearer 토큰만 받도록 교체할 것."""
+    if not isinstance(subject, str) or not 1 <= len(subject) <= 128 or role not in {'user', 'pharmacist'}:
+        raise HTTPException(401, '사용자 ID와 역할(user/pharmacist)이 필요합니다.')
+    return Actor(subject, role)
+
+
+# 기존 호출부 호환용 이름
+def local_actor(connection, subject, role) -> Actor:
+    return claimed_actor(subject, role)
+
+
+def optional_actor(request: Request, authorization: str = Header(default="")) -> Actor | None:
+    """Bearer 토큰 → X-Moyak-User-Id/X-Moyak-Role 헤더 순으로 확인, 둘 다 없으면 None."""
+    if authorization:
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer":
+            raise HTTPException(401, "Bearer 인증이 필요합니다.")
+        return verify_token(token)
+    subject, role = request.headers.get('x-moyak-user-id'), request.headers.get('x-moyak-role')
+    if subject is None and role is None:
+        return None
+    return claimed_actor(subject, role)
+
+
+def current_actor(request: Request, authorization: str = Header(default="")) -> Actor:
+    actor = optional_actor(request, authorization)
+    if actor is None:
+        raise HTTPException(401, 'X-Moyak-User-Id, X-Moyak-Role 헤더가 필요합니다.')
+    return actor
+
+
+# 팀 API 규격 엔드포인트용: 신원 헤더가 없으면 None(팀과 동일하게 검사 생략), 있으면 권한 검사
+legacy_actor = optional_actor

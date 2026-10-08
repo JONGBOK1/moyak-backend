@@ -36,6 +36,11 @@ data/processed/*
 data/*.db
 **/*.db
 data/database-schema*.json
+data/scenario-integration-backup/
+data/team-integration-source/
+data/supabase-current-schema.json
+data/kiosk-codex-backup/
+.pytest_tmp/
 
 # 노트북 체크포인트
 .ipynb_checkpoints/

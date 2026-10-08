@@ -5,8 +5,10 @@ from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy.orm import Session
 
 from src.consult import service
-from src.consult.auth import Actor, legacy_actor
+from src.consult.auth import Actor, legacy_actor, current_actor, claimed_actor
 from src.consult.db import get_db
+from src.consult import conversation, video
+from src.consult.models import ConsultationSession, ConsultationSummary
 
 router = APIRouter(prefix="/consultations", tags=["consultation"])
 
@@ -26,6 +28,7 @@ class ConsultationDecisionRequest(BaseModel):
     reason: str | None = None
     drug_item_seq: str | None = None
     drug_item_name: str | None = None
+    price: int | None = Field(None, ge=0)
 
 
 class ConsultationResponse(BaseModel):
@@ -42,6 +45,9 @@ class ConsultationResponse(BaseModel):
     decided_at: datetime | None
     approved_purchase_id: str | None = None
     approved_drug_name: str | None = None
+    summary: str | None = None
+    ended_at: datetime | None = None
+    summary_status: str = 'not_requested'
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,7 +57,37 @@ def _to_response(consultation) -> ConsultationResponse:
     if consultation.purchase is not None:
         response.approved_purchase_id = consultation.purchase.id
         response.approved_drug_name = consultation.purchase.drug_item_name
+    from sqlalchemy.orm import object_session
+    db = object_session(consultation)
+    if db is not None:
+        room = db.get(ConsultationSession, consultation.id)
+        result = db.get(ConsultationSummary, consultation.id)
+        response.ended_at = room.ended_at if room else None
+        if result:
+            response.summary_status = result.status
+            # Never expose an unreviewed draft through the legacy endpoint.
+            if result.status == 'published' and result.published:
+                labels = {'symptoms': '증상', 'discussion': '상담 내용', 'medication_guidance': '복약 안내',
+                          'precautions': '주의사항', 'follow_up': '후속 안내', 'needs_verification': '확인 사항'}
+                response.summary = '\n\n'.join(label + '\n' + '\n'.join(result.published.get(key, []))
+                                               for key, label in labels.items())
     return response
+
+
+@router.get('/{consultation_id}/presence')
+def presence(consultation_id: str, db: Session = Depends(get_db), actor: Actor | None = Depends(legacy_actor)):
+    row = get_consultation(consultation_id, db, actor)
+    count = video.room_participant_count(row.room_url)
+    assigned = db.get(ConsultationSession, consultation_id) is not None
+    return {'available': count is not None, 'participants': count or 0,
+            'pharmacist_in_room': bool(assigned and count and count > 0)}
+
+
+@router.post('/{consultation_id}/end', response_model=ConsultationResponse)
+def end_legacy(consultation_id: str, db: Session = Depends(get_db), actor: Actor = Depends(current_actor)):
+    """상담 종료는 담당 약사만 가능 (사용자 쪽 '통화 종료'는 화면 이탈로 처리하고 이 API를 부르지 않는다)."""
+    conversation.finish(db, consultation_id, actor)
+    return _to_response(service.get_consultation(db, consultation_id))
 
 
 @router.post("", response_model=ConsultationResponse)
@@ -73,12 +109,15 @@ def create_consultation(payload: ConsultationCreateRequest, db: Session = Depend
 def list_consultations(
     status: str | None = None, user_id: str | None = None, db: Session = Depends(get_db),
     actor: Actor | None = Depends(legacy_actor),
+    pharmacist_id: str | None = None,
 ) -> list[ConsultationResponse]:
     if actor and actor.role == "user":
         user_id = actor.id
     consultations = service.list_consultations(db, status=status, user_id=user_id)
     if actor and actor.role == "pharmacist":
         consultations = [c for c in consultations if c.pharmacist_id in (None, actor.id)]
+    if pharmacist_id:
+        consultations = [c for c in consultations if c.pharmacist_id == pharmacist_id]
     return [_to_response(c) for c in consultations]
 
 
@@ -96,6 +135,20 @@ def get_consultation(consultation_id: str, db: Session = Depends(get_db),
     return _to_response(consultation)
 
 
+@router.post("/{consultation_id}/cancel", response_model=ConsultationResponse)
+def cancel_consultation(consultation_id: str, db: Session = Depends(get_db),
+                        actor: Actor | None = Depends(legacy_actor)):
+    try:
+        row = service.get_consultation(db, consultation_id)
+        if actor and (actor.role != "user" or row.user_id != actor.id):
+            raise HTTPException(403, "본인의 대기 상담만 취소할 수 있습니다.")
+        return _to_response(service.cancel_consultation(db, consultation_id))
+    except service.NotFoundError as error:
+        raise HTTPException(404, str(error)) from error
+    except service.InvalidStateError as error:
+        raise HTTPException(409, str(error)) from error
+
+
 @router.post("/{consultation_id}/decision", response_model=ConsultationResponse)
 def decide_consultation(
     consultation_id: str, payload: ConsultationDecisionRequest, db: Session = Depends(get_db),
@@ -103,6 +156,9 @@ def decide_consultation(
 ) -> ConsultationResponse:
     if actor and (actor.role != "pharmacist" or actor.id != payload.pharmacist_id):
         raise HTTPException(403, "본인 명의로만 승인할 수 있습니다.")
+    actor = actor or claimed_actor(payload.pharmacist_id, "pharmacist")
+    if not db.get(ConsultationSession, consultation_id):
+        conversation.assign(db, consultation_id, actor)
     try:
         consultation = service.decide_consultation(
             db,
@@ -112,6 +168,7 @@ def decide_consultation(
             reason=payload.reason,
             drug_item_seq=payload.drug_item_seq,
             drug_item_name=payload.drug_item_name,
+            price=payload.price,
         )
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

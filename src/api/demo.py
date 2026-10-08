@@ -14,7 +14,10 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from src import config
-from src.api.routes import consultation, conversation
+from src.api.routes import consultation, conversation, chat
+from src.api.limiter import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from src.api.routes import workflow_demo, vending, shop, drug_search, drugs
 from src.api.routes import map as map_routes
 from src.consult import conversation as service, video, worker
 from src.consult.auth import Actor, current_actor, issue_token, verify_token
@@ -69,8 +72,29 @@ async def local_only(request: Request, call_next):
 
 
 app.include_router(consultation.router)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.include_router(chat.router)
 app.include_router(conversation.router)
 app.include_router(map_routes.router)
+app.include_router(workflow_demo.router)
+app.include_router(vending.router)
+app.include_router(shop.router)
+app.include_router(drug_search.router)
+app.include_router(drugs.router)
+static_dir = Path(__file__).parent / "static"
+app.mount('/kiosk', StaticFiles(directory=static_dir / 'kiosk', html=True), name='kiosk')
+app.mount('/static/vendor', StaticFiles(directory=static_dir / 'vendor'), name='vendor')
+
+
+@app.get('/pharmacist', response_class=HTMLResponse)
+def pharmacist_dashboard():
+    return (static_dir / 'pharmacist_demo.html').read_text(encoding='utf-8')
+
+
+@app.get('/scan', response_class=HTMLResponse)
+def qr_scanner():
+    return (static_dir / 'qr_scan_demo.html').read_text(encoding='utf-8')
 
 # Serve the Flutter build beside the API: credentials stay on the server,
 # and the embedded consultation keeps the existing same-origin restriction.

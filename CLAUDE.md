@@ -140,6 +140,8 @@ moyak-backend/
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
 
+- [x] 팀 `master` 백엔드 통합 (2026-10-09): 인증은 팀 방식(요청의 ID·역할 신뢰), 키오스크 라우트는 팀 원본(`vending.py`/`shop.py`), 사용자 화면은 Flutter로 대체(HTML `static/app` 제외), 서버는 로컬 전용 — `python scripts/run_unified_local.py --flutter`. 상세는 `docs/unified-server.md`
+
 ## 8. 코딩 시 참고사항
 
 - API 키·민감정보는 반드시 `.env`로 관리하고 `python-dotenv`로 로드한다.

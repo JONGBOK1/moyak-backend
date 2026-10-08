@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from src.consult.db import get_db
+from src.drugs.database import get_catalog_db as get_db
 from src.drugs import repository
 
 router = APIRouter(prefix="/api/v1/drugs", tags=["drugs"])

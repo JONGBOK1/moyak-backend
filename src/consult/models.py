@@ -25,9 +25,16 @@ def _now() -> datetime:
 
 
 class ConsultationStatus:
+    CANCELLED = "cancelled"
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class OrderStatus:
+    CART = "cart"
+    PAID = "paid"
+    DISPENSED = "dispensed"
 
 
 class PurchaseStatus:
@@ -64,6 +71,8 @@ class ApprovedPurchase(Base):
     drug_item_seq = Column(String, nullable=False)
     drug_item_name = Column(String, nullable=False)
     approved_by = Column(String, nullable=False)  # pharmacist_id
+    price = Column(Integer, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
     status = Column(String, default=PurchaseStatus.PENDING, nullable=False)
     created_at = Column(DateTime, default=_now, nullable=False)
     expires_at = Column(DateTime, nullable=False)
@@ -79,11 +88,16 @@ class VendingMachine(Base):
     id = Column(String, primary_key=True)  # 자판기 고유 코드
     name = Column(String, nullable=False)
     address = Column(String, nullable=False, default="")
+    operating_hours = Column(String, nullable=True)
+    operating_hours = Column(String, nullable=True)
     latitude = Column(Float, nullable=True, index=True)
     longitude = Column(Float, nullable=True, index=True)
     is_active = Column(Boolean, nullable=False, default=True)
     qr_token = Column(String, nullable=True)
     qr_token_expires_at = Column(DateTime, nullable=True)
+
+    paired_user_id = Column(String, nullable=True)
+    paired_purchase_id = Column(String, ForeignKey("approved_purchases.id"), nullable=True)
 
     inventory_items = relationship("VendingInventory", back_populates="machine", cascade="all, delete-orphan")
 
@@ -162,3 +176,48 @@ class ConsultationSummary(Base):
     error = Column(String)
     reviewed_by = Column(String)
     reviewed_at = Column(DateTime)
+
+
+class Product(Base):
+    """자판기별 의약외품 재고. 본인인증 없이 즉시 구매 가능한 품목만 다룬다."""
+
+    __tablename__ = "products"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    machine_id = Column(String, ForeignKey("vending_machines.id"), nullable=False, index=True)
+    item_seq = Column(String, nullable=False)
+    item_name = Column(String, nullable=False)
+    company = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    badge = Column(String, nullable=True)  # "상처 보호" 같은 짧은 태그
+    price = Column(Integer, nullable=False)
+    stock = Column(Integer, nullable=False, default=0)
+
+
+class KioskOrder(Base):
+    """의약외품 즉시구매 주문. 본인인증이 필요 없어 사용자 계정과 연결되지 않는다."""
+
+    __tablename__ = "kiosk_orders"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    machine_id = Column(String, ForeignKey("vending_machines.id"), nullable=False, index=True)
+    status = Column(String, default=OrderStatus.CART, nullable=False)
+    total_amount = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    paid_at = Column(DateTime, nullable=True)
+    dispensed_at = Column(DateTime, nullable=True)
+
+    items = relationship("KioskOrderItem", back_populates="order")
+
+
+class KioskOrderItem(Base):
+    __tablename__ = "kiosk_order_items"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    order_id = Column(String, ForeignKey("kiosk_orders.id"), nullable=False)
+    product_id = Column(String, ForeignKey("products.id"), nullable=False)
+    item_name = Column(String, nullable=False)
+    unit_price = Column(Integer, nullable=False)
+    quantity = Column(Integer, nullable=False)
+
+    order = relationship("KioskOrder", back_populates="items")
