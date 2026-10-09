@@ -64,3 +64,36 @@ def test_build_enrichment_swallows_db_errors(monkeypatch):
 
     monkeypatch.setattr(df, "fetch_facts", boom)
     assert df.build_enrichment(["1"]) == ("", [])  # 실패해도 챗봇은 기존처럼 답변
+
+
+class FakeStore:
+    def __init__(self, docs=None, fail=False):
+        self.docs, self.fail, self.calls = docs or [], fail, []
+
+    def similarity_search(self, query, k, namespace=None, **kw):
+        self.calls.append(namespace)
+        if self.fail:
+            raise RuntimeError("pinecone down")
+        return self.docs
+
+
+def test_permission_search_uses_separate_namespace_and_can_be_disabled(monkeypatch):
+    from langchain_core.documents import Document
+
+    doc = Document(page_content="로수바정\n구분: 전문의약품 | 약효분류: 동맥경화용제", metadata={"item_name": "로수바정", "field": "permission"})
+    store = FakeStore([doc])
+    monkeypatch.setenv("DRUG_DB_ENRICH", "1")
+    assert df.search_permissions(store, "콜레스테롤 약") == [doc]
+    assert store.calls == ["permissions"]  # 기본 namespace(e약은요)는 건드리지 않음
+    assert "로수바정 · 구분: 전문의약품" in df.format_permission_block([doc])
+
+    monkeypatch.setenv("DRUG_PERMISSION_SEARCH", "0")
+    assert df.search_permissions(store, "콜레스테롤 약") == []
+    monkeypatch.delenv("DRUG_PERMISSION_SEARCH")
+    monkeypatch.delenv("DRUG_DB_ENRICH")
+    assert df.search_permissions(store, "콜레스테롤 약") == []  # 보강이 꺼져 있으면 같이 꺼짐
+
+
+def test_permission_search_failure_returns_empty(monkeypatch):
+    monkeypatch.setenv("DRUG_DB_ENRICH", "1")
+    assert df.search_permissions(FakeStore(fail=True), "x") == []

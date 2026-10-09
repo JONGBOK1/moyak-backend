@@ -195,6 +195,12 @@ def _ask_specific(
         # e약은요에 없는 약(전문의약품 등)도 허가정보에서 이름으로 찾아 덧붙이기 위해 약 이름을 뽑는다
         names = drug_names if population else extract_drug_names(search_query, rewrite_llm)
         context, system_prompt, extra_docs = _enrich(context, docs, system_prompt, names=names, population=population)
+        # 허가정보 의미 검색 (예: "콜레스테롤 약 뭐 있어?") — 별도 namespace라 위 e약은요 검색 결과엔 영향 없음
+        perm_docs = drug_facts.search_permissions(vector_store, search_query)
+        if perm_docs:
+            context = f"{context}\n\n{drug_facts.format_permission_block(perm_docs)}"
+            system_prompt += drug_facts.PERMISSION_PROMPT_RULES
+            extra_docs += perm_docs
     user_prompt = build_user_prompt(question, context)
 
     messages = [{"role": "system", "content": system_prompt}]

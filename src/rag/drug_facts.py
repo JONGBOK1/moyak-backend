@@ -240,6 +240,41 @@ def format_block(drugs: list[DrugFacts], conflicts: list[Conflict], population: 
     return "\n".join(lines)
 
 
+PERMISSION_NAMESPACE = "permissions"  # scripts/index_permissions.py가 채운 Pinecone namespace
+PERMISSION_SEARCH_K = 4
+
+
+def permission_search_enabled() -> bool:
+    """허가정보 의미 검색 — DUR 보강이 켜져 있으면 기본으로 켜지고, DRUG_PERMISSION_SEARCH=0으로만 끈다."""
+    return enabled() and os.getenv("DRUG_PERMISSION_SEARCH", "1").strip() not in ("0", "false", "off", "no")
+
+
+def search_permissions(vector_store, query: str) -> list:
+    """e약은요에 없는 약(주로 전문의약품)을 약효분류·성분으로 의미 검색. 실패하면 []."""
+    if not permission_search_enabled():
+        return []
+    try:
+        return vector_store.similarity_search(query, k=PERMISSION_SEARCH_K, namespace=PERMISSION_NAMESPACE)
+    except Exception as e:
+        logger.warning("permission search skipped: %s: %s", type(e).__name__, str(e)[:200])
+        return []
+
+
+def format_permission_block(docs) -> str:
+    if not docs:
+        return ""
+    lines = ["[식약처 의약품 허가정보 검색 결과 (e약은요에 없는 약, 주로 전문의약품 · 효능 설명문 없음)]"]
+    lines += [f"- {d.page_content.replace(chr(10), ' · ')}" for d in docs]
+    return "\n".join(lines)
+
+
+PERMISSION_PROMPT_RULES = """
+[식약처 의약품 허가정보 검색 결과] 블록 규칙:
+- 질문한 약이나 분류가 위 e약은요 자료에 있으면 e약은요 자료를 우선하고, 이 블록은 e약은요에 없는 약을 물었을 때만 사용하세요.
+- 이 블록에는 구분(전문/일반)·약효분류·주성분·성상·보관법만 있고 효능·용법·부작용 설명은 없습니다. 없는 내용을 지어내지 마세요.
+- 전문의약품은 의사의 처방이 필요하다고 반드시 안내하고, 복용법이나 복용 여부를 판단해 주지 마세요. 스스로 골라 먹을 약으로 추천하지 마세요."""
+
+
 DUR_PROMPT_RULES = """
 [식약처 공식 데이터] 블록이 있으면 다음 규칙도 지키세요.
 - 이 블록은 식약처 의약품 허가정보와 DUR(의약품 안전사용 서비스) 공식 데이터입니다. 위 자료와 함께 근거로 사용하세요.

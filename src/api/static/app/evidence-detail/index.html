@@ -250,7 +250,7 @@
       listEl.appendChild(block);
     });
 
-    const usedDur = payload.evidence.some((e) => e.field === "dur");
+    const usedDur = payload.evidence.some((e) => e.field === "dur" || e.field === "permission");
     document.getElementById("sourceText").textContent =
       "식품의약품안전처 e약은요" + (usedDur ? " · 의약품 허가정보·DUR" : "") +
       " · 참고 약품: " + (payload.sources && payload.sources.length ? payload.sources.join(", ") : "-");
