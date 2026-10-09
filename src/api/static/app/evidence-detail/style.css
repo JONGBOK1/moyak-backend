@@ -772,3 +772,6 @@
 .formatted-answer strong {
   font-weight: 800;
 }
+/* 근거가 길면 헤더와 하단 바 사이 영역 안에서 스크롤 (Figma 내보내기의 overflow: hidden 때문에 잘리던 문제) */
+.evidence-content { overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.evidence-content::-webkit-scrollbar { display: none; }
