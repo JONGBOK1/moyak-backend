@@ -147,7 +147,8 @@
     payload = null;
   }
 
-  const CAUTION_FIELDS = new Set(["warning", "precaution", "interaction", "side_effect"]);
+  // "dur" = 식약처 허가정보·DUR(병용금기/임부금기 등) 보강 근거 — 안전 정보라 주의 박스로 표시
+  const CAUTION_FIELDS = new Set(["warning", "precaution", "interaction", "side_effect", "dur"]);
   const FIELD_LABELS = {
     efficacy: "효능",
     usage: "사용법",
@@ -249,8 +250,10 @@
       listEl.appendChild(block);
     });
 
+    const usedDur = payload.evidence.some((e) => e.field === "dur");
     document.getElementById("sourceText").textContent =
-      "식품의약품안전처 e약은요 · 참고 약품: " + (payload.sources && payload.sources.length ? payload.sources.join(", ") : "-");
+      "식품의약품안전처 e약은요" + (usedDur ? " · 의약품 허가정보·DUR" : "") +
+      " · 참고 약품: " + (payload.sources && payload.sources.length ? payload.sources.join(", ") : "-");
     document.getElementById("updatedText").textContent = "최종 확인 " + new Date().toLocaleDateString("ko-KR");
   }
 
