@@ -4,17 +4,22 @@
 - specific: 특정 약에 대한 질문 -> 전체 필드 혼합 top_k 검색
 - symptom: 증상 기반 추천 질문 -> 효능 필드로 후보 약을 먼저 찾고, 후보별 전체 정보를 모아 추천
 - interaction: 병용 안전성 질문 -> 언급된 약 이름을 추출해 각각 전체 정보를 모아 상호작용/주의사항/경고를 비교
+
+`DRUG_DB_ENRICH`가 켜져 있으면 세 유형 모두 Supabase의 식약처 허가정보·DUR(병용금기/임부금기/노인주의 등)을
+컨텍스트에 덧붙인다(src/rag/drug_facts.py). 꺼져 있거나 조회 실패 시 기존 동작과 완전히 같다.
 """
 
 import re
 import sys
 from pathlib import Path
 
+from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src import config
+from src.rag import drug_facts
 from src.rag.prompts import (
     DRUG_EXTRACTION_PROMPT,
     FIELD_LABELS,
@@ -139,6 +144,26 @@ def _extract_cited(docs, answer: str) -> tuple[list[str], list[dict]]:
     return sources, evidence
 
 
+def _enrich(context: str, docs, system_prompt: str, names=None, population=None, check_pairs=False):
+    """식약처 허가정보·DUR 블록을 컨텍스트에 덧붙인다. 꺼져 있거나 실패하면 입력을 그대로 돌려준다.
+    반환: (context, system_prompt, 근거 표시용 추가 Document 목록)"""
+    if not drug_facts.enabled():
+        return context, system_prompt, []
+    seqs = list(dict.fromkeys(d.metadata.get("item_seq") for d in docs if d.metadata.get("item_seq")))[:5]
+    block, drugs = drug_facts.build_enrichment(seqs, names, population, check_pairs)
+    if not block:
+        return context, system_prompt, []
+    # 답변에서 이 약을 인용하면 "원문 근거"에도 공식 데이터가 함께 보이도록 약별 Document로 만든다
+    extra = []
+    for d in drugs:
+        lines = [f"{d.etc_otc or ''} · 주성분: {', '.join(d.ingredients[:4]) or '정보 없음'}".strip(" ·")]
+        lines += [f"DUR {w['type']} ({w['ingredient']}): {w['content']}".rstrip(": ") for w in d.warnings]
+        extra.append(Document(page_content="\n".join(lines),
+                              metadata={"item_name": d.item_name, "item_seq": d.item_seq, "field": "dur"}))
+    joined = f"{context}\n\n{block}" if context else block
+    return joined, system_prompt + drug_facts.DUR_PROMPT_RULES, extra
+
+
 def _ask_specific(
     question: str,
     search_query: str,
@@ -149,13 +174,15 @@ def _ask_specific(
     population: str | None = None,
 ) -> dict:
     docs = None
+    drug_names: list[str] = []
     if population and rewrite_llm is not None:
         # 일반 top_k 검색은 "임산부가 먹어도 돼?" 같은 수식어 때문에 엉뚱한 약으로 샐 수 있다.
         # 특수 대상자 질문일 때는 약 이름을 먼저 정확히 추출해서, 그 약의 전체 필드(주의사항/경고 포함)를 확실히 가져온다.
         drug_names = extract_drug_names(search_query, rewrite_llm)
+        exact_seqs = drug_facts.resolve_name_seqs(drug_names)  # 꺼져 있으면 {} → 기존 방식
         resolved_docs = []
         for name in drug_names:
-            resolved_docs.extend(_resolve_drug_docs(name, vector_store))
+            resolved_docs.extend(_resolve_drug_docs(name, vector_store, exact_seqs.get(name)))
         if resolved_docs:
             docs = resolved_docs
 
@@ -163,14 +190,19 @@ def _ask_specific(
         docs = vector_store.similarity_search(search_query, k=TOP_K)
 
     context = build_context(docs)
+    system_prompt, extra_docs = SYSTEM_PROMPT, []
+    if drug_facts.enabled() and rewrite_llm is not None:
+        # e약은요에 없는 약(전문의약품 등)도 허가정보에서 이름으로 찾아 덧붙이기 위해 약 이름을 뽑는다
+        names = drug_names if population else extract_drug_names(search_query, rewrite_llm)
+        context, system_prompt, extra_docs = _enrich(context, docs, system_prompt, names=names, population=population)
     user_prompt = build_user_prompt(question, context)
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt}]
     messages.extend({"role": h["role"], "content": h["content"]} for h in history)
     messages.append({"role": "user", "content": user_prompt})
 
     answer = llm.invoke(messages).content
-    sources, evidence = _extract_cited(docs, answer)
+    sources, evidence = _extract_cited(docs + extra_docs, answer)
     return {"answer": answer, "sources": sources, "evidence": evidence}
 
 
@@ -212,14 +244,19 @@ def _ask_symptom(question: str, search_query: str, history: list[dict], vector_s
         docs.extend(vector_store.similarity_search(efficacy_query, k=PER_DRUG_FIELD_K, filter={"item_seq": seq}))
 
     context = build_grouped_context(docs, block_label="후보")
+    system_prompt, extra_docs = RECOMMEND_SYSTEM_PROMPT, []
+    if drug_facts.enabled():
+        # 임산부/노인/소아 질문이면 해당 DUR 경고(임부금기 등)를 강조해 금기 후보를 확실히 거르게 한다
+        population = detect_population(search_query, rewrite_llm)
+        context, system_prompt, extra_docs = _enrich(context, docs, system_prompt, population=population)
     user_prompt = build_recommend_user_prompt(question, context)
 
-    messages = [{"role": "system", "content": RECOMMEND_SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt}]
     messages.extend({"role": h["role"], "content": h["content"]} for h in history)
     messages.append({"role": "user", "content": user_prompt})
 
     answer = llm.invoke(messages).content
-    sources, evidence = _extract_cited(docs, answer)
+    sources, evidence = _extract_cited(docs + extra_docs, answer)
     return {"answer": answer, "sources": sources, "evidence": evidence}
 
 
@@ -237,8 +274,13 @@ def extract_drug_names(question: str, rewrite_llm) -> list[str]:
     return names[:MAX_INTERACTION_DRUGS]
 
 
-def _resolve_drug_docs(drug_name: str, vector_store):
-    """언급된 약 이름을 실제 등록 품목과 매칭하고, 그 품목의 전체 필드를 가져온다."""
+def _resolve_drug_docs(drug_name: str, vector_store, item_seq: str | None = None):
+    """언급된 약 이름을 실제 등록 품목과 매칭하고, 그 품목의 전체 필드를 가져온다.
+    item_seq가 주어지면(허가정보에서 정확히 찾은 제품) 그 품목을 우선 쓰고, e약은요에 없으면 기존 방식으로 찾는다."""
+    if item_seq:
+        exact = vector_store.similarity_search(drug_name, k=PER_DRUG_FIELD_K, filter={"item_seq": item_seq})
+        if exact:
+            return exact
     matches = vector_store.similarity_search(drug_name, k=1)
     if not matches:
         return []
@@ -257,26 +299,32 @@ def _ask_interaction(question: str, search_query: str, history: list[dict], vect
             "evidence": [],
         }
 
+    exact_seqs = drug_facts.resolve_name_seqs(drug_names)  # 꺼져 있으면 {} → 기존 방식
     docs = []
     for name in drug_names:
-        docs.extend(_resolve_drug_docs(name, vector_store))
+        docs.extend(_resolve_drug_docs(name, vector_store, exact_seqs.get(name)))
 
-    if not docs:
+    context = build_grouped_context(docs, block_label="약품") if docs else ""
+    # 병용 질문은 DUR 병용금기 목록으로 성분 조합을 직접 판정한다 (e약은요에 없는 약도 이름으로 찾아 포함)
+    context, system_prompt, extra_docs = _enrich(
+        context, docs, INTERACTION_SYSTEM_PROMPT, names=drug_names, check_pairs=True
+    )
+
+    if not context:
         return {
             "answer": "제공된 자료에서 확인되지 않습니다. 약사와 상담하시는 것을 권장드립니다.",
             "sources": [],
             "evidence": [],
         }
 
-    context = build_grouped_context(docs, block_label="약품")
     user_prompt = build_interaction_user_prompt(question, context)
 
-    messages = [{"role": "system", "content": INTERACTION_SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt}]
     messages.extend({"role": h["role"], "content": h["content"]} for h in history)
     messages.append({"role": "user", "content": user_prompt})
 
     answer = llm.invoke(messages).content
-    sources, evidence = _extract_cited(docs, answer)
+    sources, evidence = _extract_cited(docs + extra_docs, answer)
     return {"answer": answer, "sources": sources, "evidence": evidence}
 
 

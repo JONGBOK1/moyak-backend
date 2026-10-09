@@ -9,6 +9,7 @@ FIELD_LABELS = {
     "interaction": "상호작용",
     "side_effect": "부작용",
     "storage": "보관법",
+    "dur": "식약처 허가·DUR",  # Supabase 공식 데이터 보강(drug_facts.py)
 }
 
 SYSTEM_PROMPT = """당신은 '모약이'입니다. 식품의약품안전처(식약처) e약은요 공공데이터를 기반으로 의약품 정보를 안내하는 챗봇입니다.

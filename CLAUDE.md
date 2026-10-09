@@ -99,6 +99,10 @@ moyak-backend/
    - **interaction(병용/상호작용 확인)**: ① GPT-4o-mini로 질문에 언급된 약 이름을 추출(`extract_drug_names`, 최대 3개) → ② 각 약 이름을 실제 등록 품목에 매칭해 전체 필드를 `item_seq` 필터로 모음(`_resolve_drug_docs`) → ③ 전용 프롬프트(`INTERACTION_SYSTEM_PROMPT`)로 답변 생성. **가장 중요한 규칙**: 자료에 특정 조합에 대한 언급이 없다고 "안전하다"고 결론 내리지 않고, "확인되지 않음 + 약사 상담"으로 답하도록 강제한다(e약은요 상호작용 데이터는 완전한 약물-약물 매트릭스가 아니라 각 약이 자체적으로 명시한 일반 문구이기 때문).
    - 질문 유형 분류는 `classify_intent`(GPT-4o-mini)가 담당하며, 대화 후속 질문 재작성(`rewrite_standalone_question`) 이후에 실행된다.
    - **특수 대상자(임산부/소아/고령자) 안전 필터**: 유형 분류와 별개로 `detect_population`(GPT-4o-mini)이 질문에서 임산부/소아/고령자 언급을 감지한다. specific 질문에서 감지되면, 일반 top_k 검색 대신 `extract_drug_names`+`_resolve_drug_docs`(interaction과 동일한 방식)로 정확한 약의 전체 필드(주의사항/경고 포함)를 확실히 가져온다 — "임산부가 먹어도 돼?" 같은 수식어가 top_k 검색을 엉뚱한 약으로 새게 만드는 문제를 막기 위함. symptom 질문에서 감지되면 `RECOMMEND_SYSTEM_PROMPT`의 규칙에 따라 후보 중 해당 대상자 금기 약을 제외하고, 안전한 후보가 없으면 추천하지 않는다.
+   - **식약처 공식 데이터 보강 (`src/rag/drug_facts.py`, `DRUG_DB_ENRICH=1`일 때만)**: 본문 검색은 그대로 Pinecone(e약은요)이고, Supabase의 `drug_permissions`(허가정보 42,962건: 전문/일반·주성분, e약은요에 없는 약도 이름으로 검색), `dur_warnings`(임부금기·노인주의·특정연령대금기·효능군중복·분할주의), `dur_conflicts`(병용금기 성분쌍)를 읽기 전용으로 조회해 `[식약처 공식 데이터]` 블록으로 컨텍스트에 덧붙인다.
+     - 병용금기는 LLM 판단이 아니라 목록 일치로 결정적으로 판정(DUR 성분코드 우선, 없으면 염·수화물을 뗀 성분명 **완전 일치**만 — 부분 일치는 잘못된 금기 경고를 만들 수 있어 사용 안 함). 목록에 없으면 "확인되지 않음(안전하다는 뜻 아님)"으로 명시.
+     - 병용/특수대상자 질문은 허가정보에서 정확한 제품을 먼저 찾아(`resolve_name_seqs`) Pinecone을 그 품목으로 필터링 — 이름이 비슷한 다른 제품(예: 원펜정→일펜정)을 고르던 문제 해결.
+     - 근거(`evidence`)에 `field: "dur"`(라벨 "식약처 허가·DUR") 항목이 추가될 수 있음. 꺼져 있거나 DB 조회 실패 시 기존 동작과 100% 동일. 2026-10-09 실제 질문 검증 + `check_rag_quality.py` 전체 통과(켜진 상태). **Render는 중간점검(10/13) 이후 켤 예정**.
    - 답변에서 실제로 인용된 약품명만 출처/근거로 남기는 `_extract_cited`는 LLM이 긴 제품명의 띄어쓰기를 살짝 바꿔 쓰는 경우가 있어 공백 제거 후 비교한다.
 7. **STEP 6 - API 서버**: FastAPI `/chat` 엔드포인트. 프론트(Flutter)와 JSON 스펙 맞추기
    - 요청: `POST /chat` `{"question": "string", "history": [{"role": "user"|"assistant", "content": "string"}, ...]}`
