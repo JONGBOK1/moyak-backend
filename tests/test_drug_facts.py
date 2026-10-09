@@ -97,3 +97,24 @@ def test_permission_search_uses_separate_namespace_and_can_be_disabled(monkeypat
 def test_permission_search_failure_returns_empty(monkeypatch):
     monkeypatch.setenv("DRUG_DB_ENRICH", "1")
     assert df.search_permissions(FakeStore(fail=True), "x") == []
+
+
+def _row(name, in_eyak=True, cancel="정상"):
+    return {"item_seq": name, "item_name": name, "in_eyak": in_eyak, "cancel_name": cancel}
+
+
+def test_product_score_prefers_plain_brand_tablet():
+    rows = [_row("타이레놀콜드-에스정"), _row("타이레놀8시간이알서방정(아세트아미노펜)"),
+            _row("타이레놀산500밀리그램(아세트아미노펜)"), _row("타이레놀정500밀리그람(아세트아미노펜)")]
+    best = max(rows, key=lambda r: df._product_score("타이레놀", r))
+    assert best["item_name"] == "타이레놀정500밀리그람(아세트아미노펜)"
+
+
+def test_population_check_by_ingredient():
+    table = {df.normalize_ingredient("이부프로펜"): ("이부프로펜", "임신 말기 태아 위험")}
+    ibu = DrugFacts("1", "원펜정", ingredients=["이부프로펜"])
+    apap = DrugFacts("2", "타이레놀정", ingredients=["아세트아미노펜"])
+    df.check_population_by_ingredient([ibu, apap], "pregnant", table)
+    assert ibu.warnings[0]["type"] == "임부금기" and "같은 성분 기준" in ibu.warnings[0]["content"]
+    assert apap.warnings == [] and "임부금기 목록에 없음" in apap.population_note
+    assert "안전하다는 뜻은 아니며" in apap.population_note

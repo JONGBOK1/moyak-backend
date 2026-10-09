@@ -46,6 +46,7 @@ class DrugFacts:
     ingredients: list[str] = field(default_factory=list)  # 주성분 이름
     dur_codes: set[str] = field(default_factory=set)  # DUR 성분코드(D000…) — 병용금기 정확 매칭용
     warnings: list[dict] = field(default_factory=list)  # {"type", "ingredient", "content"}
+    population_note: str | None = None  # 질문 대상자 DUR 성분 확인 결과 (해당 없음 안내용)
 
 
 @dataclass
@@ -165,20 +166,45 @@ def _lookup_seqs(names: list[str]) -> list[tuple[str, str]]:
             key = name.replace(" ", "")
             if len(key) < 2:
                 continue
-            row = conn.execute(
+            rows = conn.execute(
                 text("""
-                    SELECT p.item_seq FROM public.drug_permissions p
+                    SELECT p.item_seq, p.item_name, p.cancel_name,
+                           EXISTS (SELECT 1 FROM public.drugs d WHERE d.item_seq = p.item_seq) AS in_eyak
+                    FROM public.drug_permissions p
                     WHERE replace(p.item_name, ' ', '') ILIKE :pat OR p.main_item_ingr ILIKE :pat
-                    ORDER BY (replace(p.item_name, ' ', '') ILIKE :pat) DESC,
-                             EXISTS (SELECT 1 FROM public.drugs d WHERE d.item_seq = p.item_seq) DESC,
-                             (p.cancel_name = '정상') DESC, length(p.item_name)
-                    LIMIT 1
+                    LIMIT 200
                 """),
                 {"pat": f"%{key}%"},
-            ).first()
-            if row:
-                pairs.append((name, row[0]))
+            ).mappings().all()
+            if rows:
+                best = max(rows, key=lambda r: _product_score(key, r))
+                pairs.append((name, best["item_seq"]))
     return pairs
+
+
+# "타이레놀" → 타이레놀정500밀리그람 처럼, 브랜드 뒤에 제형·함량만 붙은 기본 제품을 고르기 위한 규칙.
+# (가장 짧은 이름을 고르면 "타이레놀콜드-에스정" 같은 다른 약, 유사도로 고르면 "8시간이알서방정"이 뽑히던 문제)
+_PLAIN_REMAINDER = re.compile(
+    r"^(정|필름코팅정|츄어블정|캡슐|연질캡슐|시럽|현탁액|액|산|과립)?"
+    r"[\d.,/]*(밀리그람|밀리그램|mg|그램|g|mL|밀리리터)?$",
+    re.IGNORECASE,
+)
+
+
+def _product_score(key: str, row) -> tuple:
+    name = re.sub(r"\([^)]*\)", "", row["item_name"]).replace(" ", "")
+    starts = name.startswith(key)
+    plain = starts and bool(_PLAIN_REMAINDER.match(name[len(key):]))
+    tablet = plain and name[len(key):].startswith("정")
+    return (
+        key in name,  # 제품명에 들어 있음 (성분명으로만 걸린 것보다 우선)
+        plain,  # 브랜드 + 제형/함량만
+        tablet,  # 같은 조건이면 정제 우선
+        starts,
+        bool(row["in_eyak"]),  # e약은요에도 있는 품목
+        row["cancel_name"] == "정상",
+        -len(name),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -211,6 +237,38 @@ def find_conflicts(drugs: list[DrugFacts], conflict_rows=None) -> list[Conflict]
     return found
 
 
+@lru_cache(maxsize=4)
+def _population_ingredients(type_name: str) -> dict:
+    """DUR 경고 유형(예: 임부금기)에 해당하는 성분 → (성분명, 내용). 성분 단위로 금기 여부를 확인하기 위함."""
+    engine = get_engine()
+    with engine.connect() as conn, conn.begin():
+        _read_only(conn)
+        rows = conn.execute(
+            text("SELECT DISTINCT ON (ingr_name) ingr_name, prohbt_content FROM public.dur_warnings "
+                 "WHERE type_name = :t AND ingr_name IS NOT NULL ORDER BY ingr_name, prohbt_content NULLS LAST"),
+            {"t": type_name},
+        ).all()
+    return {normalize_ingredient(name): (name, content) for name, content in rows}
+
+
+def check_population_by_ingredient(drugs: list[DrugFacts], population: str | None, table=None) -> None:
+    """질문 대상자(임산부/노인/소아)에 대해 각 약의 '주성분'이 DUR 목록에 있는지 확인해 결과를 채운다."""
+    focus = POPULATION_DUR_TYPES.get(population or "")
+    if not focus:
+        return
+    table = table if table is not None else _population_ingredients(focus)
+    for d in drugs:
+        if any(w["type"] == focus for w in d.warnings):
+            continue  # 품목 자체에 이미 경고가 있음
+        hits = [table[normalize_ingredient(i)] for i in d.ingredients if normalize_ingredient(i) in table]
+        if hits:
+            name, content = hits[0]
+            d.warnings.insert(0, {"type": focus, "ingredient": name, "content": f"{content or ''} (같은 성분 기준)".strip()})
+        elif d.ingredients:
+            d.population_note = (f"주성분({', '.join(d.ingredients[:3])})은 식약처 DUR {focus} 목록에 없음 "
+                                 "— 목록에 없다고 안전하다는 뜻은 아니며, e약은요 주의사항을 함께 확인할 것")
+
+
 def format_block(drugs: list[DrugFacts], conflicts: list[Conflict], population: str | None, check_pairs: bool) -> str:
     """LLM 컨텍스트에 덧붙일 공식 데이터 블록."""
     if not drugs:
@@ -228,6 +286,8 @@ def format_block(drugs: list[DrugFacts], conflicts: list[Conflict], population: 
             mark = " ★질문 대상자 관련" if focus and w["type"] == focus else ""
             detail = f": {w['content']}" if w["content"] else ""
             lines.append(f"  · DUR {w['type']}{mark} ({w['ingredient']}){detail}")
+        if d.population_note:
+            lines.append(f"  · {d.population_note}")
         if not d.warnings:
             lines.append("  · DUR 품목 경고: 등록된 항목 없음")
     if check_pairs and len(drugs) >= 2:
@@ -301,6 +361,7 @@ def build_enrichment(
             for d in resolve_names(mentioned_names):
                 if all(d.item_seq != x.item_seq for x in drugs):
                     drugs.append(d)
+        check_population_by_ingredient(drugs, population)
         conflicts = find_conflicts(drugs) if check_pairs and len(drugs) >= 2 else []
         return format_block(drugs, conflicts, population, check_pairs), drugs
     except Exception as e:  # 공식 데이터 보강은 부가 기능 — 실패해도 기존 답변 흐름은 그대로
