@@ -298,9 +298,22 @@
     }
     const panel = document.getElementById("recPanel");
     const label = btn.textContent;
+    let consentPrompted = false;
     recHandle = MoyakRecording.mount(document.getElementById("recBody"), {
       consultationId, actorId: userId, role: "user",
       onRecordingChange: (on) => (btn.textContent = on ? "🔴 녹음 중" : label), // 패널을 닫아도 녹음 중임을 보여준다
+      // 약사가 상담을 연결했는데 내가 아직 동의 전이면 동의 창을 자동으로 띄운다(처음 한 번). 닫아도 버튼에 표시가 남는다.
+      onState: (room) => {
+        const needConsent = !!(room && !room.ended_at && !room.user_consent_at);
+        btn.classList.toggle("need", needConsent);
+        if (needConsent && !btn.textContent.startsWith("🔴")) btn.textContent = "🎙 동의 필요";
+        else if (!needConsent && btn.textContent === "🎙 동의 필요") btn.textContent = label;
+        if (needConsent && !consentPrompted) {
+          consentPrompted = true;
+          panel.hidden = false;
+          document.getElementById("chatPanel").hidden = true;
+        }
+      },
     });
     btn.onclick = () => {
       panel.hidden = !panel.hidden;

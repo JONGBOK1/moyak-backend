@@ -9,7 +9,8 @@
  * - 전사 실패 시 같은 조각을 재전송(같은 client_id라 중복 저장 없음). 업로드 전 마지막 조각(최대 20초)은 페이지를 떠나면 사라진다.
  * - 약사만: 상담 연결(담당 배정), 전사 원문 보기, 상담 종료, 요약 초안 6항목 검토·수정 후 공개, 실패 시 재시도.
  *
- * 사용: MoyakRecording.mount(containerEl, { consultationId, actorId, role: "user" | "pharmacist", onRecordingChange? })
+ * 사용: MoyakRecording.mount(containerEl, { consultationId, actorId, role: "user" | "pharmacist", onRecordingChange?, onState? })
+ *       onState(room|null): 3초마다 상담 연결·동의 상태를 알려준다(예: 환자 화면이 동의 요청 창을 자동으로 띄울 때 사용).
  *       반환값 .stop()은 녹음 중인 마지막 조각을 올리고 멈춘다(통화에서 나갈 때 호출).
  */
 (function () {
@@ -199,7 +200,9 @@
             <button class="alt" data-a="pause">${paused || micError ? "▶ 녹음 다시 시작" : "⏸ 잠깐 멈추기"}</button></div>
           <div class="note">내 마이크 소리만 20초마다 자동으로 올라가 글로 바뀌어요. 말소리가 없는 구간은 올리지 않아요.</div>`;
       } else if (!room.ended_at && mine && !both) {
-        html += `<div class="note">상대방이 동의하면 녹음이 자동으로 시작돼요.</div>`;
+        html += `<div class="note">${isPharm
+          ? "환자 앱 화면에 녹음 동의 요청 창이 자동으로 떴어요. 환자가 '동의합니다'를 누르면 녹음이 자동으로 시작돼요."
+          : "약사가 동의하면 녹음이 자동으로 시작돼요."}</div>`;
       }
       const shown = files.filter((f) => isPharm || f.sender_role === role);
       if (shown.length) {
@@ -281,6 +284,7 @@
       lastRoom = room;
       syncRecording(room);
       render({ room, files, summary, transcript });
+      if (opts.onState) opts.onState(room);
       if (summary && summary.status === "published") { stopped = true; clearInterval(timer); }
     }
 
