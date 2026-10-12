@@ -273,6 +273,15 @@
       document.getElementById("summaryBody").textContent = data.summary;
       document.getElementById("summaryCard").hidden = false;
       document.getElementById("joinNowRow").style.display = "none";
+    } else if (data.status === "approved" || data.status === "rejected") {
+      // 약사가 결정은 했지만 상담 요약은 아직 검토 중 — 공개되면 폴링으로 자동 표시된다
+      document.getElementById("summaryBody").textContent = "약사가 상담 내용을 정리하고 있어요. 검토가 끝나면 여기에 자동으로 표시돼요.";
+      document.getElementById("summaryCard").hidden = false;
+      if (data.room_url) {
+        sessionStorage.setItem("moyak_video_room_url", data.room_url);
+        document.getElementById("joinNowRow").style.display = "block";
+        document.getElementById("joinNowBtn").onclick = goToVideo;
+      }
     } else if (data.room_url) {
       sessionStorage.setItem("moyak_video_room_url", data.room_url);
       document.getElementById("joinNowRow").style.display = "block";
@@ -317,11 +326,29 @@
 
   async function init() {
     try {
-      const pendingRes = await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
-      const pendingList = pendingRes.ok ? await pendingRes.json() : [];
+      // 이미 진행한 상담의 결과를 보러 온 경우(?id= 또는 화상 화면에서 뒤로가기)엔 새 상담을 만들지 않고 그 상담을 보여준다.
+      // 예전엔 대기(pending) 상담만 찾아서, 약사가 승인/거절한 뒤 "상담 결과 화면으로"를 누르면 새 상담이 생겨버렸다.
+      const params = new URLSearchParams(location.search);
+      const fromChatbot = !!sessionStorage.getItem("moyak_pending_chat_summary");
+      const viewId = params.get("id") || (!direct && !fromChatbot ? sessionStorage.getItem("moyak_consultation_id") : null);
+      let current = null;
+      if (viewId) {
+        try {
+          const c = await api("GET", "/consultations/" + encodeURIComponent(viewId));
+          // 주소로 연 결과는 끝난 상담도 보여주고, 뒤로가기로 온 경우는 아직 진행 중인 상담만 이어서 보여준다
+          if (c.user_id === userId && c.status !== "cancelled" && (params.get("id") || !c.ended_at)) current = c;
+        } catch (e) {
+          // 없거나 지워진 상담이면 아래 기본 흐름으로
+        }
+      }
+
+      const pendingRes = current ? null : await fetch("/consultations?status=pending&user_id=" + encodeURIComponent(userId));
+      const pendingList = pendingRes && pendingRes.ok ? await pendingRes.json() : [];
 
       let data;
-      if (pendingList.length > 0) {
+      if (current) {
+        data = current;
+      } else if (pendingList.length > 0) {
         data = pendingList[0];
       } else {
         // 직접 상담은 대화 요약 없이 보낸다 → 서버가 "직접 상담 요청 (사전 챗봇 대화 없음)" 문구로 채워 약사에게 표시

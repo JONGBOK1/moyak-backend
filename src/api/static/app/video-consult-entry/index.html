@@ -344,7 +344,7 @@
         <div class="summary-sub">약사가 상담을 마무리하고 요약을 검토하면 상담 결과 화면에 표시돼요</div>
         <button class="call-btn chat" id="toWaitingBtn">상담 결과 화면으로</button>
       </div>`;
-    document.getElementById("toWaitingBtn").onclick = () => (location.href = "/app/pharmacist-waiting/");
+    document.getElementById("toWaitingBtn").onclick = () => (location.href = "/app/pharmacist-waiting/?id=" + encodeURIComponent(consultationId));
   }
 
   // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
@@ -409,7 +409,7 @@
         <div class="summary-text">${esc(summary)}</div>
         <button class="call-btn chat" id="toWaitingBtn">상담 결과 화면으로</button>
       </div>`;
-    document.getElementById("toWaitingBtn").onclick = () => (location.href = "/app/pharmacist-waiting/");
+    document.getElementById("toWaitingBtn").onclick = () => (location.href = "/app/pharmacist-waiting/?id=" + encodeURIComponent(consultationId));
   }
 
   async function refresh() {
