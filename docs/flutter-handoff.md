@@ -174,6 +174,14 @@ flowchart LR
   - 상담 종료: 확인 후 `POST /consultations/{id}/end` → 응답 `summary`로 **요약 화면** 표시("상담 결과 화면으로" → 약사 대기). 약사가 먼저 종료해도 3초 갱신에서 `summary`가 보이면 요약 화면으로 전환
   - 요약은 GPT가 대화(채팅+챗봇 대화+처방 결과)만으로 작성, 음성 내용은 포함 안 됨(요약 끝에 안내 문구 있음)
 
+### 4-14-1. 음성 기록 · 약사 검토 요약 (2026-10-12 추가)
+- 화상 통화 화면의 "🎙 녹음" 패널. 모든 요청에 헤더 `X-Moyak-User-Id: <user_id>`, `X-Moyak-Role: user`
+- `GET /consultations/{id}/session` → 409면 "약사 연결 전", 200이면 `{user_consent_at, pharmacist_consent_at, ended_at}`
+- 동의 문구를 보여주고 사용자가 누르면 `POST .../session/consent`. **양측 모두 동의**해야 녹음 가능
+- 녹음(내 마이크만) → 멈추면 `POST .../audio?client_id=<고유값>&start_ms=<통화 시작부터 ms>` 본문=음성(webm/m4a 등, Content-Type 지정). 3초마다 `GET .../audio`로 상태(queued/processing/completed/failed) 표시, failed는 **같은 client_id로 같은 파일 재전송**
+- "상담 종료"는 약사가 연결된 상담이면 **통화에서 나가기만** 하고(요약 생성은 약사가 함), 약사가 검토·공개하면 `GET /consultations/{id}`의 `summary`에 글로, `GET .../summary`의 `content`에 6항목으로 나타남
+- 약사 연결 전 상담은 기존처럼 `POST /consultations/{id}/end`(즉시 요약) 사용
+
 ### 4-15. 마이페이지 `app/mypage`
 - 아직 대부분 정적: "게스트 사용자", 결제수단 없음 안내
 - "전자 구매 허가서" → 허가서 목록 / "로그아웃" → 임시 사용자 ID 삭제 → 로그인

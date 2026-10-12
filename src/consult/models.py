@@ -9,7 +9,7 @@ VendingMachine: 자판기 1대 = QR 토큰을 발급/보유하는 주체
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from src.consult.db import Base
@@ -176,3 +176,55 @@ class KioskOrderItem(Base):
     quantity = Column(Integer, nullable=False)
 
     order = relationship("KioskOrder", back_populates="items")
+
+
+# ---------- 상담 음성 기록·AI 요약 (한별 구현 이식, 2026-10-12) ----------
+class ConsultationSession(Base):
+    """담당 약사 배정 + 양측 녹음·AI 요약 동의 + 종료 시각. 이 행이 있어야 음성 업로드/검토 요약 흐름을 쓸 수 있다."""
+
+    __tablename__ = "consultation_sessions"
+    consultation_id = Column(String, ForeignKey("consultation_requests.id"), primary_key=True)
+    pharmacist_id = Column(String, nullable=False)
+    user_consent_at = Column(DateTime)
+    pharmacist_consent_at = Column(DateTime)
+    ended_at = Column(DateTime)
+    revision = Column(Integer, nullable=False, default=0)
+
+
+class ConsultationAudio(Base):
+    """각 기기 마이크로 녹음해 올린 음성 조각. 워커가 전사(transcript)하고 원본 음성은 지운다."""
+
+    __tablename__ = "consultation_audio"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    consultation_id = Column(String, ForeignKey("consultation_requests.id"), nullable=False, index=True)
+    sender_id = Column(String, nullable=False)
+    sender_role = Column(String, nullable=False)
+    client_id = Column(String, nullable=False)  # 같은 파일 재전송 시 중복 방지
+    start_ms = Column(Integer, nullable=False)
+    filename = Column(String, nullable=False)
+    audio = Column(LargeBinary)
+    digest = Column(String, nullable=False)
+    transcript = Column(Text)
+    status = Column(String, nullable=False, default="queued", index=True)  # queued/processing/completed/failed
+    lease = Column(String)
+    started_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    error = Column(String)
+    __table_args__ = (UniqueConstraint("consultation_id", "sender_role", "sender_id", "client_id"),)
+
+
+class ConsultationSummary(Base):
+    """종료 후 백그라운드에서 만든 6항목 요약 초안 → 약사 검토·수정 → 공개(published)."""
+
+    __tablename__ = "consultation_summaries"
+    consultation_id = Column(String, ForeignKey("consultation_requests.id"), primary_key=True)
+    status = Column(String, nullable=False, default="queued", index=True)  # queued/processing/pending_review/published/failed
+    source = Column(JSON, nullable=False)
+    draft = Column(JSON)
+    published = Column(JSON)
+    lease = Column(String)
+    started_at = Column(DateTime)
+    error = Column(String)
+    reviewed_by = Column(String)
+    reviewed_at = Column(DateTime)
+

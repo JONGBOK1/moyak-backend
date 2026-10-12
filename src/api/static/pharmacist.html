@@ -98,6 +98,7 @@
   <div id="pendingTab"></div>
   <div id="historyTab" style="display:none"></div>
 
+<script src="/static/vendor/consult-recording.js"></script>
 <script>
   const pharmacistIdEl = document.getElementById("pharmacistId");
   pharmacistIdEl.value = localStorage.getItem("moyak_pharmacist_id") || "";
@@ -154,9 +155,14 @@
       <div class="live-chat-head">💬 화상 상담 채팅 (환자와 실시간)</div>
       <div class="live-list"><div class="live-empty">아직 메시지가 없습니다.</div></div>
       <div class="live-input"><input placeholder="환자에게 보낼 메시지" maxlength="1000" /><button>보내기</button></div>
-      <button class="end-btn">상담 종료 및 대화 요약</button>
       <div class="summary-box" hidden></div>`;
     card.appendChild(box);
+
+    // 음성 기록·AI 요약 패널: 상담 연결 → 양측 동의 → 녹음·전사 → (승인/거절 후) 상담 종료 → 요약 검토·공개
+    const recBox = document.createElement("div");
+    recBox.className = "live-chat";
+    card.appendChild(recBox);
+    MoyakRecording.mount(recBox, { consultationId: c.id, actorId: () => pharmacistIdEl.value, role: "pharmacist" });
 
     const list = box.querySelector(".live-list");
     const input = box.querySelector(".live-input input");
@@ -180,8 +186,8 @@
 
     function showSummary(summary) {
       clearInterval(timer);
-      box.querySelector(".live-input").remove();
-      box.querySelector(".end-btn").remove();
+      const inputRow = box.querySelector(".live-input");
+      if (inputRow) inputRow.remove();
       const sb = box.querySelector(".summary-box");
       sb.textContent = "📝 상담 요약\n" + summary;
       sb.hidden = false;
@@ -223,20 +229,6 @@
     box.querySelector(".live-input button").addEventListener("click", send);
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.isComposing) send();
-    });
-
-    box.querySelector(".end-btn").addEventListener("click", async (e) => {
-      if (!confirm("화상 상담을 종료하고 대화 내용을 요약할까요? 종료 후에는 채팅을 보낼 수 없습니다.")) return;
-      e.target.disabled = true;
-      e.target.textContent = "요약 생성 중...";
-      try {
-        const data = await api("POST", `/consultations/${c.id}/end`);
-        showSummary(data.summary);
-      } catch (err) {
-        alert("상담 종료 실패: " + err.message);
-        e.target.disabled = false;
-        e.target.textContent = "상담 종료 및 대화 요약";
-      }
     });
 
     if (c.summary) {

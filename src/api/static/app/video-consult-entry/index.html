@@ -9,6 +9,7 @@
   </style>
   <script src="/static/vendor/app-scale.js"></script>
   <script src="/static/vendor/pharmacist-presence.js"></script>
+  <script src="/static/vendor/consult-recording.js"></script>
   <link rel="stylesheet" href="./vars.css">
   <link rel="stylesheet" href="./style.css">
   
@@ -269,7 +270,12 @@
       <div class="call-frame"><iframe src="${roomUrl}" allow="camera; microphone; fullscreen; display-capture"></iframe></div>
       <div class="call-toolbar">
         <button class="call-btn chat" id="chatToggleBtn">💬 채팅<span class="unread" id="unreadBadge" hidden></span></button>
+        <button class="call-btn chat" id="recToggleBtn">🎙 녹음</button>
         <button class="call-btn end" id="endCallBtn">상담 종료</button>
+      </div>
+      <div class="chat-panel" id="recPanel" hidden>
+        <div class="chat-head"><span>음성 기록 · AI 요약</span><button class="chat-close" id="recCloseBtn">✕</button></div>
+        <div class="chat-list" id="recBody"></div>
       </div>
       <div class="chat-panel" id="chatPanel" hidden>
         <div class="chat-head"><span>약사와 채팅</span><button class="chat-close" id="chatCloseBtn">✕</button></div>
@@ -280,7 +286,47 @@
         </div>
       </div>`;
     setupChat();
+    setupRecording();
   });
+
+  // 음성 기록·AI 요약 (동의 → 내 마이크 녹음·업로드 → 약사가 종료·검토 후 공개된 요약만 표시)
+  function setupRecording() {
+    const btn = document.getElementById("recToggleBtn");
+    if (!consultationId || !userId) {
+      btn.disabled = true;
+      return;
+    }
+    const panel = document.getElementById("recPanel");
+    MoyakRecording.mount(document.getElementById("recBody"), { consultationId, actorId: userId, role: "user" });
+    btn.onclick = () => {
+      panel.hidden = !panel.hidden;
+      document.getElementById("chatPanel").hidden = true;
+    };
+    document.getElementById("recCloseBtn").onclick = () => (panel.hidden = true);
+  }
+
+  // 약사가 연결한 상담인지 (연결됐으면 요약은 약사가 종료·검토 후 공개 — 환자 종료는 통화에서 나가기)
+  async function pharmacistConnected() {
+    try {
+      const res = await fetch(`/consultations/${consultationId}/session`, {
+        headers: { "X-Moyak-User-Id": encodeURIComponent(userId || ""), "X-Moyak-Role": "user" },
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function showLeft() {
+    clearInterval(chatTimer);
+    document.getElementById("entryContent").innerHTML = `
+      <div class="summary-view">
+        <div class="summary-title">👋 통화를 마쳤어요</div>
+        <div class="summary-sub">약사가 상담을 마무리하고 요약을 검토하면 상담 결과 화면에 표시돼요</div>
+        <button class="call-btn chat" id="toWaitingBtn">상담 결과 화면으로</button>
+      </div>`;
+    document.getElementById("toWaitingBtn").onclick = () => (location.href = "/app/pharmacist-waiting/");
+  }
 
   // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
   const consultationId = sessionStorage.getItem("moyak_consultation_id");
@@ -340,7 +386,7 @@
     document.getElementById("entryContent").innerHTML = `
       <div class="summary-view">
         <div class="summary-title">📝 상담이 종료되었어요</div>
-        <div class="summary-sub">오늘 상담 내용을 요약했어요</div>
+        <div class="summary-sub">오늘 상담 내용을 정리했어요</div>
         <div class="summary-text">${esc(summary)}</div>
         <button class="call-btn chat" id="toWaitingBtn">상담 결과 화면으로</button>
       </div>`;
@@ -401,6 +447,11 @@
     });
 
     document.getElementById("endCallBtn").onclick = async () => {
+      if (await pharmacistConnected()) {
+        if (!confirm("화상 통화에서 나갈까요? 상담 요약은 약사가 검토한 뒤 보여드려요.")) return;
+        showLeft();
+        return;
+      }
       if (!confirm("화상 상담을 종료할까요? 종료하면 대화 내용을 요약해 드려요.")) return;
       const btn = document.getElementById("endCallBtn");
       btn.disabled = true;

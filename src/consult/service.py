@@ -16,6 +16,7 @@ from src.consult.models import (
     ApprovedPurchase,
     ConsultationMessage,
     ConsultationRequest,
+    ConsultationSession,
     ConsultationStatus,
     MessageSender,
     PurchaseStatus,
@@ -159,6 +160,9 @@ def add_message(
         raise InvalidStateError("본인의 상담에만 메시지를 보낼 수 있습니다.")
     if consultation.ended_at is not None:
         raise InvalidStateError("이미 종료된 상담입니다.")
+    room = db.get(ConsultationSession, consultation_id)
+    if room is not None and room.ended_at is not None:  # 약사가 상담을 종료(요약 검토 중)한 뒤엔 채팅 불가
+        raise InvalidStateError("이미 종료된 상담입니다.")
     content = content.strip()
     if not content:
         raise InvalidStateError("메시지 내용이 비어 있습니다.")
@@ -186,6 +190,9 @@ def end_consultation(db: Session, consultation_id: str, llm) -> ConsultationRequ
         return consultation
     if consultation.status == ConsultationStatus.CANCELLED:
         raise InvalidStateError("취소된 상담입니다.")
+    if db.get(ConsultationSession, consultation_id) is not None:
+        # 약사가 연결한 상담은 '약사 검토 후 공개' 흐름을 쓴다 — 검토 없는 즉시 요약 공개를 막는다
+        raise InvalidStateError("약사가 연결한 상담은 약사가 종료하고 요약을 검토한 뒤 공개합니다.")
 
     consultation.summary = summary_module.summarize(llm, consultation, DIRECT_REQUEST_SUMMARY)
     consultation.ended_at = _now()

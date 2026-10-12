@@ -1,4 +1,6 @@
+import asyncio
 import sys
+from contextlib import suppress
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -7,11 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
+from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
-from src.api.routes import chat, consultation, drugs, shop, vending
+from src.api.routes import chat, consultation, conversation, drugs, shop, vending
 from src.api.routes import map as map_routes
+from src.consult import worker
 from src.consult.db import SessionLocal, init_db
 from src.consult.map_seed import seed_demo_machines
 from src.rag.chain import get_llm, get_rewrite_llm, get_vector_store
@@ -27,7 +31,23 @@ async def lifespan(app: FastAPI):
     app.state.vector_store = get_vector_store()
     app.state.llm = get_llm()
     app.state.rewrite_llm = get_rewrite_llm()
-    yield
+
+    # 상담 음성 전사·요약 초안 생성 워커 (DB 대기열을 1초마다 확인, 실패 작업은 재시도 가능 상태로 남음)
+    async def process_queue():
+        while True:
+            try:
+                processed = await run_in_threadpool(worker.process_one)
+            except Exception:
+                processed = False
+            await asyncio.sleep(0.1 if processed else 1)
+
+    task = asyncio.create_task(process_queue())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(title="MOYAK 모약이 API", lifespan=lifespan)
@@ -44,6 +64,7 @@ app.add_middleware(
 
 app.include_router(chat.router)
 app.include_router(consultation.router)
+app.include_router(conversation.router)
 app.include_router(drugs.router)
 app.include_router(vending.router)
 app.include_router(shop.router)

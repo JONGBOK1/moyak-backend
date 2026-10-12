@@ -24,6 +24,12 @@ DATA_PROCESSED_DIR = BASE_DIR / "data" / "processed"
 # 상담/자판기 연동용 DB. 기본값은 로컬 SQLite 파일.
 # 배포 환경에서 재시작 시에도 기록을 남기려면 DATABASE_URL을 Postgres 등으로 지정할 것
 # (Render free 인스턴스는 디스크가 휘발성이라 SQLite 파일은 재배포/재시작 시 초기화됨).
+# 상담 음성 전사·요약 (src/consult/ai.py) — 한별 구현 이식
+CONSULT_TRANSCRIPTION_MODEL = os.getenv("CONSULT_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+CONSULT_SUMMARY_MODEL = os.getenv("CONSULT_SUMMARY_MODEL", "gpt-4o")
+# Bearer 토큰 서명용(선택, 32자 이상). 비어 있으면 토큰 대신 X-Moyak-User-Id/X-Moyak-Role 헤더(팀 방식)만 사용
+CONSULT_AUTH_SECRET = os.getenv("CONSULT_AUTH_SECRET", "")
+
 # 지도 화면의 기본 중심 좌표 "위도,경도" — 위치 권한이 없을 때 이 위치를 보여준다. 기본값: 동양미래대학교
 DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5011,126.8670")
 
