@@ -297,7 +297,11 @@
       return;
     }
     const panel = document.getElementById("recPanel");
-    MoyakRecording.mount(document.getElementById("recBody"), { consultationId, actorId: userId, role: "user" });
+    const label = btn.textContent;
+    recHandle = MoyakRecording.mount(document.getElementById("recBody"), {
+      consultationId, actorId: userId, role: "user",
+      onRecordingChange: (on) => (btn.textContent = on ? "🔴 녹음 중" : label), // 패널을 닫아도 녹음 중임을 보여준다
+    });
     btn.onclick = () => {
       panel.hidden = !panel.hidden;
       document.getElementById("chatPanel").hidden = true;
@@ -317,8 +321,10 @@
     }
   }
 
+  let recHandle = null;
   function showLeft() {
     clearInterval(chatTimer);
+    if (recHandle) recHandle.stop(); // 마지막 녹음 조각까지 올리고 마이크를 닫는다
     document.getElementById("entryContent").innerHTML = `
       <div class="summary-view">
         <div class="summary-title">👋 통화를 마쳤어요</div>

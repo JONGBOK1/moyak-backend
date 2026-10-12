@@ -19,8 +19,9 @@ def transcribe(filename: str, audio: bytes) -> str:
             model=config.CONSULT_TRANSCRIPTION_MODEL, file=(filename, audio), language="ko",
         )
     text = result.text.strip()
-    if not text or len(text) > 40000:
-        raise ValueError("Empty or oversized transcript")
+    # 자동 녹음 조각은 말소리 없이 잡음만 있을 수 있다 — 빈 결과는 실패가 아니라 "말한 내용 없음"
+    if len(text) > 40000:
+        raise ValueError("Oversized transcript")
     return text
 
 

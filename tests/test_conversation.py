@@ -152,3 +152,34 @@ def test_no_consent_ends_without_ai_summary(setup):
     client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
     assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 200
     assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "not_requested"
+
+
+def test_auto_recording_segments_time_base_and_failed_segments(setup, monkeypatch):
+    client, factory = setup
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    client.post("/consultations/c1/session/consent", headers=USER)
+    assert client.get("/consultations/c1/session", headers=USER).json()["recording_elapsed_ms"] is None  # 한쪽 동의
+    client.post("/consultations/c1/session/consent", headers=PHARM)
+    assert client.get("/consultations/c1/session", headers=USER).json()["recording_elapsed_ms"] >= 0  # 공통 시간 기준
+
+    texts = {b"u0": "어제부터 머리가 아파요", b"p20": "열은 있으세요?", b"u20": "", b"u40": None}
+
+    def fake(filename, audio):
+        if texts[audio] is None:
+            raise RuntimeError("provider down")
+        return texts[audio]
+    monkeypatch.setattr(ai, "transcribe", fake)
+    for h, cid, ms, body in ((USER, "u0", 0, b"u0"), (PHARM, "p20", 20000, b"p20"),
+                             (USER, "u20", 20000, b"u20"), (USER, "u40", 40000, b"u40")):
+        client.post(f"/consultations/c1/audio?client_id={cid}&start_ms={ms}",
+                    headers={**h, "Content-Type": "audio/webm"}, content=body)
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 409  # 전사 중이면 대기
+    run_worker(factory)
+    # 실패한 조각(상대가 이미 나가 재전송 불가)이 있어도 종료 가능, 요약 한계로 명시
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 200
+    from src.consult.models import ConsultationSummary
+    with factory() as db:
+        source = db.get(ConsultationSummary, "c1").source
+    assert [t["text"] for t in source["transcript"]] == ["어제부터 머리가 아파요", "열은 있으세요?"]  # 시간순, 빈 조각 제외
+    assert any("1개는 전사에 실패" in x for x in source["limitations"])

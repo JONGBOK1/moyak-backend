@@ -84,8 +84,14 @@ def consented(room):
 
 
 def session_view(room):
-    return {key: getattr(room, key) for key in (
+    view = {key: getattr(room, key) for key in (
         "consultation_id", "pharmacist_id", "user_consent_at", "pharmacist_consent_at", "ended_at")}
+    # 녹음 시간 기준점 = 양측 동의가 모두 끝난 시각. 서버가 경과 시간을 알려줘야 두 기기의 녹음 조각을
+    # 같은 시계로 정렬할 수 있다(기기 시계·시간대 차이와 무관).
+    both = room.user_consent_at and room.pharmacist_consent_at
+    view["recording_elapsed_ms"] = (
+        int((_now() - max(room.user_consent_at, room.pharmacist_consent_at)).total_seconds() * 1000) if both else None)
+    return view
 
 
 def consent(db, cid, actor):
@@ -145,27 +151,31 @@ def finish(db, cid, actor):
         return session_view(room)
     audio = db.query(ConsultationAudio).filter_by(consultation_id=cid).order_by(
         ConsultationAudio.start_ms, ConsultationAudio.id).all()
-    if any(row.status != "completed" for row in audio):
-        raise HTTPException(409, "모든 음성의 전사가 끝난 뒤 종료해주세요. 실패한 파일은 다시 올려주세요.")
+    if any(row.status in ("queued", "processing") for row in audio):
+        raise HTTPException(409, "녹음을 글로 바꾸는 중입니다. 잠시 후 다시 종료해주세요.")
+    # 자동 녹음은 조각이 많고 상대가 이미 나갔을 수 있어, 전사 실패 조각은 종료를 막지 않고 요약 한계로 명시한다
+    failed = sum(row.status == "failed" for row in audio)
+    audio = [row for row in audio if row.status == "completed" and (row.transcript or "").strip()]
     if room.user_consent_at and room.pharmacist_consent_at:
         if consultation.status == ConsultationStatus.PENDING:
             raise HTTPException(409, "약사의 승인 또는 거절을 먼저 확정해주세요.")
         chat = db.query(ConsultationMessage).filter_by(consultation_id=cid).order_by(
             ConsultationMessage.created_at).all()
         prior = consultation.chat_summary if consultation.chat_summary != DIRECT_REQUEST_SUMMARY else ""
-        if not audio and not chat and not prior:
-            raise HTTPException(409, "요약할 상담 내용이 없습니다.")
+        has_content = audio or chat or prior
         source = {
             "prior_chat": prior,
             "transcript": [{"speaker": a.sender_role, "start_ms": a.start_ms, "text": a.transcript} for a in audio],
             "chat": [{"speaker": m.sender_role, "text": m.content, "time": m.created_at.isoformat()} for m in chat],
             "decision": {"status": consultation.status, "reason": consultation.decision_reason,
                          "approved_drug": consultation.purchase.drug_item_name if consultation.purchase else None},
-            "limitations": ["제출된 음성/채팅만 포함합니다. 업로드하지 않은 대화는 확인할 수 없습니다."],
+            "limitations": ["제출된 음성/채팅만 포함합니다. 업로드하지 않은 대화는 확인할 수 없습니다."]
+            + ([f"음성 조각 {failed}개는 전사에 실패해 빠졌습니다."] if failed else []),
         }
         if len(json.dumps(source, ensure_ascii=False)) > 120000:
             raise HTTPException(413, "요약 입력 한도를 초과했습니다.")
-        db.add(ConsultationSummary(consultation_id=cid, source=source))
+        if has_content:  # 요약할 대화가 없으면(무음 녹음뿐 등) 요약 없이 종료
+            db.add(ConsultationSummary(consultation_id=cid, source=source))
     room.ended_at = _now()
     db.commit()
     return session_view(room)

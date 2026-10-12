@@ -178,7 +178,10 @@ flowchart LR
 - 화상 통화 화면의 "🎙 녹음" 패널. 모든 요청에 헤더 `X-Moyak-User-Id: <user_id>`, `X-Moyak-Role: user`
 - `GET /consultations/{id}/session` → 409면 "약사 연결 전", 200이면 `{user_consent_at, pharmacist_consent_at, ended_at}`
 - 동의 문구를 보여주고 사용자가 누르면 `POST .../session/consent`. **양측 모두 동의**해야 녹음 가능
-- 녹음(내 마이크만) → 멈추면 `POST .../audio?client_id=<고유값>&start_ms=<통화 시작부터 ms>` 본문=음성(webm/m4a 등, Content-Type 지정). 3초마다 `GET .../audio`로 상태(queued/processing/completed/failed) 표시, failed는 **같은 client_id로 같은 파일 재전송**
+- 양측 동의가 끝나면 **자동으로 녹음 시작**(내 마이크만, 일시정지 버튼 제공). **20초마다 조각**으로 잘라 `POST .../audio?client_id=<조각마다 고유값>&start_ms=<ms>` 본문=음성(webm/m4a 등, Content-Type 지정)
+  - `start_ms` = 조각 시작 시각 − 기준점. 기준점은 `GET .../session`의 `recording_elapsed_ms`를 받은 순간 `now - recording_elapsed_ms`로 계산(양측 동의 시점, 서버 기준 — 두 기기 조각이 시간순으로 정렬됨)
+  - 말소리가 거의 없는 조각은 올리지 않아도 됨(비용 절약). 3초마다 `GET .../audio`로 상태(queued/processing/completed/failed) 표시, failed는 **같은 client_id로 같은 파일 재전송**
+  - 통화에서 나갈 때 진행 중 조각을 마무리해 업로드
 - "상담 종료"는 약사가 연결된 상담이면 **통화에서 나가기만** 하고(요약 생성은 약사가 함), 약사가 검토·공개하면 `GET /consultations/{id}`의 `summary`에 글로, `GET .../summary`의 `content`에 6항목으로 나타남
 - 약사 연결 전 상담은 기존처럼 `POST /consultations/{id}/end`(즉시 요약) 사용
 
