@@ -274,9 +274,17 @@
       document.getElementById("summaryCard").hidden = false;
       document.getElementById("joinNowRow").style.display = "none";
     } else if (data.status === "approved" || data.status === "rejected") {
-      // 약사가 결정은 했지만 상담 요약은 아직 검토 중 — 공개되면 폴링으로 자동 표시된다
-      document.getElementById("summaryBody").textContent = "약사가 상담 내용을 정리하고 있어요. 검토가 끝나면 여기에 자동으로 표시돼요.";
-      document.getElementById("summaryCard").hidden = false;
+      // 약사가 결정은 했고 상담 요약이 만들어지는 중이면 안내 — 공개되면 폴링으로 자동 표시된다
+      fetch(`/consultations/${encodeURIComponent(data.id)}/summary`, {
+        headers: { "X-Moyak-User-Id": encodeURIComponent(userId), "X-Moyak-Role": "user" },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((s) => {
+          if (!s || !["queued", "processing", "pending_review", "failed"].includes(s.status)) return;
+          document.getElementById("summaryBody").textContent = "약사가 상담 내용을 정리하고 있어요. 검토가 끝나면 여기에 자동으로 표시돼요.";
+          document.getElementById("summaryCard").hidden = false;
+        })
+        .catch(() => {});
       if (data.room_url) {
         sessionStorage.setItem("moyak_video_room_url", data.room_url);
         document.getElementById("joinNowRow").style.display = "block";

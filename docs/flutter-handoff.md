@@ -187,8 +187,14 @@ flowchart LR
 
 ### 4-15. 마이페이지 `app/mypage`
 - 아직 대부분 정적: "게스트 사용자", 결제수단 없음 안내
-- "전자 구매 허가서" → 허가서 목록 / "로그아웃" → 임시 사용자 ID 삭제 → 로그인
+- "전자 구매 허가서" → 허가서 목록 / "🩺 내 상담 내역" → 상담 내역 / "로그아웃" → 임시 사용자 ID 삭제 → 로그인
 - ⚠️ "재고 신청하기"는 웹에서도 **화면이 없음**(`/app/inventory-request/` 미구현) — 기획 확정 전까지 비활성 처리 추천
+
+### 4-15-1. 내 상담 내역 `app/consult-history` (2026-10-12 추가)
+- `GET /consultations?user_id=` (최신순) → 취소(cancelled)는 숨김
+- 카드: 신청 일시, 상태(pending "상담 진행 중" · approved "처방 완료" · rejected "처방 불가"), 진입 경로(바로 상담/챗봇 후), 처방약 또는 거절 사유
+- `summary`가 있으면 접이식 "📝 상담 요약 보기"(■ 항목 제목 굵게). 없으면 `GET /consultations/{id}/summary`(헤더 `X-Moyak-User-Id`, `X-Moyak-Role: user`)가 queued/processing/pending_review/failed일 때만 "약사가 상담 요약을 정리하고 있어요"
+- "자세히 보기" → 약사상담 화면 `?id=<상담ID>` (그 상담 결과를 표시, 새 상담을 만들지 않음)
 
 ### 4-16. 전자 구매 허가서 `app/permit-list`
 - `GET /vending/purchases?user_id=` → `[{drug_item_name, status, created_at, expires_at, approved_by, price, paid_at, …}]`
