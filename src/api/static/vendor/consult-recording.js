@@ -267,7 +267,7 @@
         room = await call("GET", "/session");
         if (room.recording_elapsed_ms != null) anchor = Date.now() - room.recording_elapsed_ms;
       } catch (e) {
-        if (e.status !== 409 && e.status !== 403) showErr(e);
+        if (e.status !== 409 && e.status !== 403 && e.status !== 0) showErr(e); // ID 미입력(0)은 버튼을 누를 때만 안내
       }
       if (room) {
         try {
