@@ -466,3 +466,21 @@
   width: 155px;
   height: 56px;
 }
+
+/* 글자가 상자보다 길어 줄바꿈되며 겹치던 문제 수정: 회원 표시는 글자 길이에 맞게 늘어나고(오른쪽 끝 고정), 제목은 한 줄 유지 */
+.user-pill {
+  width: auto;
+  left: auto;
+  right: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.user-pill .user-check,
+.user-pill .div6 {
+  position: static;
+}
+.div6,
+.div7 {
+  white-space: nowrap;
+}
