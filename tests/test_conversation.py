@@ -69,7 +69,7 @@ def test_audio_requires_both_consents(setup):
     assert up(USER).status_code == 409  # 한쪽만 동의
     client.post("/consultations/c1/session/consent", headers=PHARM)
     assert up(USER).status_code == 202
-    assert up(USER).json()["status"] == "queued"  # 같은 client_id 재전송은 중복 없이 성공
+    assert up(USER).json()["status"] == "pending"  # 같은 client_id 재전송은 중복 없이 성공
 
 
 def test_full_flow_review_then_publish(setup):
@@ -93,7 +93,7 @@ def test_full_flow_review_then_publish(setup):
 
     run_worker(factory)  # 요약 초안 생성
     draft = client.get("/consultations/c1/summary", headers=PHARM).json()
-    assert draft["status"] == "pending_review" and draft["content"]["symptoms"] == ["두통"]
+    assert draft["status"] == "draft" and draft["content"]["symptoms"] == ["두통"]
     assert client.get("/consultations/c1/summary", headers=USER).json()["content"] is None  # 공개 전엔 사용자에게 안 보임
     assert client.get("/consultations/c1").json()["summary"] is None
 
@@ -121,7 +121,7 @@ def test_failed_transcription_can_be_reuploaded_and_summary_retried(setup, monke
 
     monkeypatch.setattr(ai, "transcribe", lambda *a: "다시 올린 음성")
     retry = client.post("/consultations/c1/audio?client_id=a1&start_ms=0", headers={**USER, "Content-Type": "audio/webm"}, content=b"voice")
-    assert retry.status_code == 202 and retry.json()["status"] == "queued"
+    assert retry.status_code == 202 and retry.json()["status"] == "pending"
     run_worker(factory)
     with factory() as db:
         assert db.query(ConsultationAudio).one().transcript == "다시 올린 음성"
@@ -133,9 +133,9 @@ def test_failed_transcription_can_be_reuploaded_and_summary_retried(setup, monke
     run_worker(factory)
     assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "failed"
     monkeypatch.setattr(ai, "summarize", lambda s: CONTENT)
-    assert client.post("/consultations/c1/summary/retry", headers=PHARM).json()["status"] == "queued"
+    assert client.post("/consultations/c1/summary/retry", headers=PHARM).json()["status"] == "pending"
     run_worker(factory)
-    assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "pending_review"
+    assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "draft"
 
 
 def test_legacy_immediate_summary_blocked_once_pharmacist_connected(setup):

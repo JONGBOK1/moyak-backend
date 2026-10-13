@@ -89,7 +89,7 @@ def end(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(g
 
 @router.get("/summary")
 def summary(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
-    """약사: 초안(pending_review)·공개본, 사용자: 공개된 요약만."""
+    """약사: 초안(draft)·공개본, 사용자: 공개된 요약만."""
     return service.summary(db, cid, actor)
 
 

@@ -280,7 +280,7 @@
       })
         .then((res) => (res.ok ? res.json() : null))
         .then((s) => {
-          if (!s || !["queued", "processing", "pending_review", "failed"].includes(s.status)) return;
+          if (!s || !["pending", "processing", "draft", "failed"].includes(s.status)) return;
           document.getElementById("summaryBody").textContent = "약사가 상담 내용을 정리하고 있어요. 검토가 끝나면 여기에 자동으로 표시돼요.";
           document.getElementById("summaryCard").hidden = false;
         })

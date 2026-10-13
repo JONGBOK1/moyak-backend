@@ -161,7 +161,7 @@
         headers: { "X-Moyak-User-Id": encodeURIComponent(userId), "X-Moyak-Role": "user" },
       });
       if (!res.ok) return false;
-      return ["queued", "processing", "pending_review", "failed"].includes((await res.json()).status);
+      return ["pending", "processing", "draft", "failed"].includes((await res.json()).status);
     } catch (e) {
       return false;
     }

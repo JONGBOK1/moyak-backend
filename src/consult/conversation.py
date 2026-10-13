@@ -121,7 +121,7 @@ def upload(db, cid, actor, client_id, start_ms, extension, audio):
             consented(room)
             existing.audio, existing.digest = audio, digest
             existing.start_ms, existing.filename = start_ms, f"audio.{extension}"
-            existing.status, existing.error = "queued", None
+            existing.status, existing.error = "pending", None
             db.commit()
             return audio_view(existing)
         if existing.digest != digest or existing.start_ms != start_ms:
@@ -151,11 +151,11 @@ def finish(db, cid, actor):
         return session_view(room)
     audio = db.query(ConsultationAudio).filter_by(consultation_id=cid).order_by(
         ConsultationAudio.start_ms, ConsultationAudio.id).all()
-    if any(row.status in ("queued", "processing") for row in audio):
+    if any(row.status in ("pending", "processing") for row in audio):
         raise HTTPException(409, "녹음을 글로 바꾸는 중입니다. 잠시 후 다시 종료해주세요.")
     # 자동 녹음은 조각이 많고 상대가 이미 나갔을 수 있어, 전사 실패 조각은 종료를 막지 않고 요약 한계로 명시한다
     failed = sum(row.status == "failed" for row in audio)
-    audio = [row for row in audio if row.status == "completed" and (row.transcript or "").strip()]
+    audio = [row for row in audio if row.status == "done" and (row.transcript or "").strip()]
     if room.user_consent_at and room.pharmacist_consent_at:
         if consultation.status == ConsultationStatus.PENDING:
             raise HTTPException(409, "약사의 승인 또는 거절을 먼저 확정해주세요.")
@@ -208,7 +208,7 @@ def publish(db, cid, actor, content: SummaryContent):
     if actor.role != "pharmacist":
         raise HTTPException(403, "담당 약사만 요약을 확정할 수 있습니다.")
     row = db.get(ConsultationSummary, cid)
-    if not row or row.status != "pending_review":
+    if not row or row.status != "draft":
         raise HTTPException(409, "확인 대기 중인 요약이 없습니다.")
     row.published = content.model_dump()
     row.reviewed_by = actor.id
@@ -228,6 +228,6 @@ def retry_summary(db, cid, actor):
     row = db.get(ConsultationSummary, cid)
     if not row or row.status != "failed":
         raise HTTPException(409, "실패한 요약만 재시도할 수 있습니다.")
-    row.status, row.error = "queued", None
+    row.status, row.error = "pending", None
     db.commit()
     return summary(db, cid, actor)

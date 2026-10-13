@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def process_one(factory=SessionLocal) -> bool:
     for model in (ConsultationSummary, ConsultationAudio):
         with factory() as db:
-            available = or_(model.status == "queued", and_(
+            available = or_(model.status == "pending", and_(
                 model.status == "processing", model.started_at < _now() - timedelta(minutes=5)))
             pk = model.consultation_id if model is ConsultationSummary else model.id
             row = db.query(model).filter(available).order_by(pk).first()
@@ -41,9 +41,9 @@ def process_one(factory=SessionLocal) -> bool:
         try:
             if model is ConsultationSummary:
                 draft = SummaryContent.model_validate(ai.summarize(payload)).model_dump()
-                values = {"draft": draft, "status": "pending_review"}
+                values = {"draft": draft, "status": "draft"}
             else:
-                values = {"transcript": ai.transcribe(*payload), "audio": None, "status": "completed"}
+                values = {"transcript": ai.transcribe(*payload), "audio": None, "status": "done"}
         except Exception:
             # Provider exceptions can contain transcript/body content: never log them.
             logger.warning("Consultation AI job failed (%s)", model.__tablename__)

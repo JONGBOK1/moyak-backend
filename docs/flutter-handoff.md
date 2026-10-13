@@ -180,7 +180,7 @@ flowchart LR
 - 동의 문구를 보여주고 사용자가 누르면 `POST .../session/consent`. **양측 모두 동의**해야 녹음 가능
 - 양측 동의가 끝나면 **자동으로 녹음 시작**(내 마이크만, 일시정지 버튼 제공). **20초마다 조각**으로 잘라 `POST .../audio?client_id=<조각마다 고유값>&start_ms=<ms>` 본문=음성(webm/m4a 등, Content-Type 지정)
   - `start_ms` = 조각 시작 시각 − 기준점. 기준점은 `GET .../session`의 `recording_elapsed_ms`를 받은 순간 `now - recording_elapsed_ms`로 계산(양측 동의 시점, 서버 기준 — 두 기기 조각이 시간순으로 정렬됨)
-  - 말소리가 거의 없는 조각은 올리지 않아도 됨(비용 절약). 3초마다 `GET .../audio`로 상태(queued/processing/completed/failed) 표시, failed는 **같은 client_id로 같은 파일 재전송**
+  - 말소리가 거의 없는 조각은 올리지 않아도 됨(비용 절약). 3초마다 `GET .../audio`로 상태(pending/processing/done/failed) 표시, failed는 **같은 client_id로 같은 파일 재전송**
   - 통화에서 나갈 때 진행 중 조각을 마무리해 업로드
 - "상담 종료"는 약사가 연결된 상담이면 **통화에서 나가기만** 하고(요약 생성은 약사가 함), 약사가 검토·공개하면 `GET /consultations/{id}`의 `summary`에 글로, `GET .../summary`의 `content`에 6항목으로 나타남
 - 약사 연결 전 상담은 기존처럼 `POST /consultations/{id}/end`(즉시 요약) 사용
@@ -193,7 +193,7 @@ flowchart LR
 ### 4-15-1. 내 상담 내역 `app/consult-history` (2026-10-12 추가)
 - `GET /consultations?user_id=` (최신순) → 취소(cancelled)는 숨김
 - 카드: 신청 일시, 상태(pending "상담 진행 중" · approved "처방 완료" · rejected "처방 불가"), 진입 경로(바로 상담/챗봇 후), 처방약 또는 거절 사유
-- `summary`가 있으면 접이식 "📝 상담 요약 보기"(■ 항목 제목 굵게). 없으면 `GET /consultations/{id}/summary`(헤더 `X-Moyak-User-Id`, `X-Moyak-Role: user`)가 queued/processing/pending_review/failed일 때만 "약사가 상담 요약을 정리하고 있어요"
+- `summary`가 있으면 접이식 "📝 상담 요약 보기"(■ 항목 제목 굵게). 없으면 `GET /consultations/{id}/summary`(헤더 `X-Moyak-User-Id`, `X-Moyak-Role: user`)가 pending/processing/draft/failed일 때만 "약사가 상담 요약을 정리하고 있어요"
 - "자세히 보기" → 약사상담 화면 `?id=<상담ID>` (그 상담 결과를 표시, 새 상담을 만들지 않음)
 
 ### 4-16. 전자 구매 허가서 `app/permit-list`

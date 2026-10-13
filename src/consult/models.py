@@ -225,7 +225,7 @@ class ConsultationAudio(Base):
     audio = Column(LargeBinary)
     digest = Column(String, nullable=False)
     transcript = Column(Text)
-    status = Column(String, nullable=False, default="queued", index=True)  # queued/processing/completed/failed
+    status = Column(String, nullable=False, default="pending", index=True)  # pending/processing/done/failed (팀 Supabase와 같은 값)
     lease = Column(String)
     started_at = Column(DateTime)
     created_at = Column(DateTime, default=_now, nullable=False)
@@ -238,7 +238,7 @@ class ConsultationSummary(Base):
 
     __tablename__ = "consultation_summaries"
     consultation_id = Column(String, ForeignKey("consultation_requests.id"), primary_key=True)
-    status = Column(String, nullable=False, default="queued", index=True)  # queued/processing/pending_review/published/failed
+    status = Column(String, nullable=False, default="pending", index=True)  # pending/processing/draft/published/failed (팀 Supabase와 같은 값)
     source = Column(JSON, nullable=False)
     draft = Column(JSON)
     published = Column(JSON)

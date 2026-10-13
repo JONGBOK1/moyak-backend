@@ -46,6 +46,14 @@ def _migrate_sqlite_to_shared_schema() -> None:
             if "text" not in cols:
                 conn.execute(text("ALTER TABLE consultation_messages RENAME TO consultation_messages_old"))
                 conn.execute(text("DROP INDEX IF EXISTS ix_consultation_messages_consultation_id"))
+    # 상태값을 팀 Supabase와 같은 이름으로 (queued→pending, completed→done, pending_review→draft)
+    with engine.begin() as conn:
+        if insp.has_table("consultation_audio"):
+            conn.execute(text("UPDATE consultation_audio SET status = CASE status WHEN 'queued' THEN 'pending' "
+                              "WHEN 'completed' THEN 'done' ELSE status END WHERE status IN ('queued', 'completed')"))
+        if insp.has_table("consultation_summaries"):
+            conn.execute(text("UPDATE consultation_summaries SET status = CASE status WHEN 'queued' THEN 'pending' "
+                              "WHEN 'pending_review' THEN 'draft' ELSE status END WHERE status IN ('queued', 'pending_review')"))
     if insp.has_table("consultation_messages_old"):
         from src.consult.models import ConsultationMessage
 

@@ -18,7 +18,7 @@
     symptoms: "호소한 증상", discussion: "상담 내용", medication_guidance: "복약 안내",
     precautions: "주의사항", follow_up: "후속 안내", needs_verification: "확인이 필요한 내용",
   };
-  const AUDIO_STATUS = { queued: "전사 대기", processing: "전사 중", completed: "전사 완료", failed: "전사 실패" };
+  const AUDIO_STATUS = { pending: "전사 대기", processing: "전사 중", done: "전사 완료", failed: "전사 실패" };
   const SEGMENT_MS = 20000;   // 조각 길이
   const SILENCE_LEVEL = 0.02; // 조각 안 최대 음량(RMS)이 이보다 작으면 무음으로 보고 버림
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -207,15 +207,15 @@
       const shown = files.filter((f) => isPharm || f.sender_role === role);
       if (shown.length) {
         const count = (st) => shown.filter((f) => f.status === st).length;
-        const busy = count("queued") + count("processing");
-        html += `<div class="note">녹음 조각 ${shown.length}개 · 전사 완료 ${count("completed")}` +
+        const busy = count("pending") + count("processing");
+        html += `<div class="note">녹음 조각 ${shown.length}개 · 전사 완료 ${count("done")}` +
           (busy ? ` · 전사 중 ${busy}` : "") +
           (count("failed") ? ` · <span class="err">실패 ${count("failed")}</span>` : "") + `</div>`;
         const retry = shown.filter((f) => f.status === "failed" && blobs[f.client_id]);
         if (retry.length) html += `<div class="row"><button class="alt" data-a="reup">실패한 조각 다시 보내기 (${retry.length})</button></div>`;
       }
       if (isPharm) {
-        const lines = (transcript || []).filter((t) => t.status !== "completed" || (t.text || "").trim());
+        const lines = (transcript || []).filter((t) => t.status !== "done" || (t.text || "").trim());
         if (lines.length) {
           html += `<div class="sum-label">전사 원문 (동의 시점부터 시간순)</div><div class="transcript">${lines.map((t) =>
             `${mmss(t.start_ms)} [${t.sender_role === "pharmacist" ? "약사" : "환자"}] ${esc(t.text || "(" + (AUDIO_STATUS[t.status] || t.status) + ")")}`).join("\n")}</div>`;
@@ -233,11 +233,11 @@
       if (!room.ended_at || !summary) return "";
       const st = summary.status;
       if (st === "not_requested") return `<div class="note">AI 요약 없이 종료됐어요. (녹음 동의가 없었거나 요약할 대화가 없었어요)</div>`;
-      if (st === "queued" || st === "processing") return `<div class="note">📝 ${isPharm ? "요약 초안을 만드는 중…" : "약사가 상담 요약을 준비하고 있어요."}</div>`;
+      if (st === "pending" || st === "processing") return `<div class="note">📝 ${isPharm ? "요약 초안을 만드는 중…" : "약사가 상담 요약을 준비하고 있어요."}</div>`;
       if (st === "failed") return isPharm
         ? `<div class="err">요약 생성에 실패했어요.</div><div class="row"><button data-a="retry">요약 다시 만들기</button></div>`
         : `<div class="note">약사가 상담 요약을 준비하고 있어요.</div>`;
-      if (st === "pending_review") {
+      if (st === "draft") {
         if (!isPharm) return `<div class="note">📝 약사가 요약을 검토하고 있어요. 검토가 끝나면 여기에 표시돼요.</div>`;
         return `<div class="sum-label">📝 요약 초안 검토 (한 줄에 한 항목, 수정 후 공개)</div>` +
           Object.entries(LABELS).map(([k, label]) =>
@@ -264,7 +264,7 @@
       everConnected = true;
       if (busyAction) return; // 종료 처리 중엔 버튼 상태를 덮어쓰지 않는다
       // 약사가 요약 초안을 고치는 중이면 다시 그려서 입력을 지우지 않는다
-      if (lastSummaryStatus === "pending_review" && isPharm && root.querySelector("textarea")) return;
+      if (lastSummaryStatus === "draft" && isPharm && root.querySelector("textarea")) return;
       let room = null, files = [], summary = null, transcript = null;
       try {
         room = await call("GET", "/session");
