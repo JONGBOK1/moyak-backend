@@ -57,7 +57,7 @@ class MessageCreateRequest(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    id: str
+    id: int
     sender_role: str
     sender_id: str
     content: str

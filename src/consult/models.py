@@ -10,13 +10,27 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import TypeDecorator
 
 from src.consult.db import Base
 
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+class UUIDString(TypeDecorator):
+    """코드에서는 문자열 UUID. 팀 Supabase(Postgres)에서는 네이티브 uuid 컬럼, 로컬 SQLite에서는 문자열로 저장."""
+
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        return dialect.type_descriptor(String())
 
 
 def _now() -> datetime:
@@ -80,11 +94,15 @@ class ConsultationMessage(Base):
 
     __tablename__ = "consultation_messages"
 
-    id = Column(String, primary_key=True, default=_uuid)
+    # 팀 Supabase(한별)와 같은 구조: 자동 증가 번호 + 내용 컬럼 이름은 "text" + 중복 전송 방지용 client_id
+    __table_args__ = (UniqueConstraint("consultation_id", "sender_role", "sender_id", "client_id"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
     consultation_id = Column(String, ForeignKey("consultation_requests.id"), nullable=False, index=True)
     sender_role = Column(String, nullable=False)  # MessageSender.USER / PHARMACIST
     sender_id = Column(String, nullable=False)
-    content = Column(String, nullable=False)
+    client_id = Column(String, nullable=False, default=_uuid)
+    content = Column("text", Text, nullable=False)  # 코드에서는 content, DB 컬럼은 text
     created_at = Column(DateTime, default=_now, nullable=False)
 
     consultation = relationship("ConsultationRequest", back_populates="messages")
@@ -115,7 +133,9 @@ class ApprovedPurchase(Base):
 class VendingMachine(Base):
     __tablename__ = "vending_machines"
 
-    id = Column(String, primary_key=True)  # 자판기 고유 코드
+    # 자판기 코드(예: VM-001). 팀 Supabase의 vending_machines는 내부 UUID(id)와 사람이 보는 code를 따로 두고,
+    # 상품·주문 테이블도 code를 참조한다. 우리 코드는 이 code를 자판기 id로 쓴다(UUID id는 DB가 자동 생성).
+    id = Column("code", String, primary_key=True)
     name = Column(String, nullable=False)
     qr_token = Column(String, nullable=True)
     qr_token_expires_at = Column(DateTime, nullable=True)
@@ -138,8 +158,8 @@ class Product(Base):
 
     __tablename__ = "products"
 
-    id = Column(String, primary_key=True, default=_uuid)
-    machine_id = Column(String, ForeignKey("vending_machines.id"), nullable=False, index=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid)
+    machine_id = Column(String, ForeignKey("vending_machines.code"), nullable=False, index=True)
     item_seq = Column(String, nullable=False)
     item_name = Column(String, nullable=False)
     company = Column(String, nullable=False)
@@ -154,8 +174,8 @@ class KioskOrder(Base):
 
     __tablename__ = "kiosk_orders"
 
-    id = Column(String, primary_key=True, default=_uuid)
-    machine_id = Column(String, ForeignKey("vending_machines.id"), nullable=False, index=True)
+    id = Column(UUIDString, primary_key=True, default=_uuid)
+    machine_id = Column(String, ForeignKey("vending_machines.code"), nullable=False, index=True)
     status = Column(String, default=OrderStatus.CART, nullable=False)
     total_amount = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=_now, nullable=False)
@@ -168,9 +188,9 @@ class KioskOrder(Base):
 class KioskOrderItem(Base):
     __tablename__ = "kiosk_order_items"
 
-    id = Column(String, primary_key=True, default=_uuid)
-    order_id = Column(String, ForeignKey("kiosk_orders.id"), nullable=False)
-    product_id = Column(String, ForeignKey("products.id"), nullable=False)
+    id = Column(UUIDString, primary_key=True, default=_uuid)
+    order_id = Column(UUIDString, ForeignKey("kiosk_orders.id"), nullable=False)
+    product_id = Column(UUIDString, ForeignKey("products.id"), nullable=False)
     item_name = Column(String, nullable=False)
     unit_price = Column(Integer, nullable=False)
     quantity = Column(Integer, nullable=False)

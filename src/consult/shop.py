@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from src.consult.db import is_shared_db
 from src.consult.models import KioskOrder, KioskOrderItem, OrderStatus, Product, VendingMachine
 
 # 상품을 등록할 관리 화면이 아직 없어서, 자판기에 상품이 하나도 없으면
@@ -38,6 +39,8 @@ class InvalidStateError(Exception):
 def _ensure_machine(db: Session, machine_id: str) -> VendingMachine:
     machine = db.get(VendingMachine, machine_id)
     if machine is None:
+        if is_shared_db(db):
+            raise NotFoundError(f"등록되지 않은 자판기입니다: {machine_id}")
         machine = VendingMachine(id=machine_id, name=machine_id)
         db.add(machine)
         db.commit()
@@ -45,6 +48,8 @@ def _ensure_machine(db: Session, machine_id: str) -> VendingMachine:
 
 
 def _seed_products_if_empty(db: Session, machine_id: str) -> None:
+    if is_shared_db(db):  # 팀 DB의 상품은 팀이 관리한다
+        return
     exists = db.query(Product).filter(Product.machine_id == machine_id).first()
     if exists is not None:
         return

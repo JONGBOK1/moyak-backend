@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from src.consult import summary as summary_module
+from src.consult.db import is_shared_db
 from src.consult import video
 from src.consult.models import (
     ApprovedPurchase,
@@ -204,6 +205,8 @@ def end_consultation(db: Session, consultation_id: str, llm) -> ConsultationRequ
 def rotate_qr_token(db: Session, machine_id: str, machine_name: str | None = None) -> VendingMachine:
     machine = db.get(VendingMachine, machine_id)
     if machine is None:
+        if is_shared_db(db):  # 팀 DB에는 등록된 자판기만 — 주소를 잘못 쳐도 자판기가 새로 생기지 않게
+            raise NotFoundError(f"등록되지 않은 자판기입니다: {machine_id}")
         machine = VendingMachine(id=machine_id, name=machine_name or machine_id)
         db.add(machine)
 

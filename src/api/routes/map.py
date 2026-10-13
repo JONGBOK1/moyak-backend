@@ -76,13 +76,13 @@ _SUPABASE_MACHINES = """
 """
 
 _LOCAL_MACHINES = """
-    SELECT m.id, m.id AS code, m.name, COALESCE(m.address, '') AS address,
+    SELECT m.code AS id, m.code, m.name, COALESCE(m.address, '') AS address,
            m.latitude, m.longitude, m.operating_hours,
            COUNT(p.id) AS item_count, COALESCE(SUM(p.stock), 0) AS stock_count
     FROM vending_machines m
-    LEFT JOIN products p ON p.machine_id = m.id
+    LEFT JOIN products p ON p.machine_id = m.code
     WHERE m.is_active AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL {extra}
-    GROUP BY m.id ORDER BY m.name, m.id LIMIT 501
+    GROUP BY m.code ORDER BY m.name, m.code LIMIT 501
 """
 
 
@@ -94,7 +94,7 @@ def _query_machines(engine, machine_id: str | None = None):
             extra = "AND m.id::text = :machine_id" if machine_id else ""
             rows = conn.execute(text(_SUPABASE_MACHINES.format(extra=extra)), params).mappings().all()
             return "supabase", rows
-        extra = "AND m.id = :machine_id" if machine_id else ""
+        extra = "AND m.code = :machine_id" if machine_id else ""
         rows = conn.execute(text(_LOCAL_MACHINES.format(extra=extra)), params).mappings().all()
         return "local", rows
 

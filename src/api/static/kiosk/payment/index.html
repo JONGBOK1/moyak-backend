@@ -138,7 +138,7 @@
 </style>
 <script>
   const params = new URLSearchParams(location.search);
-  const machineId = params.get("machine") || "M001";
+  const machineId = params.get("machine") || "VM-001";
   const orderId = params.get("order"); // 의약외품 장바구니 주문
   // 약사 승인 약(cart2) 결제 — 쉼표로 구분된 승인 건 id 목록
   const purchaseIds = (params.get("purchases") || "").split(",").filter(Boolean);

@@ -203,7 +203,7 @@ flowchart LR
 
 ## 5. 키오스크 화면 흐름
 
-- 자판기 ID: 웹은 주소의 `?machine=` (기본 `M001`) → **앱에서는 설정값**(자판기마다 고정)
+- 자판기 ID: 웹은 주소의 `?machine=` (기본 `VM-001`, 팀 Supabase의 자판기 `code`) → **앱에서는 설정값**(자판기마다 고정)
 - 공용 기기라 **로그아웃 = `POST /vending/machines/{id}/rotate-qr`** (새 QR 발급 시 서버가 로그인 해제)
 
 ```mermaid

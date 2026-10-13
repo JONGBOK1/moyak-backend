@@ -84,7 +84,7 @@
 
 <script>
   const params = new URLSearchParams(location.search);
-  const machineId = params.get("machine") || "M001";
+  const machineId = params.get("machine") || "VM-001";
   const q = (s) => document.querySelector(s);
   let nextUrl = null;
   const next = () => { if (nextUrl) location.href = nextUrl; };

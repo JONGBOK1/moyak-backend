@@ -197,6 +197,13 @@ moyak-backend/
 
 **중요한 설계 원칙**: AI(챗봇)는 이 흐름 어디에도 "승인" 권한이 없고, 사용자도 약품을 직접 지정하지 않는다. 어떤 약을 줄지는 항상 약사가 상담 내용을 보고 승인 시점에 정하며(마치 처방하듯), `pharmacist_id`가 명시적으로 호출하는 `/consultations/{id}/decision`에서만 이 결정이 발생한다. 모든 승인/수령 기록이 DB에 남는다(감사 로그 역할).
 
+**팀 Supabase DB 통합 (2026-10-13, `dev` 브랜치에서 진행 중 — 아직 master/Render 미반영)**:
+- `DATABASE_URL`을 팀 Supabase(Postgres) 주소로 바꾸면 상담·채팅·녹음·요약·승인·키오스크 데이터가 한별 서버와 같은 테이블에 저장된다(재시작해도 유지). 로컬 개발은 SQLite 유지 권장.
+- 우리 코드를 Supabase 구조에 맞춤(팀 DB 구조는 변경하지 않음): 자판기는 `code`(VM-001…)가 우리 코드의 자판기 id(Supabase 내부 UUID `id`는 DB가 생성), 상품·주문 id는 Postgres에서 uuid 타입(`UUIDString`), 채팅은 DB 컬럼 `text` + 자동 증가 id + `client_id`(코드·API에선 그대로 `content`).
+- 공유 DB(Postgres)에서는 테이블 생성·컬럼 추가·데모 자판기/상품 자동 생성을 하지 않는다(`is_shared_db`). 등록 안 된 자판기 코드는 404. 키오스크 기본 자판기는 `VM-001`(로컬 시드도 VM-001~005).
+- 로컬 SQLite는 시작 시 자동 변환(`_migrate_sqlite_to_shared_schema`: vending_machines.id→code, 채팅 테이블 재구성·기존 메시지 보존).
+- 2026-10-13 Supabase 읽기 전용 점검: 우리 ORM 조회(자판기·상품·주문·상담·채팅·녹음·요약·승인) 전부 정상. 한별 데이터는 전부 `is_sample=true`, 녹음 상태값이 한별은 `done`(우리는 `completed`)이라 한별 녹음은 우리 요약 재료에서 빠짐.
+
 **아직 스텁인 부분** (실제 서비스 전 반드시 교체 필요):
 - **사용자/약사 인증 없음**: `user_id`/`pharmacist_id`를 요청 바디로 그대로 받는다. 실제 인증 시스템이 붙으면 그 값으로 교체.
 - **화상상담**: Daily.co 프리빌트 iframe으로 연결됨(`DAILY_API_KEY`/`DAILY_SUBDOMAIN` 필요). 다만 자체 디자인의 커스텀 통화 UI는 아니고 Daily 기본 UI 그대로 노출됨 — Figma 디자인과 통일하려면 Daily의 JS/Flutter SDK로 직접 UI를 짜야 함.
