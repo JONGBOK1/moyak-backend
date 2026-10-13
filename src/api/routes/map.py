@@ -14,13 +14,13 @@ import os
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text, inspect
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from pathlib import Path
 from dotenv import load_dotenv
 from src import config
-from src.database.connection import create_database_engine
+from src.map_database import create_database_engine
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
@@ -38,7 +38,7 @@ def _map_database_url() -> str | None:
 
 @lru_cache(maxsize=1)
 def map_engine():
-    url = _map_database_url() or config.DATABASE_URL
+    url = _map_database_url()
     if url:
         return create_database_engine(url)
     # Supabase 미설정 시 앱 자체 DB(시연용 가상 자판기 + 키오스크 재고)를 쓴다
@@ -76,36 +76,26 @@ _SUPABASE_MACHINES = """
 """
 
 _LOCAL_MACHINES = """
-    SELECT m.id, m.id AS code, m.name, COALESCE(m.address, '') AS address,
+    SELECT m.code AS id, m.code, m.name, COALESCE(m.address, '') AS address,
            m.latitude, m.longitude, m.operating_hours,
            COUNT(p.id) AS item_count, COALESCE(SUM(p.stock), 0) AS stock_count
     FROM vending_machines m
-    LEFT JOIN products p ON p.machine_id = m.id
+    LEFT JOIN products p ON p.machine_id = m.code
     WHERE m.is_active AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL {extra}
-    GROUP BY m.id ORDER BY m.name, m.id LIMIT 501
+    GROUP BY m.code ORDER BY m.name, m.code LIMIT 501
 """
 
 
 def _query_machines(engine, machine_id: str | None = None):
     params = {"machine_id": machine_id} if machine_id else {}
     with engine.connect() as conn, conn.begin():
-        if engine.dialect.name == "postgresql":
+        if engine.dialect.name == "postgresql" and _map_database_url():
             _begin_read_only(conn)
             extra = "AND m.id::text = :machine_id" if machine_id else ""
             rows = conn.execute(text(_SUPABASE_MACHINES.format(extra=extra)), params).mappings().all()
             return "supabase", rows
-        extra = "AND m.id = :machine_id" if machine_id else ""
-        columns = {c['name'] for c in inspect(conn).get_columns('vending_machines')}
-        hours = 'm.operating_hours' if 'operating_hours' in columns else 'NULL'
-        inventory = _local_inventory_sql(conn)
-        rows = conn.execute(text(f"""
-          SELECT m.id,m.id AS code,m.name,COALESCE(m.address,'') AS address,
-                 m.latitude,m.longitude,{hours} AS operating_hours,
-                 COUNT(p.item_seq) AS item_count,COALESCE(SUM(p.stock),0) AS stock_count
-          FROM vending_machines m LEFT JOIN ({inventory}) p ON p.machine_id=m.id
-          WHERE m.is_active AND m.latitude IS NOT NULL AND m.longitude IS NOT NULL {extra}
-          GROUP BY m.id ORDER BY m.name,m.id LIMIT 501
-        """), params).mappings().all()
+        extra = "AND m.code = :machine_id" if machine_id else ""
+        rows = conn.execute(text(_LOCAL_MACHINES.format(extra=extra)), params).mappings().all()
         return "local", rows
 
 
@@ -157,8 +147,6 @@ def machine_detail(
     engine=Depends(map_engine),
 ):
     """자판기 하나의 위치 + 품목별 재고 — 지도에서 마커를 눌렀을 때 쓴다."""
-    if (lat is None) != (lng is None):
-        raise HTTPException(422, 'lat과 lng는 함께 보내야 합니다.')
     try:
         source, rows = _query_machines(engine, machine_id)
         if not rows:
@@ -167,22 +155,20 @@ def machine_detail(
             if source == "supabase":
                 _begin_read_only(conn)
                 inventory = conn.execute(
-                    text("SELECT i.item_seq, i.stock, i.price, COALESCE(d.item_name,p.item_name,i.item_seq) AS item_name "
-                         "FROM public.machine_inventory i LEFT JOIN public.drugs d ON d.item_seq=i.item_seq "
-                         "LEFT JOIN LATERAL (SELECT item_name FROM public.drug_permissions "
-                         "WHERE item_seq=i.item_seq ORDER BY item_name LIMIT 1) p ON true "
+                    text("SELECT i.item_seq, i.stock, i.price FROM public.machine_inventory i "
                          "WHERE i.machine_id::text = :machine_id ORDER BY i.item_seq"),
                     {"machine_id": machine_id},
                 ).mappings().all()
+                names = _drug_names()
                 items = [
-                    {"item_seq": r["item_seq"], "item_name": r['item_name'],
+                    {"item_seq": r["item_seq"], "item_name": names.get(str(r["item_seq"]), str(r["item_seq"])),
                      "stock": r["stock"], "price": int(r["price"]) if r["price"] is not None else None, "category": None}
                     for r in inventory
                 ]
             else:
                 inventory = conn.execute(
-                    text("SELECT item_seq, item_name, stock, price, category FROM (" + _local_inventory_sql(conn) +
-                         ") i WHERE machine_id = :machine_id ORDER BY category, item_name"),
+                    text("SELECT item_seq, item_name, stock, price, category FROM products "
+                         "WHERE machine_id = :machine_id ORDER BY category, item_name"),
                     {"machine_id": machine_id},
                 ).mappings().all()
                 items = [dict(r) for r in inventory]
@@ -197,24 +183,13 @@ def machine_detail(
 def _db_unavailable(e: SQLAlchemyError) -> HTTPException:
     # 원인 파악용으로 서버 로그엔 오류 종류/메시지를 남기고(엔진이 hide_parameters라 비밀번호·쿼리 값은 안 나옴),
     # 응답엔 오류 종류 이름만 준다 — DB 주소·비밀번호·SQL은 절대 응답에 넣지 않는다.
-    logger.warning('map DB error: %s', type(e).__name__)
-    return HTTPException(503, DB_ERROR)
+    orig = getattr(e, "orig", None) or e
+    logger.warning("map DB error: %s: %s", type(orig).__name__, str(orig).splitlines()[0][:300] if str(orig) else "")
+    return HTTPException(503, f"{DB_ERROR} ({type(orig).__name__})")
 
 
-def _local_inventory_sql(conn):
-    tables = set(inspect(conn).get_table_names())
-    parts = []
-    if 'products' in tables:
-        parts.append('SELECT machine_id,item_seq,item_name,stock,price,category FROM products')
-    if 'vending_inventory' in tables:
-        cols = {c['name'] for c in inspect(conn).get_columns('vending_inventory')}
-        seq = 'drug_id' if 'drug_id' in cols else 'CAST(id AS TEXT)'
-        name = 'drug_name' if 'drug_name' in cols else seq
-        price = 'price' if 'price' in cols else 'NULL'
-        category = 'category' if 'category' in cols else 'NULL'
-        exclude = (' WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.machine_id=v.machine_id '
-                   'AND p.item_seq=v.drug_id)') if 'products' in tables and 'drug_id' in cols else ''
-        parts.append(f'SELECT machine_id,{seq} AS item_seq,{name} AS item_name,stock_count AS stock,'
-                     f'{price} AS price,{category} AS category FROM vending_inventory v' + exclude)
-    return ' UNION ALL '.join(parts) if parts else (
-        'SELECT NULL AS machine_id,NULL AS item_seq,NULL AS item_name,0 AS stock,NULL AS price,NULL AS category WHERE 0=1')
+def _drug_names() -> dict[str, str]:
+    """Supabase 재고는 품목기준코드(item_seq)만 있어서, 약사 검색용 약품 인덱스로 이름을 붙인다."""
+    from src.api.routes.drugs import _load_drugs
+
+    return {d.item_seq: d.item_name for d in _load_drugs()}

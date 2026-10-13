@@ -100,7 +100,10 @@ def pay_purchases(payload: PayPurchasesRequest, db: Session = Depends(get_db)) -
 @router.post("/machines/{machine_id}/rotate-qr", response_model=QrTokenResponse)
 def rotate_qr(machine_id: str, name: str | None = None, db: Session = Depends(get_db)) -> QrTokenResponse:
     """자판기가 주기적으로 호출 — 새 QR 토큰을 발급받아 화면에 QR로 표시한다."""
-    machine = service.rotate_qr_token(db, machine_id=machine_id, machine_name=name)
+    try:
+        machine = service.rotate_qr_token(db, machine_id=machine_id, machine_name=name)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     svg = _qr_svg({"machine_id": machine.id, "qr_token": machine.qr_token})
     return QrTokenResponse(
         machine_id=machine.id,

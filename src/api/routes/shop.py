@@ -92,6 +92,16 @@ def pay_order(order_id: str, db: Session = Depends(get_db)) -> OrderResponse:
         raise HTTPException(status_code=409, detail=str(e))
 
 
+@router.post('/orders/{order_id}/cancel', response_model=OrderResponse)
+def cancel_order(order_id: str, db: Session = Depends(get_db)):
+    try:
+        return shop.cancel_order(db, order_id)
+    except shop.NotFoundError as e:
+        raise HTTPException(404, str(e))
+    except shop.InvalidStateError as e:
+        raise HTTPException(409, str(e))
+
+
 @router.post("/orders/{order_id}/dispense", response_model=OrderResponse)
 def dispense_order(order_id: str, db: Session = Depends(get_db)) -> OrderResponse:
     try:

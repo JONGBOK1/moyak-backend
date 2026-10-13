@@ -21,10 +21,10 @@ slowapi==0.1.10
 
 # 약사 상담 / 자판기 연동
 SQLAlchemy==2.0.52
-psycopg[binary]==3.3.6
+qrcode==8.0
 
 # STEP 7: 테스트
 pytest==8.3.3
 
-# Kiosk QR rendering
-qrcode==8.0
+# Read-only PostgreSQL map catalog
+psycopg[binary]==3.3.6

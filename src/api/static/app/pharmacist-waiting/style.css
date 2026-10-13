@@ -776,3 +776,6 @@
 .summary-body { font-size: 13px; line-height: 1.6; color: #2b2b2b; white-space: pre-wrap; }
 .join-now-btn.pharmacist-in { background: #3e2723; color: #ffd54f; animation: joinPulse 1.6s infinite; }
 @keyframes joinPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 213, 79, 0.6); } 50% { box-shadow: 0 0 0 8px rgba(255, 213, 79, 0); } }
+/* 상담 요약 카드 등으로 내용이 길어지면 하단 바에 가리지 않고 스크롤 */
+.waiting-content { overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.waiting-content::-webkit-scrollbar { display: none; }

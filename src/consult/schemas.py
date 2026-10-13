@@ -1,18 +1,20 @@
+"""상담 음성·요약 흐름 스키마 (한별 구현 이식, 2026-10-12)."""
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, AliasChoices
-from uuid import uuid4
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
 ClientID = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9_-]{1,80}$")]
 SummaryItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
-
-class MessageCreate(BaseModel):
-    client_id: ClientID = Field(default_factory=lambda: uuid4().hex)
-    text: NonBlank = Field(validation_alias=AliasChoices('text', 'content'))
-    sender_id: str | None = None
-    sender_role: str | None = None
+# 요약 6개 항목 (약사 검토·수정 화면과 사용자 공개 문구에서 같은 순서/라벨 사용)
+SUMMARY_LABELS = {
+    "symptoms": "호소한 증상",
+    "discussion": "상담 내용",
+    "medication_guidance": "복약 안내",
+    "precautions": "주의사항",
+    "follow_up": "후속 안내",
+    "needs_verification": "확인이 필요한 내용",
+}
 
 
 class SummaryContent(BaseModel):

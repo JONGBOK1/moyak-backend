@@ -228,7 +228,7 @@
 
 <script>
   const params = new URLSearchParams(location.search);
-  const machineId = params.get("machine") || "M001";
+  const machineId = params.get("machine") || "VM-001";
   const CART_KEY = `moyak_kiosk_cart_${machineId}`;
 
   // Figma 디자인의 카드 6개는 순서가 고정돼 있어서, 실제 상품명으로 매칭해 productId를 붙인다.

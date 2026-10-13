@@ -5,6 +5,7 @@ import hmac
 import json
 import time
 import os
+from urllib.parse import unquote
 from dataclasses import dataclass
 
 from fastapi import Header, HTTPException, Request
@@ -86,7 +87,8 @@ def optional_actor(request: Request, authorization: str = Header(default="")) ->
     subject, role = request.headers.get('x-moyak-user-id'), request.headers.get('x-moyak-role')
     if subject is None and role is None:
         return None
-    return claimed_actor(subject, role)
+    # 브라우저는 한글을 헤더에 그대로 못 넣어서 화면이 encodeURIComponent로 보낸다 (영문 ID는 그대로)
+    return claimed_actor(unquote(subject) if subject else subject, role)
 
 
 def current_actor(request: Request, authorization: str = Header(default="")) -> Actor:

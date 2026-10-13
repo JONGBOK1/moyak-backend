@@ -122,7 +122,7 @@
 </style>
 <script>
   const params = new URLSearchParams(location.search);
-  const machineId = params.get("machine") || "M001";
+  const machineId = params.get("machine") || "VM-001";
   const m = encodeURIComponent(machineId);
   // 본인인증 구매 경로 (약사 승인건) — 단건(purchase) 또는 결제한 여러 건(purchases, 쉼표 구분)
   const purchaseIds = (params.get("purchases") || params.get("purchase") || "").split(",").filter(Boolean);

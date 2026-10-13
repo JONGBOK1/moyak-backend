@@ -1,4 +1,14 @@
-"""Persisted chat, recording consent and pharmacist-reviewed summary lifecycle."""
+"""상담 음성 기록 동의 · 음성 전사 · 약사 검토 요약 흐름 (한별 구현 이식, 2026-10-12).
+
+흐름: 약사 배정(claim) → 양측 동의(consent) → 각자 마이크 녹음 업로드(audio) → 워커가 전사
+     → 약사 승인/거절 → 약사가 상담 종료(session/end) → 워커가 6항목 요약 초안 생성
+     → 약사 검토·수정 후 공개(summary/publish) → 공개된 요약만 사용자에게 보임
+
+우리 기존 기능과의 연결
+- 채팅은 기존 `/consultations/{id}/messages`(3초 폴링)를 그대로 쓰고, 요약 재료로 함께 넣는다.
+- 공개 시 `consultation_requests.summary`(글)·`ended_at`도 채워서, 기존 사용자 화면(대기/화상 요약 카드)에 그대로 표시된다.
+- 이 흐름(ConsultationSession)이 시작된 상담은 기존 즉시 요약(`POST /end`)을 막는다 — 검토 없이 공개되면 안 되므로.
+"""
 import hashlib
 import json
 
@@ -7,14 +17,24 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from src.consult.auth import Actor
-from src.consult.models import (ConsultationRequest, ConsultationSession, ConsultationMessage,
-                                ConsultationAudio, ConsultationSummary, _now)
-from src.consult.schemas import MessageCreate, SummaryContent
+from src.consult.models import (
+    ConsultationAudio,
+    ConsultationMessage,
+    ConsultationRequest,
+    ConsultationSession,
+    ConsultationStatus,
+    ConsultationSummary,
+    _now,
+)
+from src.consult.schemas import SUMMARY_LABELS, SummaryContent
+
+DIRECT_REQUEST_SUMMARY = "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)"
+MAX_AUDIO_PER_CONSULTATION = 240
 
 
 def participant(db: Session, cid: str, actor: Actor, *, lock=False):
     if lock:
-        # Serialize mutations of a room on SQLite as well as PostgreSQL.
+        # 같은 상담에 대한 동시 변경을 직렬화 (SQLite/PostgreSQL 공통)
         db.execute(update(ConsultationSession).where(
             ConsultationSession.consultation_id == cid
         ).values(revision=ConsultationSession.revision + 1))
@@ -27,21 +47,22 @@ def participant(db: Session, cid: str, actor: Actor, *, lock=False):
     if not allowed:
         raise HTTPException(403, "상담 참여자만 접근할 수 있습니다.")
     if not room:
-        raise HTTPException(409, "약사 배정이 필요합니다.")
+        raise HTTPException(409, "약사가 아직 상담을 연결하지 않았습니다.")
     return consultation, room
 
 
 def assign(db: Session, cid: str, actor: Actor):
+    """약사가 상담을 맡는다(담당 약사 배정). 같은 약사가 다시 눌러도 그대로 성공."""
     if actor.role != "pharmacist":
-        raise HTTPException(403, "약사만 상담을 배정받을 수 있습니다.")
-    # This also locks the parent row to make duplicate assignments idempotent.
+        raise HTTPException(403, "약사만 상담을 연결할 수 있습니다.")
     changed = db.execute(update(ConsultationRequest).where(
         ConsultationRequest.id == cid,
-        ConsultationRequest.status == "pending",
+        ConsultationRequest.status != ConsultationStatus.CANCELLED,
+        ConsultationRequest.ended_at.is_(None),
         (ConsultationRequest.pharmacist_id.is_(None) | (ConsultationRequest.pharmacist_id == actor.id)),
     ).values(pharmacist_id=actor.id)).rowcount
     if not changed:
-        raise HTTPException(409, "배정할 수 없는 상담입니다.")
+        raise HTTPException(409, "연결할 수 없는 상담입니다 (취소·종료됐거나 다른 약사가 담당).")
     room = db.get(ConsultationSession, cid)
     if not room:
         room = ConsultationSession(consultation_id=cid, pharmacist_id=actor.id)
@@ -63,8 +84,14 @@ def consented(room):
 
 
 def session_view(room):
-    return {key: getattr(room, key) for key in (
+    view = {key: getattr(room, key) for key in (
         "consultation_id", "pharmacist_id", "user_consent_at", "pharmacist_consent_at", "ended_at")}
+    # 녹음 시간 기준점 = 양측 동의가 모두 끝난 시각. 서버가 경과 시간을 알려줘야 두 기기의 녹음 조각을
+    # 같은 시계로 정렬할 수 있다(기기 시계·시간대 차이와 무관).
+    both = room.user_consent_at and room.pharmacist_consent_at
+    view["recording_elapsed_ms"] = (
+        int((_now() - max(room.user_consent_at, room.pharmacist_consent_at)).total_seconds() * 1000) if both else None)
+    return view
 
 
 def consent(db, cid, actor):
@@ -75,49 +102,6 @@ def consent(db, cid, actor):
         setattr(room, field, _now())
     db.commit()
     return session_view(room)
-
-
-def message_view(message):
-    return {**{key: getattr(message, key) for key in (
-        "id", "consultation_id", "sender_id", "sender_role", "client_id", "text", "created_at")},
-        "content": message.text}
-
-
-def messages(db, cid, actor, after=0, limit=100):
-    if actor is None:
-        # 팀 규격(신원 없이 폴링) 호환: 상담 존재 여부만 확인한다.
-        if not db.get(ConsultationRequest, cid):
-            raise HTTPException(404, "상담을 찾을 수 없습니다.")
-    else:
-        participant(db, cid, actor)
-    rows = db.query(ConsultationMessage).filter(
-        ConsultationMessage.consultation_id == cid, ConsultationMessage.id > after,
-    ).order_by(ConsultationMessage.id).limit(limit).all()
-    return [message_view(row) for row in rows]
-
-
-def send(db, cid, actor, payload: MessageCreate):
-    if ((payload.sender_id is not None and payload.sender_id != actor.id)
-            or (payload.sender_role is not None and payload.sender_role != actor.role)):
-        raise HTTPException(403, '메시지 발신자가 인증 사용자와 다릅니다.')
-    if actor.role == "pharmacist" and not db.get(ConsultationSession, cid):
-        assign(db, cid, actor)  # 팀 흐름: 약사가 채팅을 시작하면 그 상담을 맡은 것으로 본다.
-    _, room = participant(db, cid, actor, lock=True)
-    existing = db.query(ConsultationMessage).filter_by(
-        consultation_id=cid, sender_id=actor.id, sender_role=actor.role, client_id=payload.client_id,
-    ).first()
-    if existing:
-        if existing.text != payload.text:
-            raise HTTPException(409, "이미 사용한 client_id입니다.")
-        result = message_view(existing)
-        db.commit()
-        return result
-    active(room)
-    message = ConsultationMessage(consultation_id=cid, sender_id=actor.id,
-                                  sender_role=actor.role, **payload.model_dump(include={'client_id', 'text'}))
-    db.add(message)
-    db.commit()
-    return message_view(message)
 
 
 def audio_view(row):
@@ -132,23 +116,22 @@ def upload(db, cid, actor, client_id, start_ms, extension, audio):
         consultation_id=cid, sender_id=actor.id, sender_role=actor.role, client_id=client_id,
     ).first()
     if existing:
-        if existing.status == "failed":
+        if existing.status == "failed":  # 실패한 파일 재전송 → 다시 전사 대기열로
             active(room)
             consented(room)
             existing.audio, existing.digest = audio, digest
             existing.start_ms, existing.filename = start_ms, f"audio.{extension}"
-            existing.status, existing.error = "queued", None
+            existing.status, existing.error = "pending", None
             db.commit()
             return audio_view(existing)
         if existing.digest != digest or existing.start_ms != start_ms:
             raise HTTPException(409, "이미 사용한 client_id입니다.")
-        result = audio_view(existing)
+        result = audio_view(existing)  # 같은 파일 중복 전송 → 그대로 성공 처리
         db.commit()
         return result
     active(room)
     consented(room)
-    count = db.query(ConsultationAudio).filter_by(consultation_id=cid).count()
-    if count >= 240:
+    if db.query(ConsultationAudio).filter_by(consultation_id=cid).count() >= MAX_AUDIO_PER_CONSULTATION:
         raise HTTPException(409, "상담당 음성 파일 한도를 초과했습니다.")
     row = ConsultationAudio(consultation_id=cid, sender_id=actor.id, sender_role=actor.role,
                             client_id=client_id, start_ms=start_ms, filename=f"audio.{extension}",
@@ -159,6 +142,7 @@ def upload(db, cid, actor, client_id, start_ms, extension, audio):
 
 
 def finish(db, cid, actor):
+    """담당 약사가 상담 종료. 양측 동의가 있으면 요약 초안 생성을 예약한다(동의가 없으면 AI 처리 안 함)."""
     consultation, room = participant(db, cid, actor, lock=True)
     if actor.role != "pharmacist":
         raise HTTPException(403, "담당 약사가 상담을 종료해야 합니다.")
@@ -167,27 +151,31 @@ def finish(db, cid, actor):
         return session_view(room)
     audio = db.query(ConsultationAudio).filter_by(consultation_id=cid).order_by(
         ConsultationAudio.start_ms, ConsultationAudio.id).all()
-    if any(row.status != "completed" for row in audio):
-        raise HTTPException(409, "모든 음성의 전사가 완료된 뒤 종료해주세요. 실패한 파일은 재업로드해주세요.")
-    # No consent means chat remains usable, but no external AI processing occurs.
+    if any(row.status in ("pending", "processing") for row in audio):
+        raise HTTPException(409, "녹음을 글로 바꾸는 중입니다. 잠시 후 다시 종료해주세요.")
+    # 자동 녹음은 조각이 많고 상대가 이미 나갔을 수 있어, 전사 실패 조각은 종료를 막지 않고 요약 한계로 명시한다
+    failed = sum(row.status == "failed" for row in audio)
+    audio = [row for row in audio if row.status == "done" and (row.transcript or "").strip()]
     if room.user_consent_at and room.pharmacist_consent_at:
-        if consultation.status == "pending":
-            raise HTTPException(409, "약사의 승인 또는 거절을 확정한 뒤 종료해주세요.")
-        chat = db.query(ConsultationMessage).filter_by(consultation_id=cid).order_by(ConsultationMessage.id).all()
-        if not audio and not chat:
-            raise HTTPException(409, "요약할 상담 내용이 없습니다.")
+        if consultation.status == ConsultationStatus.PENDING:
+            raise HTTPException(409, "약사의 승인 또는 거절을 먼저 확정해주세요.")
+        chat = db.query(ConsultationMessage).filter_by(consultation_id=cid).order_by(
+            ConsultationMessage.created_at).all()
+        prior = consultation.chat_summary if consultation.chat_summary != DIRECT_REQUEST_SUMMARY else ""
+        has_content = audio or chat or prior
         source = {
-            "prior_chat": consultation.chat_summary if consultation.chat_summary !=
-                "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)" else "",
+            "prior_chat": prior,
             "transcript": [{"speaker": a.sender_role, "start_ms": a.start_ms, "text": a.transcript} for a in audio],
-            "chat": [{"speaker": m.sender_role, "text": m.text, "time": m.created_at.isoformat()} for m in chat],
+            "chat": [{"speaker": m.sender_role, "text": m.content, "time": m.created_at.isoformat()} for m in chat],
             "decision": {"status": consultation.status, "reason": consultation.decision_reason,
                          "approved_drug": consultation.purchase.drug_item_name if consultation.purchase else None},
-            "limitations": ["제출된 음성/채팅만 포함합니다. 업로드하지 않은 대화는 확인할 수 없습니다."],
+            "limitations": ["제출된 음성/채팅만 포함합니다. 업로드하지 않은 대화는 확인할 수 없습니다."]
+            + ([f"음성 조각 {failed}개는 전사에 실패해 빠졌습니다."] if failed else []),
         }
         if len(json.dumps(source, ensure_ascii=False)) > 120000:
             raise HTTPException(413, "요약 입력 한도를 초과했습니다.")
-        db.add(ConsultationSummary(consultation_id=cid, source=source))
+        if has_content:  # 요약할 대화가 없으면(무음 녹음뿐 등) 요약 없이 종료
+            db.add(ConsultationSummary(consultation_id=cid, source=source))
     room.ended_at = _now()
     db.commit()
     return session_view(room)
@@ -203,17 +191,32 @@ def summary(db, cid, actor):
         "reviewed_by": row.reviewed_by, "reviewed_at": row.reviewed_at, "error": row.error}
 
 
+def summary_text(content: dict) -> str:
+    """공개된 6항목 요약 → 기존 사용자 화면(요약 카드)에 보여줄 글."""
+    lines = []
+    for key, label in SUMMARY_LABELS.items():
+        items = content.get(key) or []
+        if items:
+            lines.append(f"■ {label}")
+            lines.extend(f"- {item}" for item in items)
+    lines.append("※ 약사가 검토한 요약입니다. 궁금한 점은 약사에게 다시 문의하세요.")
+    return "\n".join(lines)
+
+
 def publish(db, cid, actor, content: SummaryContent):
-    participant(db, cid, actor, lock=True)
+    consultation, _ = participant(db, cid, actor, lock=True)
     if actor.role != "pharmacist":
         raise HTTPException(403, "담당 약사만 요약을 확정할 수 있습니다.")
     row = db.get(ConsultationSummary, cid)
-    if not row or row.status != "pending_review":
+    if not row or row.status != "draft":
         raise HTTPException(409, "확인 대기 중인 요약이 없습니다.")
     row.published = content.model_dump()
     row.reviewed_by = actor.id
     row.reviewed_at = _now()
     row.status = "published"
+    # 기존 사용자 화면(대기 화면 요약 카드, 화상 화면 요약)이 그대로 보여주도록 기존 필드에도 저장
+    consultation.summary = summary_text(row.published)
+    consultation.ended_at = _now()
     db.commit()
     return summary(db, cid, actor)
 
@@ -225,6 +228,6 @@ def retry_summary(db, cid, actor):
     row = db.get(ConsultationSummary, cid)
     if not row or row.status != "failed":
         raise HTTPException(409, "실패한 요약만 재시도할 수 있습니다.")
-    row.status, row.error = "queued", None
+    row.status, row.error = "pending", None
     db.commit()
     return summary(db, cid, actor)

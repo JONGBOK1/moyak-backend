@@ -1,15 +1,12 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, ConfigDict
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from src.api.limiter import limiter
 from src.consult import service
-from src.consult.auth import Actor, legacy_actor, current_actor, claimed_actor
 from src.consult.db import get_db
-from src.consult import conversation, video
-from src.consult import patient_presence
-from src.consult.models import ConsultationSession, ConsultationSummary
 
 router = APIRouter(prefix="/consultations", tags=["consultation"])
 
@@ -29,7 +26,7 @@ class ConsultationDecisionRequest(BaseModel):
     reason: str | None = None
     drug_item_seq: str | None = None
     drug_item_name: str | None = None
-    price: int | None = Field(None, ge=0)
+    price: int | None = Field(None, ge=0)  # 약사가 안내하는 판매가(원), 키오스크 결제 금액
 
 
 class ConsultationResponse(BaseModel):
@@ -46,13 +43,30 @@ class ConsultationResponse(BaseModel):
     decided_at: datetime | None
     approved_purchase_id: str | None = None
     approved_drug_name: str | None = None
-    summary: str | None = None
+    summary: str | None = None  # 화상 상담 종료 시 생성된 대화 요약
     ended_at: datetime | None = None
-    summary_status: str = 'not_requested'
-    patient_online: bool = False
-    patient_queue_state: str = 'offline'
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
+
+
+class MessageCreateRequest(BaseModel):
+    client_id: str | None = Field(None, min_length=1, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
+    sender_role: str = Field(..., pattern="^(user|pharmacist)$")
+    sender_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=1000)
+
+
+class MessageResponse(BaseModel):
+    id: int
+    client_id: str
+    sender_role: str
+    sender_id: str
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 def _to_response(consultation) -> ConsultationResponse:
@@ -60,58 +74,11 @@ def _to_response(consultation) -> ConsultationResponse:
     if consultation.purchase is not None:
         response.approved_purchase_id = consultation.purchase.id
         response.approved_drug_name = consultation.purchase.drug_item_name
-    from sqlalchemy.orm import object_session
-    db = object_session(consultation)
-    if db is not None:
-        room = db.get(ConsultationSession, consultation.id)
-        result = db.get(ConsultationSummary, consultation.id)
-        response.ended_at = room.ended_at if room else None
-        response.patient_online = patient_presence.online(consultation.id)
-        response.patient_queue_state = ('ended' if response.ended_at else
-            'offline' if not response.patient_online else 'assigned' if room else 'waiting')
-        if result:
-            response.summary_status = result.status
-            # Never expose an unreviewed draft through the legacy endpoint.
-            if result.status == 'published' and result.published:
-                labels = {'symptoms': '증상', 'discussion': '상담 내용', 'medication_guidance': '복약 안내',
-                          'precautions': '주의사항', 'follow_up': '후속 안내', 'needs_verification': '확인 사항'}
-                response.summary = '\n\n'.join(label + '\n' + '\n'.join(result.published.get(key, []))
-                                               for key, label in labels.items())
     return response
 
 
-@router.post('/{consultation_id}/heartbeat')
-def heartbeat(consultation_id: str, db: Session = Depends(get_db), actor: Actor = Depends(current_actor)):
-    row = get_consultation(consultation_id, db, actor)
-    if actor.role != 'user' or actor.id != row.user_id:
-        raise HTTPException(403, '환자 본인만 접속 상태를 갱신할 수 있습니다.')
-    if row.ended_at or row.status == 'cancelled':
-        return {'active': False}
-    patient_presence.touch(consultation_id)
-    return {'active': True}
-
-
-@router.get('/{consultation_id}/presence')
-def presence(consultation_id: str, db: Session = Depends(get_db), actor: Actor | None = Depends(legacy_actor)):
-    row = get_consultation(consultation_id, db, actor)
-    count = video.room_participant_count(row.room_url)
-    assigned = db.get(ConsultationSession, consultation_id) is not None
-    return {'available': count is not None, 'participants': count or 0,
-            'pharmacist_in_room': bool(assigned and count and count > 0)}
-
-
-@router.post('/{consultation_id}/end', response_model=ConsultationResponse)
-def end_legacy(consultation_id: str, db: Session = Depends(get_db), actor: Actor = Depends(current_actor)):
-    """상담 종료는 담당 약사만 가능 (사용자 쪽 '통화 종료'는 화면 이탈로 처리하고 이 API를 부르지 않는다)."""
-    conversation.finish(db, consultation_id, actor)
-    return _to_response(service.get_consultation(db, consultation_id))
-
-
 @router.post("", response_model=ConsultationResponse)
-def create_consultation(payload: ConsultationCreateRequest, db: Session = Depends(get_db),
-                        actor: Actor | None = Depends(legacy_actor)) -> ConsultationResponse:
-    if actor and (actor.role != "user" or actor.id != payload.user_id):
-        raise HTTPException(403, "본인 명의의 상담만 생성할 수 있습니다.")
+def create_consultation(payload: ConsultationCreateRequest, db: Session = Depends(get_db)) -> ConsultationResponse:
     consultation = service.create_consultation(
         db,
         user_id=payload.user_id,
@@ -124,58 +91,43 @@ def create_consultation(payload: ConsultationCreateRequest, db: Session = Depend
 
 @router.get("", response_model=list[ConsultationResponse])
 def list_consultations(
-    status: str | None = None, user_id: str | None = None, db: Session = Depends(get_db),
-    actor: Actor | None = Depends(legacy_actor),
+    status: str | None = None,
+    user_id: str | None = None,
     pharmacist_id: str | None = None,
+    db: Session = Depends(get_db),
 ) -> list[ConsultationResponse]:
-    if actor and actor.role == "user":
-        user_id = actor.id
-    consultations = service.list_consultations(db, status=status, user_id=user_id)
-    if actor and actor.role == "pharmacist":
-        consultations = [c for c in consultations if c.pharmacist_id in (None, actor.id)]
-    if pharmacist_id:
-        consultations = [c for c in consultations if c.pharmacist_id == pharmacist_id]
-    return [_to_response(c) for c in consultations]
+    return [
+        _to_response(c)
+        for c in service.list_consultations(db, status=status, user_id=user_id, pharmacist_id=pharmacist_id)
+    ]
 
 
 @router.get("/{consultation_id}", response_model=ConsultationResponse)
-def get_consultation(consultation_id: str, db: Session = Depends(get_db),
-                     actor: Actor | None = Depends(legacy_actor)) -> ConsultationResponse:
+def get_consultation(consultation_id: str, db: Session = Depends(get_db)) -> ConsultationResponse:
     """채팅 화면이 자신이 요청한 상담의 상태를 폴링할 때 쓰는 단건 조회."""
     try:
         consultation = service.get_consultation(db, consultation_id)
-        if actor and ((actor.role == "user" and actor.id != consultation.user_id)
-                      or (actor.role == "pharmacist" and consultation.pharmacist_id not in (None, actor.id))):
-            raise HTTPException(403, "해당 상담에 접근할 수 없습니다.")
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return _to_response(consultation)
 
 
 @router.post("/{consultation_id}/cancel", response_model=ConsultationResponse)
-def cancel_consultation(consultation_id: str, db: Session = Depends(get_db),
-                        actor: Actor | None = Depends(legacy_actor)):
+def cancel_consultation(consultation_id: str, db: Session = Depends(get_db)) -> ConsultationResponse:
+    """사용자가 대기 화면에서 직접 상담 요청을 취소할 때 쓴다."""
     try:
-        row = service.get_consultation(db, consultation_id)
-        if actor and (actor.role != "user" or row.user_id != actor.id):
-            raise HTTPException(403, "본인의 대기 상담만 취소할 수 있습니다.")
-        return _to_response(service.cancel_consultation(db, consultation_id))
-    except service.NotFoundError as error:
-        raise HTTPException(404, str(error)) from error
-    except service.InvalidStateError as error:
-        raise HTTPException(409, str(error)) from error
+        consultation = service.cancel_consultation(db, consultation_id=consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return _to_response(consultation)
 
 
 @router.post("/{consultation_id}/decision", response_model=ConsultationResponse)
 def decide_consultation(
-    consultation_id: str, payload: ConsultationDecisionRequest, db: Session = Depends(get_db),
-    actor: Actor | None = Depends(legacy_actor),
+    consultation_id: str, payload: ConsultationDecisionRequest, db: Session = Depends(get_db)
 ) -> ConsultationResponse:
-    if actor and (actor.role != "pharmacist" or actor.id != payload.pharmacist_id):
-        raise HTTPException(403, "본인 명의로만 승인할 수 있습니다.")
-    actor = actor or claimed_actor(payload.pharmacist_id, "pharmacist")
-    if not db.get(ConsultationSession, consultation_id):
-        conversation.assign(db, consultation_id, actor)
     try:
         consultation = service.decide_consultation(
             db,
@@ -192,3 +144,66 @@ def decide_consultation(
     except service.InvalidStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return _to_response(consultation)
+
+@router.get("/{consultation_id}/messages", response_model=list[MessageResponse])
+def list_messages(consultation_id: str, db: Session = Depends(get_db)) -> list[MessageResponse]:
+    """화상 상담 채팅 목록 — 사용자 앱/약사 콘솔이 3초 간격으로 폴링한다."""
+    try:
+        return service.list_messages(db, consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{consultation_id}/messages", response_model=MessageResponse)
+@limiter.limit("60/minute")
+def send_message(
+    request: Request, consultation_id: str, payload: MessageCreateRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    try:
+        return service.add_message(
+            db,
+            consultation_id=consultation_id,
+            sender_role=payload.sender_role,
+            sender_id=payload.sender_id,
+            content=payload.content,
+            client_id=payload.client_id,
+        )
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/{consultation_id}/end", response_model=ConsultationResponse)
+@limiter.limit("10/minute;100/day")
+def end_consultation(request: Request, consultation_id: str, db: Session = Depends(get_db)) -> ConsultationResponse:
+    """화상 상담 종료 → 대화 요약 생성(GPT-4o-mini, 실제 비용 발생이라 요청량 제한).
+    사용자/약사 누가 먼저 눌러도 되고, 이미 종료된 상담이면 기존 요약을 그대로 반환한다."""
+    try:
+        consultation = service.end_consultation(db, consultation_id, llm=request.app.state.rewrite_llm)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except service.InvalidStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return _to_response(consultation)
+
+
+class PresenceResponse(BaseModel):
+    available: bool  # 화상방이 없거나 Daily 조회 실패 시 False (화면은 알림만 생략)
+    participants: int  # 지금 화상방 접속 인원
+    pharmacist_in_room: bool
+
+
+@router.get("/{consultation_id}/presence", response_model=PresenceResponse)
+def room_presence(consultation_id: str, db: Session = Depends(get_db)) -> PresenceResponse:
+    """사용자 대기/화상 입장 화면이 폴링 — 약사가 화상방에 들어오면 배너+알림음으로 알려주기 위함.
+    사용자가 아직 방에 들어가기 전(대기/미리보기 화면)에만 쓰므로, 방에 누가 있으면 그 사람이 약사다
+    (방 최대 인원 2명)."""
+    try:
+        consultation = service.get_consultation(db, consultation_id)
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    count = service.video.room_participant_count(consultation.room_url)
+    if count is None:
+        return PresenceResponse(available=False, participants=0, pharmacist_in_room=False)
+    return PresenceResponse(available=True, participants=count, pharmacist_in_room=count > 0)

@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8" />
 <title>모약이 상담·자판기 데모</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/lib/browser.min.js"></script>
 <style>
   body { font-family: sans-serif; max-width: 1100px; margin: 30px auto; padding: 0 16px; color: #222; }
   h1 { font-size: 20px; }
@@ -24,7 +23,7 @@
   .badge.rejected { background: #f8d7da; color: #721c24; }
   .badge.dispensed { background: #d1ecf1; color: #0c5460; }
   .consult-item { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-top: 8px; background: #fff; font-size: 13px; }
-  #qrCanvas { margin-top: 10px; border: 1px solid #ddd; border-radius: 6px; }
+  #qrCanvas { margin-top: 10px; border: 1px solid #ddd; border-radius: 6px; width: 180px; height: 180px; }
 </style>
 </head>
 <body>
@@ -39,7 +38,7 @@
     <div class="panel">
       <h2>📱 사용자 앱</h2>
       <p class="note" style="margin-top:0">
-        실제 서비스에서는 이 요청이 <a href="/">챗봇 화면</a>의 "약사와 상담하기" 버튼에서 자동으로 만들어집니다
+        실제 서비스에서는 이 요청이 <a href="/chat-test">챗봇 화면</a>의 "약사와 상담하기" 버튼에서 자동으로 만들어집니다
         (사용자는 약품 코드를 몰라도 됩니다 — 여기선 API를 직접 확인해보기 위한 단축 폼이에요).
       </p>
       <label>사용자 ID</label>
@@ -63,9 +62,9 @@
     <div class="panel">
       <h2>🏧 자판기 화면</h2>
       <label>자판기 ID</label>
-      <input id="machineId" value="M001" />
+      <input id="machineId" value="VM-001" />
       <button id="qrBtn" class="secondary">QR 새로 발급</button>
-      <canvas id="qrCanvas" width="180" height="180"></canvas>
+      <div id="qrCanvas"></div>
       <div id="qrResult" class="result"></div>
 
       <label style="margin-top: 16px">스캔한 사용자 ID (앱에서 QR 스캔했다고 가정)</label>
@@ -77,6 +76,18 @@
   </div>
 
 <script>
+  function formatRequestedAt(isoString) {
+    // 백엔드가 naive UTC로 저장/직렬화하므로("Z" 없는 ISO 문자열), 명시적으로 UTC로 해석시킨 뒤
+    // 브라우저 로컬 시간대로 표시한다.
+    const date = new Date(isoString + "Z");
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    const h = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return `${y}년 ${m}월 ${d}일 ${h}시 ${min}분`;
+  }
+
   async function api(method, path, body) {
     const res = await fetch(path, {
       method,
@@ -119,6 +130,7 @@
         div.className = "consult-item";
         div.innerHTML = `
           <div><b>${c.user_id}</b> <span class="badge pending">대기중</span></div>
+          <div class="note" style="margin:2px 0">신청 시각: ${formatRequestedAt(c.created_at)}</div>
           <div style="white-space:pre-wrap">대화 내용: ${c.chat_summary}</div>
         `;
 
@@ -192,8 +204,7 @@
     try {
       const data = await api("POST", `/vending/machines/${encodeURIComponent(machineId)}/rotate-qr`);
       lastQrToken = data.qr_token;
-      const qrPayload = JSON.stringify({ machine_id: data.machine_id, qr_token: data.qr_token });
-      QRCode.toCanvas(document.getElementById("qrCanvas"), qrPayload, { width: 180 });
+      document.getElementById("qrCanvas").innerHTML = data.qr_svg;
       box.textContent = `발급 완료 (만료: ${new Date(data.qr_token_expires_at + "Z").toLocaleTimeString()})`;
     } catch (e) {
       box.textContent = "오류: " + e.message;

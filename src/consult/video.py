@@ -28,6 +28,7 @@ def create_room() -> str | None:
         return res.json()["url"]
     except requests.exceptions.RequestException:
         return None
+
 _PRESENCE_CACHE: dict[str, tuple[float, int | None]] = {}
 _PRESENCE_TTL_SECONDS = 2  # 여러 화면이 3초마다 물어봐도 Daily API는 방마다 최대 2초에 한 번만 호출
 

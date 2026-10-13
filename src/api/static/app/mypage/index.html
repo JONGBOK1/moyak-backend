@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="/moyak-unified.js"></script>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -93,6 +92,10 @@
         </div>
       </div>
       <div class="settings-list-column">
+        <div class="setting-item-0" id="settingHistory">
+          <div class="div5">내 상담 내역 (처방·상담 요약)</div>
+          <img class="chevron-right2" src="chevron-right1.svg" />
+        </div>
         <div class="setting-item-0" id="settingNotice">
           <div class="div5">공지사항 및 서비스 안내</div>
           <img class="chevron-right2" src="chevron-right1.svg" />
@@ -151,6 +154,9 @@
   const userId = localStorage.getItem("moyak_user_id");
   document.getElementById("userIdLabel").textContent = userId ? "ID " + userId.slice(0, 8) + "..." : "로그인 정보 없음";
 
+  document.getElementById("settingHistory").addEventListener("click", () => {
+    location.href = "/app/consult-history/";
+  });
   document.getElementById("permitCard").addEventListener("click", () => {
     location.href = "/app/permit-list/";
   });

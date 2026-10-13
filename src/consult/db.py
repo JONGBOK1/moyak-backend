@@ -4,14 +4,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from src import config
-from src.database.connection import create_database_engine
+from src.map_database import create_database_engine
 
 engine = create_database_engine(config.DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+# 로컬 SQLite만 우리가 구조를 관리한다. Postgres(팀 Supabase 공유 DB)는 구조를 바꾸지 않고 그대로 쓴다.
+IS_SQLITE = engine.url.get_backend_name() == "sqlite"
 
 Base = declarative_base()
 
@@ -19,77 +21,81 @@ Base = declarative_base()
 def init_db() -> None:
     from src.consult import models  # noqa: F401  (모델 등록을 위해 임포트)
 
-    if engine.dialect.name == "sqlite":
-        _migrate_sqlite_vending_columns()
-        Base.metadata.create_all(bind=engine)
-        _migrate_sqlite_scenario_columns()
-    else:
-        # Shared databases are migrated explicitly, never mutated by API/worker startup.
-        with engine.connect() as connection, connection.begin():
-            connection.execute(text('SET TRANSACTION READ ONLY'))
-            connection.execute(text("SET LOCAL statement_timeout='15s'"))
-            problems = schema_problems(connection)
-        if problems:
-            raise RuntimeError('DB schema mapping/migration required: ' + '; '.join(problems))
-
-
-def schema_problems(connection):
-    """Validate table/column presence and identifier types; never run DDL."""
-    from sqlalchemy import String, Integer
-    inspector = inspect(connection)
-    schema = 'public' if connection.dialect.name == 'postgresql' else None
-    existing = set(inspector.get_table_names(schema=schema))
-    problems = []
-    for name, model in Base.metadata.tables.items():
-        if name not in existing:
-            problems.append('missing table ' + name)
-            continue
-        columns = {c['name']: c for c in inspector.get_columns(name, schema=schema)}
-        for column in model.columns:
-            actual = columns.get(column.name)
-            label = name + '.' + column.name
-            if actual is None:
-                problems.append('missing column ' + label)
-            elif column.primary_key or column.foreign_keys:
-                if isinstance(column.type, String) and not isinstance(actual['type'], String):
-                    problems.append('identifier type mismatch ' + label)
-                elif isinstance(column.type, Integer) and not isinstance(actual['type'], Integer):
-                    problems.append('identifier type mismatch ' + label)
-    return problems
-
-
-def _migrate_sqlite_vending_columns() -> None:
-    """기존 로컬 SQLite DB에도 자판기 위치 컬럼을 추가한다(간단한 개발용 migration)."""
-    inspector = inspect(engine)
-    if "vending_machines" not in inspector.get_table_names():
+    if not IS_SQLITE:
+        # 팀 공유 DB: 테이블 생성·컬럼 추가를 하지 않는다(구조 변경은 팀과 합의 후 SQL로).
         return
-    columns = {column["name"] for column in inspector.get_columns("vending_machines")}
-    additions = {
-        "address": "TEXT NOT NULL DEFAULT ''",
-        "operating_hours": "VARCHAR",
-        "operating_hours": "VARCHAR",
-        "latitude": "REAL",
-        "longitude": "REAL",
-        "is_active": "INTEGER NOT NULL DEFAULT 1",
-    }
-    with engine.begin() as connection:
-        for name, definition in additions.items():
-            if name not in columns:
-                connection.execute(text(f"ALTER TABLE vending_machines ADD COLUMN {name} {definition}"))
+    _migrate_sqlite_to_shared_schema()
+    Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
 
-def _migrate_sqlite_scenario_columns():
-    inspector = inspect(engine)
-    additions = {
-        "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},
-        "vending_machines": {"paired_user_id": "VARCHAR", "paired_purchase_id": "VARCHAR"},
-    }
-    with engine.begin() as connection:
-        for table, fields in additions.items():
-            columns = {column["name"] for column in inspector.get_columns(table)}
-            for name, definition in fields.items():
-                if name not in columns:
-                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
+def _migrate_sqlite_to_shared_schema() -> None:
+    """예전 로컬 SQLite를 팀 Supabase와 같은 구조로 맞춘다(2026-10-13 DB 통합).
+
+    - vending_machines.id → code (자판기 코드 컬럼 이름)
+    - consultation_messages: 문자열 id·content → 자동 증가 id·text·client_id (기존 메시지는 그대로 옮김)
+    """
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        if insp.has_table("vending_machines"):
+            cols = {c["name"] for c in insp.get_columns("vending_machines")}
+            if "code" not in cols and "id" in cols:
+                conn.execute(text("ALTER TABLE vending_machines RENAME COLUMN id TO code"))
+        if insp.has_table("consultation_messages"):
+            cols = {c["name"] for c in insp.get_columns("consultation_messages")}
+            if "text" not in cols:
+                conn.execute(text("ALTER TABLE consultation_messages RENAME TO consultation_messages_old"))
+                conn.execute(text("DROP INDEX IF EXISTS ix_consultation_messages_consultation_id"))
+    # 상태값을 팀 Supabase와 같은 이름으로 (queued→pending, completed→done, pending_review→draft)
+    with engine.begin() as conn:
+        if insp.has_table("consultation_audio"):
+            conn.execute(text("UPDATE consultation_audio SET status = CASE status WHEN 'queued' THEN 'pending' "
+                              "WHEN 'completed' THEN 'done' ELSE status END WHERE status IN ('queued', 'completed')"))
+        if insp.has_table("consultation_summaries"):
+            conn.execute(text("UPDATE consultation_summaries SET status = CASE status WHEN 'queued' THEN 'pending' "
+                              "WHEN 'pending_review' THEN 'draft' ELSE status END WHERE status IN ('queued', 'pending_review')"))
+    if insp.has_table("consultation_messages_old"):
+        from src.consult.models import ConsultationMessage
+
+        ConsultationMessage.__table__.create(bind=engine, checkfirst=True)
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO consultation_messages (consultation_id, sender_role, sender_id, client_id, text, created_at) "
+                "SELECT consultation_id, sender_role, sender_id, id, content, created_at "
+                "FROM consultation_messages_old ORDER BY created_at"))
+            conn.execute(text("DROP TABLE consultation_messages_old"))
+
+
+# create_all은 이미 있는 테이블에 새 컬럼을 추가하지 않는다. 로컬 SQLite를 지우지 않고도
+# 새 컬럼이 반영되도록, 나중에 추가된 nullable 컬럼만 여기서 ALTER TABLE로 보강한다.
+_LATE_COLUMNS = {
+    "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},  # SQLite 전용(Postgres는 init_db에서 건너뜀)
+    "consultation_requests": {"summary": "VARCHAR", "ended_at": "DATETIME"},
+    "vending_machines": {
+        "address": "VARCHAR",
+        "latitude": "FLOAT",
+        "longitude": "FLOAT",
+        "operating_hours": "VARCHAR",
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+    },
+}
+
+
+def _add_missing_columns() -> None:
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, columns in _LATE_COLUMNS.items():
+            if not insp.has_table(table):
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for name, sql_type in columns.items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+
+
+def is_shared_db(db: Session) -> bool:
+    """팀 공유 DB(Postgres)면 True — 자판기 자동 생성·데모 상품 채우기 같은 쓰기를 하지 않는다."""
+    return db.get_bind().dialect.name != "sqlite"
 
 
 def get_session() -> Session:

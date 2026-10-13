@@ -852,3 +852,13 @@
 .summary-view .summary-title { font-size: 18px; font-weight: 800; color: #593d0d; }
 .summary-view .summary-sub { font-size: 13px; color: #6b6b6b; }
 .summary-view .summary-text { flex: 1; font-size: 14px; line-height: 1.7; color: #222; white-space: pre-wrap; }
+
+/* 음성 기록 패널 본문 (채팅 패널과 같은 모양, 내부는 일반 블록 배치) */
+#recBody { display: block; padding: 12px; }
+.call-toolbar .call-btn { padding: 12px 6px; }
+/* 패널 머리글에 이미 제목이 있으니 내부 제목은 숨김 */
+#recBody .mrec > .row:first-child b { display: none; }
+
+/* 녹음 동의가 필요할 때 툴바 버튼 강조 */
+.call-toolbar .call-btn.need { background: #ffd54f; color: #3e2723; animation: needPulse 1.4s ease-in-out infinite; }
+@keyframes needPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 213, 79, 0.7); } 50% { box-shadow: 0 0 0 8px rgba(255, 213, 79, 0); } }

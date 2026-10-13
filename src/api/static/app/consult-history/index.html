@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { margin: 0; padding: 0; overflow-x: hidden; background: #000; }
+  </style>
+  <script src="/static/vendor/app-scale.js"></script>
+  <link rel="stylesheet" href="./vars.css">
+  <link rel="stylesheet" href="./style.css">
+
+
+  <style>
+   a,
+   button,
+   input,
+   select,
+   h1,
+   h2,
+   h3,
+   h4,
+   h5,
+   * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+       border: none;
+       text-decoration: none;
+       background: none;
+
+       -webkit-font-smoothing: antialiased;
+   }
+
+   menu, ol, ul {
+       list-style-type: none;
+       margin: 0;
+       padding: 0;
+   }
+   </style>
+  <title>내 상담 내역</title>
+</head>
+<body>
+  <div class="permit-list">
+    <div class="screen-content">
+      <div class="status-bar">
+        <div class="time">9:41</div>
+        <div class="status-icons">
+          <img class="ios-signal" src="ios-signal0.svg" />
+          <img class="ios-wifi-signal" src="ios-wifi-signal0.svg" />
+          <img class="ios-battery-full" src="ios-battery-full0.svg" />
+        </div>
+      </div>
+      <div class="sub-header">
+        <div class="back-btn" id="backBtn">
+          <img class="chevron-left" src="chevron-left0.svg" />
+        </div>
+        <div class="header-title">내 상담 내역</div>
+        <div class="spacer"></div>
+      </div>
+      <div class="permit-list-container" id="historyList"></div>
+    </div>
+    <div class="bottom-navbar">
+      <div class="tabs-container">
+        <div class="nav-tab" id="navHome">
+          <img class="home" src="home0.svg" />
+          <div class="div6">메인</div>
+        </div>
+        <div class="nav-tab2" id="navMap">
+          <img class="map-pin" src="map-pin0.svg" />
+          <div class="div7">지도</div>
+        </div>
+        <div class="qr-fab-container" id="navConsult">
+          <div class="qr-fab">
+            <img class="scan-qr-code" src="fab-stethoscope.svg" />
+          </div>
+          <div class="frame"></div>
+          <div class="qr">상담하기</div>
+        </div>
+        <div class="nav-tab3" id="navChatbot">
+          <img class="message-circle" src="message-circle0.svg" />
+          <div class="div8">모약이</div>
+        </div>
+        <div class="nav-tab4" id="navMypage">
+          <img class="user-cog" src="user-cog0.svg" />
+          <div class="div7">마이</div>
+        </div>
+      </div>
+      <div class="home-indicator-area">
+        <div class="home-pill"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // 내 상담 내역: 지난 약사 상담의 결과(처방약·거절 사유)와 약사가 검토·공개한 상담 요약을 다시 보는 화면.
+  // 서버는 GET /consultations?user_id= (최신순). 취소한 상담은 보여주지 않는다.
+  const userId = localStorage.getItem("moyak_user_id");
+  const DIRECT_PREFIX = "직접 상담 요청";
+  const STATUS = {
+    pending: { label: "상담 진행 중", cls: "pending" },
+    approved: { label: "처방 완료", cls: "approved" },
+    rejected: { label: "처방 불가", cls: "rejected" },
+  };
+
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function fmtDate(iso) {
+    const d = new Date(iso + "Z");
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ` +
+      d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+  }
+
+  // 공개된 요약은 "■ 항목" 줄로 저장된다 — 항목 제목은 굵게, 나머지는 그대로 보여준다.
+  function renderSummary(text) {
+    return esc(text).split("\n").filter((l) => l.trim()).map((line) =>
+      line.startsWith("■") ? `<div class="sum-h">${line.slice(1).trim()}</div>`
+        : line.startsWith("※") ? `<div class="sum-note">${line}</div>`
+        : `<div class="sum-line">${line}</div>`).join("");
+  }
+
+  function card(c) {
+    const st = STATUS[c.status] || { label: c.status, cls: "pending" };
+    const direct = (c.chat_summary || "").startsWith(DIRECT_PREFIX);
+    let result;
+    if (c.status === "approved") {
+      result = `<div class="h-result ok"><span>처방약</span><b>${esc(c.approved_drug_name || "-")}</b>
+        <small>가까운 자판기에서 QR을 스캔하면 받을 수 있어요</small></div>`;
+    } else if (c.status === "rejected") {
+      result = `<div class="h-result no"><span>약사 안내</span><b>${esc(c.decision_reason || "사유가 따로 전달되지 않았어요")}</b></div>`;
+    } else {
+      result = `<div class="h-result wait"><span>진행 상황</span><b>약사 상담을 기다리고 있어요</b></div>`;
+    }
+    let summary = "";
+    if (c.summary) {
+      summary = `<details class="h-summary"><summary>📝 상담 요약 보기</summary><div class="sum-body">${renderSummary(c.summary)}</div></details>`;
+    } else if (c.status !== "pending") {
+      summary = `<div class="h-summary-wait" hidden>📝 약사가 상담 요약을 정리하고 있어요</div>`;
+    }
+    const el = document.createElement("div");
+    el.className = "h-card";
+    el.innerHTML = `
+      <div class="h-top">
+        <div class="h-date">${fmtDate(c.created_at)}</div>
+        <div class="h-pill ${st.cls}">${st.label}</div>
+      </div>
+      <div class="h-kind">${direct ? "바로 약사 상담" : "모약이 챗봇 상담 후 약사 상담"}</div>
+      ${result}
+      ${summary}
+      <div class="h-more">자세히 보기 ›</div>`;
+    const wait = el.querySelector(".h-summary-wait");
+    if (wait) summaryInProgress(c.id).then((yes) => (wait.hidden = !yes));
+    el.querySelector(".h-more").onclick = () => (location.href = "/app/pharmacist-waiting/?id=" + encodeURIComponent(c.id));
+    return el;
+  }
+
+  // 요약이 실제로 만들어지는 중일 때만(약사가 녹음·요약 흐름으로 종료한 상담) "정리 중" 안내를 보여준다
+  async function summaryInProgress(id) {
+    try {
+      const res = await fetch(`/consultations/${encodeURIComponent(id)}/summary`, {
+        headers: { "X-Moyak-User-Id": encodeURIComponent(userId), "X-Moyak-Role": "user" },
+      });
+      if (!res.ok) return false;
+      return ["pending", "processing", "draft", "failed"].includes((await res.json()).status);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function load() {
+    const listEl = document.getElementById("historyList");
+    if (!userId) {
+      listEl.innerHTML = '<p class="h-empty">로그인 정보가 없어요.</p>';
+      return;
+    }
+    listEl.innerHTML = '<p class="h-empty">불러오는 중...</p>';
+    try {
+      const res = await fetch("/consultations?user_id=" + encodeURIComponent(userId));
+      const items = await res.json();
+      if (!res.ok) throw new Error(items.detail || "조회에 실패했어요.");
+      const shown = items.filter((c) => c.status !== "cancelled");
+      if (shown.length === 0) {
+        listEl.innerHTML = '<p class="h-empty">아직 약사 상담 내역이 없어요.<br>아래 가운데 "상담하기"를 누르면 약사와 바로 상담할 수 있어요.</p>';
+        return;
+      }
+      listEl.innerHTML = "";
+      shown.forEach((c) => listEl.appendChild(card(c)));
+    } catch (e) {
+      listEl.innerHTML = `<p class="h-empty error">오류: ${esc(e.message)}</p>`;
+    }
+  }
+
+  document.getElementById("backBtn").addEventListener("click", () => {
+    location.href = "/app/mypage/";
+  });
+  document.getElementById("navHome").addEventListener("click", () => {
+    location.href = "/app/main-home-disconnected/";
+  });
+  document.getElementById("navMap").addEventListener("click", () => {
+    location.href = "/app/map-screen/";
+  });
+  // 하단 가운데 "상담하기": 챗봇 대화 없이 바로 약사 화상 상담으로
+  document.getElementById("navConsult").addEventListener("click", () => {
+    location.href = "/app/pharmacist-waiting/?direct=1";
+  });
+  document.getElementById("navChatbot").addEventListener("click", () => {
+    location.href = "/app/chatbot/";
+  });
+  document.getElementById("navMypage").addEventListener("click", () => {
+    location.href = "/app/mypage/";
+  });
+
+  load();
+</script>
+</body>
+</html>

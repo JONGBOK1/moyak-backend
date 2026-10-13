@@ -125,7 +125,7 @@
 </style>
 <script>
   const params = new URLSearchParams(location.search);
-  const machineId = params.get("machine") || "M001";
+  const machineId = params.get("machine") || "VM-001";
   const q = (s) => document.querySelector(s);
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const priceText = (p) => (p.price == null ? "결제 불필요" : `${p.price.toLocaleString()}원`);

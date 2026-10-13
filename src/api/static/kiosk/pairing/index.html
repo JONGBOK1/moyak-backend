@@ -99,7 +99,7 @@
 
 <script>
   const params = new URLSearchParams(location.search);
-  const machineId = params.get("machine") || "M001";
+  const machineId = params.get("machine") || "VM-001";
   document.getElementById("machineIdText").textContent = machineId;
 
   async function api(method, path, body) {

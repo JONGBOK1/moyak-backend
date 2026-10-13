@@ -1,39 +1,35 @@
-from datetime import timedelta
-
+"""상담 음성 기록·검토 요약 흐름 (한별 구현 이식) — AI는 모의 처리, 실제 API 호출 없음."""
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from src import config
-from src.api.routes import conversation as routes, consultation as legacy
-from src.consult import conversation as service, ai, worker
-from src.consult.auth import Actor, issue_token, verify_token
+from src.api.routes import consultation as legacy
+from src.api.routes import conversation as routes
+from src.consult import ai, service, worker
 from src.consult.db import Base, get_db
-from src.consult.models import (ConsultationRequest, ConsultationAudio, ConsultationSummary, _now)
-from src.consult.schemas import MessageCreate, SummaryContent
+from src.consult.models import ConsultationAudio, ConsultationRequest
 
-USER = Actor("u1", "user")
-PHARM = Actor("p1", "pharmacist")
-CONTENT = dict(symptoms=["두통"], discussion=[], medication_guidance=[],
-               precautions=[], follow_up=[], needs_verification=["용량 확인 필요"])
+CONTENT = dict(symptoms=["두통"], discussion=["어제부터 머리가 아픔"], medication_guidance=["4~6시간 간격 1정"],
+               precautions=["음주 금지"], follow_up=[], needs_verification=["용량 확인 필요"])
+USER = {"X-Moyak-User-Id": "u1", "X-Moyak-Role": "user"}
+PHARM = {"X-Moyak-User-Id": "p1", "X-Moyak-Role": "pharmacist"}
 
 
 @pytest.fixture
 def setup(monkeypatch):
-    monkeypatch.setattr(config, "CONSULT_AUTH_SECRET", "test-secret-" * 4)
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     with factory() as db:
-        db.add(ConsultationRequest(id="c1", user_id="u1", chat_summary="test"))
+        db.add(ConsultationRequest(id="c1", user_id="u1", chat_summary="사용자: 두통이 있어요"))
         db.commit()
-        service.assign(db, "c1", PHARM)
     app = FastAPI()
     app.include_router(routes.router)
     app.include_router(legacy.router)
+
     def dependency():
         with factory() as db:
             yield db
@@ -46,184 +42,144 @@ def setup(monkeypatch):
     engine.dispose()
 
 
-def headers(actor=USER):
-    return {"Authorization": f"Bearer {issue_token(actor.id, actor.role)}"}
+def run_worker(factory):
+    while worker.process_one(factory):
+        pass
 
 
-def consent(client):
-    for actor in (USER, PHARM):
-        assert client.post("/consultations/c1/session/consent", headers=headers(actor)).status_code == 200
-
-
-def decision(client):
-    response = client.post("/consultations/c1/decision", headers=headers(PHARM),
-                           json={"pharmacist_id": "p1", "approve": False, "reason": "대면 진료 안내"})
-    assert response.status_code == 200
-
-
-def test_auth_and_participant_isolation(setup):
+def test_participant_isolation_and_claim(setup):
     client, _ = setup
-    # 팀 규격 호환: 신원 없는 목록 폴링은 허용, 신원을 밝히면 참여자 검사
-    assert client.get("/consultations/c1/messages").status_code == 200
-    assert client.get("/consultations/c1/session").status_code == 401
-    assert client.get("/consultations/c1/messages", headers=headers(Actor("u2", "user"))).status_code == 403
-    assert client.get("/consultations/c1/messages", headers=headers(Actor("p2", "pharmacist"))).status_code == 403
-    assert client.post("/consultations/c1/session/claim", headers=headers(Actor("p2", "pharmacist"))).status_code == 409
-    assert client.post("/consultations/c1/session/claim", headers=headers(USER)).status_code == 403
-    assert client.get("/consultations/c1", headers=headers(Actor("u2", "user"))).status_code == 403
-    assert client.post("/consultations/c1/decision", headers=headers(USER),
-                       json={"pharmacist_id": "p1", "approve": False}).status_code == 403
+    assert client.get("/consultations/c1/session").status_code == 401  # 신원 없음
+    assert client.get("/consultations/c1/session", headers=USER).status_code == 409  # 약사 미배정
+    assert client.post("/consultations/c1/session/claim", headers=USER).status_code == 403  # 사용자는 배정 불가
+    assert client.post("/consultations/c1/session/claim", headers=PHARM).status_code == 200
+    assert client.post("/consultations/c1/session/claim", headers=PHARM).status_code == 200  # 같은 약사 재연결 OK
+    other = {"X-Moyak-User-Id": "p2", "X-Moyak-Role": "pharmacist"}
+    assert client.post("/consultations/c1/session/claim", headers=other).status_code == 409  # 다른 약사 불가
+    stranger = {"X-Moyak-User-Id": "u2", "X-Moyak-Role": "user"}
+    assert client.get("/consultations/c1/session", headers=stranger).status_code == 403
 
 
-def test_token_tamper_expiry_and_configuration(setup, monkeypatch):
-    token = issue_token(USER.id, USER.role)
-    assert verify_token(token) == USER
-    with pytest.raises(HTTPException):
-        verify_token(token + "x")
-    with monkeypatch.context() as patch:
-        patch.setattr("src.consult.auth.time.time", lambda: 10**12)
-        with pytest.raises(HTTPException):
-            verify_token(token)
-    monkeypatch.setattr(config, "CONSULT_AUTH_SECRET", "")
-    with pytest.raises(HTTPException) as error:
-        verify_token(token)
-    assert error.value.status_code == 503
-
-
-def test_chat_idempotency_validation_pagination_and_history(setup):
+def test_audio_requires_both_consents(setup):
     client, _ = setup
-    path = "/consultations/c1/messages"
-    payload = {"client_id": "m1", "text": "복용법을 알려주세요"}
-    first = client.post(path, headers=headers(), json=payload)
-    assert first.status_code == 201
-    assert client.post(path, headers=headers(), json=payload).json()["id"] == first.json()["id"]
-    assert client.post(path, headers=headers(), json={**payload, "text": "changed"}).status_code == 409
-    assert client.post(path, headers=headers(), json={"client_id": "m2", "text": "  "}).status_code == 422
-    second = client.post(path, headers=headers(PHARM), json={"client_id": "m2", "text": "안내입니다"})
-    rows = client.get(path, headers=headers(), params={"after": first.json()["id"]}).json()
-    assert [row["id"] for row in rows] == [second.json()["id"]]
-    assert client.post("/consultations/c1/session/end", headers=headers(PHARM)).status_code == 200
-    assert client.post(path, headers=headers(), json={"client_id": "m3", "text": "종료 후"}).status_code == 409
-    assert len(client.get(path, headers=headers()).json()) == 2
-    assert client.get("/consultations/c1/summary", headers=headers()).json()["status"] == "not_requested"
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    up = lambda h: client.post("/consultations/c1/audio?client_id=a1&start_ms=0", headers={**h, "Content-Type": "audio/webm"}, content=b"voice")
+    assert up(USER).status_code == 409  # 동의 전
+    client.post("/consultations/c1/session/consent", headers=USER)
+    assert up(USER).status_code == 409  # 한쪽만 동의
+    client.post("/consultations/c1/session/consent", headers=PHARM)
+    assert up(USER).status_code == 202
+    assert up(USER).json()["status"] == "pending"  # 같은 client_id 재전송은 중복 없이 성공
 
 
-def test_audio_to_reviewed_summary(setup):
+def test_full_flow_review_then_publish(setup):
     client, factory = setup
-    path = "/consultations/c1/audio?client_id=a1&start_ms=0"
-    audio_headers = {**headers(), "Content-Type": "audio/webm"}
-    assert client.post(path, headers=audio_headers, content=b"audio").status_code == 409
-    consent(client)
-    assert client.post(path, headers=audio_headers, content=b"audio").status_code == 202
-    assert client.post(path, headers=audio_headers, content=b"audio").status_code == 202
-    assert client.post("/consultations/c1/session/end", headers=headers(PHARM)).status_code == 409
-    assert worker.process_one(factory)
-    with factory() as db:
-        audio = db.query(ConsultationAudio).one()
-        assert audio.status == "completed" and audio.audio is None
-    assert client.get("/consultations/c1/transcript", headers=headers()).status_code == 403
-    assert client.get("/consultations/c1/transcript", headers=headers(PHARM)).json()[0]["text"] == "머리가 아파요"
-    decision(client)
-    assert client.post("/consultations/c1/session/end", headers=headers(PHARM)).status_code == 200
-    assert client.post("/consultations/c1/session/end", headers=headers(PHARM)).status_code == 200
-    assert worker.process_one(factory)
-    hidden = client.get("/consultations/c1/summary", headers=headers()).json()
-    assert hidden["status"] == "pending_review" and hidden["content"] is None
-    draft = client.get("/consultations/c1/summary", headers=headers(PHARM)).json()
-    assert draft["content"] == CONTENT
-    assert client.post("/consultations/c1/summary/publish", headers=headers(), json=CONTENT).status_code == 403
-    corrected = {**CONTENT, "discussion": ["약사가 확인한 내용"]}
-    assert client.post("/consultations/c1/summary/publish", headers=headers(PHARM), json=corrected).status_code == 200
-    published = client.get("/consultations/c1/summary", headers=headers()).json()
-    assert published["content"] == corrected and published["reviewed_by"] == "p1"
-    assert client.post("/consultations/c1/summary/retry", headers=headers(PHARM)).status_code == 409
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    for h in (USER, PHARM):
+        client.post("/consultations/c1/session/consent", headers=h)
+    client.post("/consultations/c1/audio?client_id=a1&start_ms=0", headers={**USER, "Content-Type": "audio/webm"}, content=b"voice")
+    client.post("/consultations/c1/messages", json={"sender_role": "pharmacist", "sender_id": "p1", "content": "언제부터요?"})
+
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 409  # 전사 미완료
+    run_worker(factory)
+    assert client.get("/consultations/c1/transcript", headers=PHARM).json()[0]["text"] == "머리가 아파요"
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 409  # 승인/거절 전
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False, "reason": "대면 진료"})
+    assert client.post("/consultations/c1/session/end", headers=USER).status_code == 403  # 사용자는 종료 불가
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 200
+
+    # 종료 후 채팅 불가, 기존 즉시 요약(/end)도 막힘
+    assert client.post("/consultations/c1/messages", json={"sender_role": "user", "sender_id": "u1", "content": "x"}).status_code == 409
+
+    run_worker(factory)  # 요약 초안 생성
+    draft = client.get("/consultations/c1/summary", headers=PHARM).json()
+    assert draft["status"] == "draft" and draft["content"]["symptoms"] == ["두통"]
+    assert client.get("/consultations/c1/summary", headers=USER).json()["content"] is None  # 공개 전엔 사용자에게 안 보임
+    assert client.get("/consultations/c1").json()["summary"] is None
+
+    edited = {**CONTENT, "medication_guidance": ["약사 수정: 대면 진료 권고"]}
+    assert client.post("/consultations/c1/summary/publish", json=edited, headers=USER).status_code == 403
+    assert client.post("/consultations/c1/summary/publish", json=edited, headers=PHARM).status_code == 200
+    assert client.get("/consultations/c1/summary", headers=USER).json()["content"]["medication_guidance"] == ["약사 수정: 대면 진료 권고"]
+    legacy_view = client.get("/consultations/c1").json()  # 기존 화면이 쓰는 필드에도 반영
+    assert "■ 복약 안내" in legacy_view["summary"] and "약사 수정" in legacy_view["summary"]
+    assert legacy_view["ended_at"] is not None
 
 
-def test_failures_reupload_summary_retry_and_lease_recovery(setup, monkeypatch):
+def test_failed_transcription_can_be_reuploaded_and_summary_retried(setup, monkeypatch):
     client, factory = setup
-    consent(client)
-    path = "/consultations/c1/audio?client_id=a1&start_ms=0"
-    audio_headers = {**headers(), "Content-Type": "audio/webm"}
-    client.post(path, headers=audio_headers, content=b"audio")
-    def fail(*args):
-        raise RuntimeError("private provider response must not escape")
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    for h in (USER, PHARM):
+        client.post("/consultations/c1/session/consent", headers=h)
+
+    def fail(*a):
+        raise RuntimeError("provider down")
     monkeypatch.setattr(ai, "transcribe", fail)
-    assert worker.process_one(factory)
+    client.post("/consultations/c1/audio?client_id=a1&start_ms=0", headers={**USER, "Content-Type": "audio/webm"}, content=b"voice")
+    run_worker(factory)
+    assert client.get("/consultations/c1/audio", headers=USER).json()[0]["status"] == "failed"
+
+    monkeypatch.setattr(ai, "transcribe", lambda *a: "다시 올린 음성")
+    retry = client.post("/consultations/c1/audio?client_id=a1&start_ms=0", headers={**USER, "Content-Type": "audio/webm"}, content=b"voice")
+    assert retry.status_code == 202 and retry.json()["status"] == "pending"
+    run_worker(factory)
     with factory() as db:
-        row = db.query(ConsultationAudio).one()
-        assert row.audio is None and row.error == "ai_processing_failed"
-    assert client.post(path, headers=audio_headers, content=b"new-audio").json()["status"] == "queued"
-    monkeypatch.setattr(ai, "transcribe", lambda *args: "두통 상담")
-    assert worker.process_one(factory)
-    decision(client)
-    client.post("/consultations/c1/session/end", headers=headers(PHARM))
-    monkeypatch.setattr(ai, "summarize", fail)
-    assert worker.process_one(factory)
-    assert client.get("/consultations/c1/summary", headers=headers()).json()["status"] == "failed"
-    assert client.post("/consultations/c1/summary/retry", headers=headers(PHARM)).status_code == 200
-    with factory() as db:
-        row = db.get(ConsultationSummary, "c1")
-        row.status, row.lease, row.started_at = "processing", "crashed", _now() - timedelta(minutes=6)
-        db.commit()
-    monkeypatch.setattr(ai, "summarize", lambda source: CONTENT)
-    assert worker.process_one(factory)
-    assert client.get("/consultations/c1/summary", headers=headers(PHARM)).json()["status"] == "pending_review"
-    assert not worker.process_one(factory)
+        assert db.query(ConsultationAudio).one().transcript == "다시 올린 음성"
+        assert db.query(ConsultationAudio).one().audio is None  # 전사 후 원본 음성 삭제
+
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
+    client.post("/consultations/c1/session/end", headers=PHARM)
+    monkeypatch.setattr(ai, "summarize", lambda s: (_ for _ in ()).throw(RuntimeError("x")))
+    run_worker(factory)
+    assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "failed"
+    monkeypatch.setattr(ai, "summarize", lambda s: CONTENT)
+    assert client.post("/consultations/c1/summary/retry", headers=PHARM).json()["status"] == "pending"
+    run_worker(factory)
+    assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "draft"
 
 
-def test_websocket_send_replay_and_unauthorized(setup):
-    client, _ = setup
-    with client.websocket_connect("/consultations/c1/messages/ws") as socket:
-        socket.send_json({"token": issue_token(USER.id, USER.role), "after": 0})
-        socket.send_json({"client_id": "ws1", "text": "실시간 메시지"})
-        ack = socket.receive_json()
-        assert ack["type"] == "ack"
-        event = socket.receive_json()
-        assert event["type"] == "messages" and event["items"][0]["text"] == "실시간 메시지"
-    with client.websocket_connect("/consultations/c1/messages/ws") as socket:
-        socket.send_json({"token": issue_token(PHARM.id, PHARM.role), "after": 0})
-        assert socket.receive_json()["items"][0]["client_id"] == "ws1"
-    with client.websocket_connect("/consultations/c1/messages/ws") as socket:
-        socket.send_json({"token": issue_token("u2", "user")})
-        assert socket.receive()["code"] == 1008
-
-
-def test_audio_bounds_and_empty_summary(setup, monkeypatch):
-    client, _ = setup
-    consent(client)
-    assert client.post("/consultations/c1/session/end", headers=headers(USER)).status_code == 403
-    path = "/consultations/c1/audio?client_id=a1&start_ms=0"
-    assert client.post(path, headers=headers(), content=b"data").status_code == 415
-    audio_headers = {**headers(), "Content-Type": "audio/webm"}
-    assert client.post(path, headers=audio_headers, content=b"").status_code == 422
-    monkeypatch.setattr(routes, "MAX_AUDIO_BYTES", 3)
-    assert client.post(path, headers=audio_headers, content=b"long").status_code == 413
-    decision(client)
-    assert client.post("/consultations/c1/session/end", headers=headers(PHARM)).status_code == 409
-
-
-def test_expired_worker_cannot_overwrite_new_owner(setup, monkeypatch):
+def test_legacy_immediate_summary_blocked_once_pharmacist_connected(setup):
     client, factory = setup
-    consent(client)
-    client.post("/consultations/c1/messages", headers=headers(), json={"client_id": "m1", "text": "두통 상담"})
-    decision(client)
-    assert client.post("/consultations/c1/session/end", headers=headers(PHARM)).status_code == 200
-    def simulate_reclaim(source):
-        with factory() as db:
-            row = db.get(ConsultationSummary, "c1")
-            row.lease, row.status = "new-owner", "processing"
-            db.commit()
-        return CONTENT
-    monkeypatch.setattr(ai, "summarize", simulate_reclaim)
-    assert worker.process_one(factory)
+    client.post("/consultations/c1/session/claim", headers=PHARM)
     with factory() as db:
-        row = db.get(ConsultationSummary, "c1")
-        assert row.lease == "new-owner" and row.status == "processing" and row.draft is None
+        with pytest.raises(service.InvalidStateError):
+            service.end_consultation(db, "c1", llm=None)
 
 
-def test_other_pharmacist_cannot_decide_or_list_assigned_consultation(setup):
+def test_no_consent_ends_without_ai_summary(setup):
     client, _ = setup
-    other = Actor("p2", "pharmacist")
-    assert client.get("/consultations", headers=headers(other)).json() == []
-    assert client.post("/consultations/c1/decision", headers=headers(other),
-                       json={"pharmacist_id": "p2", "approve": False}).status_code == 409
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 200
+    assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "not_requested"
+
+
+def test_auto_recording_segments_time_base_and_failed_segments(setup, monkeypatch):
+    client, factory = setup
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    client.post("/consultations/c1/session/consent", headers=USER)
+    assert client.get("/consultations/c1/session", headers=USER).json()["recording_elapsed_ms"] is None  # 한쪽 동의
+    client.post("/consultations/c1/session/consent", headers=PHARM)
+    assert client.get("/consultations/c1/session", headers=USER).json()["recording_elapsed_ms"] >= 0  # 공통 시간 기준
+
+    texts = {b"u0": "어제부터 머리가 아파요", b"p20": "열은 있으세요?", b"u20": "", b"u40": None}
+
+    def fake(filename, audio):
+        if texts[audio] is None:
+            raise RuntimeError("provider down")
+        return texts[audio]
+    monkeypatch.setattr(ai, "transcribe", fake)
+    for h, cid, ms, body in ((USER, "u0", 0, b"u0"), (PHARM, "p20", 20000, b"p20"),
+                             (USER, "u20", 20000, b"u20"), (USER, "u40", 40000, b"u40")):
+        client.post(f"/consultations/c1/audio?client_id={cid}&start_ms={ms}",
+                    headers={**h, "Content-Type": "audio/webm"}, content=body)
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 409  # 전사 중이면 대기
+    run_worker(factory)
+    # 실패한 조각(상대가 이미 나가 재전송 불가)이 있어도 종료 가능, 요약 한계로 명시
+    assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 200
+    from src.consult.models import ConsultationSummary
+    with factory() as db:
+        source = db.get(ConsultationSummary, "c1").source
+    assert [t["text"] for t in source["transcript"]] == ["어제부터 머리가 아파요", "열은 있으세요?"]  # 시간순, 빈 조각 제외
+    assert any("1개는 전사에 실패" in x for x in source["limitations"])

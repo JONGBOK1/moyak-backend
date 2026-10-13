@@ -522,3 +522,6 @@
   left: 134px;
   top: 20px;
 }
+/* 허가서가 여러 장이면 하단 바 위 영역 안에서 스크롤 (전체 화면이 874px로 잘리던 문제) */
+.screen-content { bottom: 91px; overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.screen-content::-webkit-scrollbar { display: none; }

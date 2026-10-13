@@ -389,3 +389,8 @@
   top: 1758px;
   overflow: hidden;
 }
+
+/* 카드 제목이 줄바꿈되며 설명과 겹치지 않도록 한 줄 유지 */
+.div7 {
+  white-space: nowrap;
+}

@@ -99,6 +99,14 @@ moyak-backend/
    - **interaction(병용/상호작용 확인)**: ① GPT-4o-mini로 질문에 언급된 약 이름을 추출(`extract_drug_names`, 최대 3개) → ② 각 약 이름을 실제 등록 품목에 매칭해 전체 필드를 `item_seq` 필터로 모음(`_resolve_drug_docs`) → ③ 전용 프롬프트(`INTERACTION_SYSTEM_PROMPT`)로 답변 생성. **가장 중요한 규칙**: 자료에 특정 조합에 대한 언급이 없다고 "안전하다"고 결론 내리지 않고, "확인되지 않음 + 약사 상담"으로 답하도록 강제한다(e약은요 상호작용 데이터는 완전한 약물-약물 매트릭스가 아니라 각 약이 자체적으로 명시한 일반 문구이기 때문).
    - 질문 유형 분류는 `classify_intent`(GPT-4o-mini)가 담당하며, 대화 후속 질문 재작성(`rewrite_standalone_question`) 이후에 실행된다.
    - **특수 대상자(임산부/소아/고령자) 안전 필터**: 유형 분류와 별개로 `detect_population`(GPT-4o-mini)이 질문에서 임산부/소아/고령자 언급을 감지한다. specific 질문에서 감지되면, 일반 top_k 검색 대신 `extract_drug_names`+`_resolve_drug_docs`(interaction과 동일한 방식)로 정확한 약의 전체 필드(주의사항/경고 포함)를 확실히 가져온다 — "임산부가 먹어도 돼?" 같은 수식어가 top_k 검색을 엉뚱한 약으로 새게 만드는 문제를 막기 위함. symptom 질문에서 감지되면 `RECOMMEND_SYSTEM_PROMPT`의 규칙에 따라 후보 중 해당 대상자 금기 약을 제외하고, 안전한 후보가 없으면 추천하지 않는다.
+   - **식약처 공식 데이터 보강 (`src/rag/drug_facts.py`, `DRUG_DB_ENRICH=1`일 때만)**: 본문 검색은 그대로 Pinecone(e약은요)이고, Supabase의 `drug_permissions`(허가정보 42,962건: 전문/일반·주성분, e약은요에 없는 약도 이름으로 검색), `dur_warnings`(임부금기·노인주의·특정연령대금기·효능군중복·분할주의), `dur_conflicts`(병용금기 성분쌍)를 읽기 전용으로 조회해 `[식약처 공식 데이터]` 블록으로 컨텍스트에 덧붙인다.
+     - 병용금기는 LLM 판단이 아니라 목록 일치로 결정적으로 판정(DUR 성분코드 우선, 없으면 염·수화물을 뗀 성분명 **완전 일치**만 — 부분 일치는 잘못된 금기 경고를 만들 수 있어 사용 안 함). 목록에 없으면 "확인되지 않음(안전하다는 뜻 아님)"으로 명시.
+     - 병용/특수대상자 질문은 허가정보에서 정확한 제품을 먼저 찾아(`resolve_name_seqs`) Pinecone을 그 품목으로 필터링 — 이름이 비슷한 다른 제품(예: 원펜정→일펜정)을 고르던 문제 해결.
+     - **허가정보 의미 검색**: `scripts/index_permissions.py`로 허가 '정상'이면서 e약은요에 없는 30,495개 품목(주로 전문의약품)을 Pinecone 같은 인덱스의 **별도 namespace `permissions`**에 임베딩(제품명·전문/일반·약효분류·주성분·성상·보관법, 분류 빈 품목은 같은 주성분 품목 분류로 보완, 2026-10-09 업로드 완료). specific(정보) 질문에서만 top 4를 `[식약처 의약품 허가정보 검색 결과]`로 덧붙이고 증상 추천에는 쓰지 않는다(전문의약품 추천 방지). e약은요 자료가 있으면 그걸 우선, 전문의약품은 처방 필요만 안내하고 복용법은 안내하지 않도록 프롬프트로 강제. 기본 namespace(e약은요)는 그대로라 기존 검색 결과에 영향 없음. `DRUG_PERMISSION_SEARCH=0`으로 이것만 끌 수 있음.
+     - **제품 매칭 규칙** (`_product_score`): "타이레놀"처럼 브랜드만 말하면 "브랜드+제형/함량만" 붙은 기본 제품(정제 우선, 예: 타이레놀정500밀리그람)을 고른다 — 이름이 가장 짧은 것("타이레놀콜드-에스정")이나 유사도 1위("8시간이알서방정")를 고르던 문제 해결.
+     - **특수 대상자 성분 확인** (`check_population_by_ingredient`): 품목에 DUR 경고가 없어도 주성분이 임부금기/노인주의/연령금기 목록에 있는지 성분 단위로 확인하고, 없으면 "목록에 없음(안전하다는 뜻은 아님)"을 명시.
+     - **답변 구성 규칙** (SYSTEM/INTERACTION 프롬프트 8번): ① 첫 문장 결론 → ② 주성분과 자료 속 금기·주의 근거로 이유 2~4문장(대상자 언급이 자료에 없으면 그 사실 + 누구에게나 해당하는 주의사항) → ③ 약사 상담 권고. 결론 강도는 자료만큼(금기면 "드시면 안 됩니다", 상의 권고면 "상의 필요"). 예: 아세트아미노펜은 DUR 임부금기가 아니므로 타이레놀은 "상의 필요", 이부프로펜(원펜정)은 "드시면 안 됩니다".
+     - 근거(`evidence`)에 `field: "dur"`(라벨 "식약처 허가·DUR") 항목이 추가될 수 있음. 꺼져 있거나 DB 조회 실패 시 기존 동작과 100% 동일. 2026-10-09 실제 질문 검증 + `check_rag_quality.py` 전체 통과(켜진 상태). 중간점검(10/13) 시연부터 사용하기로 결정(2026-10-09) — 로컬 `.env`에 켜짐, Render는 환경변수 `DRUG_DB_ENRICH=1` 추가 필요. 켜면 답변당 약 +1.5초(측정: 4.8→6.3초). 앱 근거 화면은 `dur` 근거를 주의 박스로 표시하고 출처에 '의약품 허가정보·DUR'을 덧붙인다.
    - 답변에서 실제로 인용된 약품명만 출처/근거로 남기는 `_extract_cited`는 LLM이 긴 제품명의 띄어쓰기를 살짝 바꿔 쓰는 경우가 있어 공백 제거 후 비교한다.
 7. **STEP 6 - API 서버**: FastAPI `/chat` 엔드포인트. 프론트(Flutter)와 JSON 스펙 맞추기
    - 요청: `POST /chat` `{"question": "string", "history": [{"role": "user"|"assistant", "content": "string"}, ...]}`
@@ -107,7 +115,8 @@ moyak-backend/
    - 응답: `{"answer": "string", "sources": ["string", ...], "evidence": [{"item_name", "field", "field_label", "text"}, ...]}`
      - `evidence`: 답변이 실제로 인용한 원본 청크 목록(신뢰도 어필용 — "AI 요약"이 아니라 식약처 원문 그대로임을 사용자에게 보여주기 위해 추가)
    - 헬스체크: `GET /health` → `{"status": "ok"}`
-   - 테스트용 페이지: `GET /` → 한국어 웹 UI (`src/api/static/chat_test.html`), 답변/출처/원문 근거를 브라우저에서 바로 확인 가능
+   - 루트: `GET /` → 앱 첫 화면 `/app/splash/`로 리다이렉트 (서버 주소만 입력해도 앱 전체 흐름을 볼 수 있게)
+   - 테스트용 페이지: `GET /chat-test` → 한국어 웹 UI (`src/api/static/chat_test.html`), 답변/출처/원문 근거를 브라우저에서 바로 확인 가능
    - **요청량 제한**: `/chat`은 IP당 15회/분, 200회/일로 제한(`slowapi`, `src/api/limiter.py`). 초과 시 `429` + `{"detail": "요청이 너무 많습니다..."}`. 실제 비용이 드는 엔드포인트라 남용 방지용. Render처럼 프록시 뒤에 배포할 때는 uvicorn에 `--proxy-headers`를 켜야 진짜 클라이언트 IP로 카운트된다(안 켜면 전부 같은 IP로 잡혀 프록시 하나가 전체 사용자의 한도를 공유하게 됨).
    - (이 스펙이 바뀌면 반드시 이 문서와 팀에 공유할 것)
 8. **STEP 7 - 테스트**: 정제/청킹 로직 유닛 테스트(`pytest`, API 호출 없음), RAG 답변 품질 셀프 체크(`python tests/check_rag_quality.py`, 실제 API 호출·소액 비용 발생·수동 실행 전용이라 pytest 자동 수집 대상 아님)
@@ -138,9 +147,8 @@ moyak-backend/
 - [x] STEP 7: 테스트 (`tests/test_cleaning.py`, `tests/test_chunking.py` 유닛 테스트 9건 통과 / `tests/check_rag_quality.py` 셀프 체크 통과 — 안전 문구 규칙 자동 검증 + 어투는 수동 확인용)
 - [x] `/chat` 요청량 제한 (IP당 15회/분·200회/일, `slowapi`, `src/api/limiter.py`)
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
+- [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` + 앱 지도 화면 `/app/map-screen/`(카카오 지도, `KAKAO_JS_KEY` 필요) — 가상 자판기는 동양미래대학교 주변 실제 장소, Supabase용 시드 SQL `scripts/supabase_demo_machines.sql` (2026-10-07 한별 동의 후 실행 완료: VM-001 좌표 보정, VM-006~009 추가, 재고 15건 — Render도 `MAP_DATABASE_URL`로 Supabase 조회 중)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
-
-- [x] 팀 `master` 백엔드 통합 (2026-10-09): 인증은 팀 방식(요청의 ID·역할 신뢰), 키오스크 라우트는 팀 원본(`vending.py`/`shop.py`), 사용자 화면은 Flutter로 대체(HTML `static/app` 제외), 서버는 로컬 전용 — `python scripts/run_unified_local.py --flutter`. 상세는 `docs/unified-server.md`
 
 ## 8. 코딩 시 참고사항
 
@@ -158,8 +166,9 @@ moyak-backend/
 
 - `POST /consultations` — 상담 요청 생성. 요청 바디는 `user_id`만 필수이고 `chat_summary`는 선택이다(`requested_drug_*`도 선택) — 약품 지정은 사용자가 아니라 약사가 승인 시점에 한다. `chat_summary`를 안 보내면 서버가 `DIRECT_REQUEST_SUMMARY`(고정 문구: "직접 상담 요청 (사전 챗봇 대화 없음 — 화상으로 바로 문진 필요)")로 채운다. 생성 시 `src/consult/video.py`가 Daily.co REST API로 화상 상담방을 만들고 `room_url`을 응답에 포함한다(생성 실패해도 상담 요청 자체는 계속 진행 — 화상은 부가 기능).
   - **진입점 두 곳**이 같은 API를 쓴다(회의 결과: 챗봇을 강제로 거치게 하지 않기 위해 분리):
-    - `GET /` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
+    - `GET /chat-test` (`chat_test.html`) "🩺 약사와 상담하기" 버튼 — 지금까지의 챗봇 대화(`history`)를 통째로 `chat_summary`로 만들어 전송
     - `GET /consult` (`consult_direct.html`) — 네비게이션바/메뉴에서 바로 진입하는 용도. 텍스트 입력 없이 버튼 하나로 즉시 상담 요청(= `chat_summary` 생략) → 바로 화상 화면으로 전환
+    - 앱(`/app/...`) 모든 화면 하단 가운데 "상담하기" 버튼(🩺) — 챗봇 대화 없이 `/app/pharmacist-waiting/?direct=1`로 이동해 `chat_summary` 없이 상담 생성(또는 대기 중 상담 재사용) 후 바로 화상 입장 화면(`/app/video-consult-entry/`)으로 전환. 챗봇 대화 중 나오는 "약사에게 바로 상담하기" 버튼은 기존처럼 대화 내용을 함께 전달
   - 두 진입점 다 응답의 `room_url`을 `<iframe>`으로 바로 띄운다(노트북/폰 카메라 권한 요청됨). 사용자 식별은 아직 실제 인증이 없어 브라우저 `localStorage`에 저장한 임시 ID를 쓴다(`moyak_user_id`, 두 페이지가 같은 키를 써서 동일 브라우저면 ID가 이어진다).
   - **상담 생성 전에 항상 `GET /consultations?status=pending&user_id=`로 먼저 조회**해서, 이미 대기 중인 상담이 있으면 새로 만들지 않고 그걸 재사용한다(중복 상담 방지 — 사용자가 버튼을 여러 번 누르거나 페이지를 새로고침해도 상담이 중복 생성되지 않음).
   - 상담 생성/재사용 이후 두 페이지 모두 **3초 간격으로 `GET /consultations/{id}`를 폴링**해서 상태 변화를 실시간 반영한다: `approved`가 되면 처방된 약 이름(`approved_drug_name`)과 "자판기에서 QR 스캔" 안내 배너를, `rejected`가 되면 약사가 입력한 `decision_reason`(없으면 기본 안내 문구)을 화면에 표시하고 폴링을 멈춘다.
@@ -167,12 +176,34 @@ moyak-backend/
 - `GET /consultations?status=pending&user_id=` — 대기 목록 (약사 대시보드용으로는 `status`만, 특정 사용자의 중복 상담 확인용으로는 `user_id`도 같이 필터링)
 - `GET /consultations/{id}` — 단건 조회. 챗봇/상담 페이지가 자신이 만든 상담의 상태를 폴링할 때 쓴다. 없는 id면 404.
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
+  - `price`(원, 선택, 0 이상): 약사가 승인 시 안내하는 판매가(e약은요엔 가격 데이터가 없어 약사가 입력). 약사 콘솔(`/pharmacist`)에서는 필수 입력. 가격이 있는 승인 건은 키오스크에서 **결제해야 수령 가능**하고, 가격이 없는 건(가격 도입 전/데모 페이지 승인)은 기존처럼 결제 없이 수령.
+- **화상 상담 중 채팅 + 종료 요약**:
+  - `GET /consultations/{id}/messages` / `POST /consultations/{id}/messages` `{"sender_role": "user"|"pharmacist", "sender_id", "content"}` — 사용자 앱 화상 화면(`/app/video-consult-entry/`)의 "💬 채팅"과 약사 콘솔(`/pharmacist`) 카드의 채팅창이 3초 간격 폴링으로 주고받는다. 사용자는 본인 상담에만 보낼 수 있고(`sender_id == user_id`), 종료된 상담에는 보낼 수 없다(409). IP당 60회/분 제한.
+  - `POST /consultations/{id}/end` — 사용자/약사 누구든 "상담 종료"를 누르면 GPT-4o-mini(`src/consult/summary.py`)가 [상담 전 챗봇 대화 + 상담 중 채팅 + 처방 결과]를 요약해 `summary`/`ended_at`에 저장(한 번만 생성, 재호출 시 기존 요약 반환). 요약할 대화가 없으면 LLM을 부르지 않고 고정 문구를 반환. 실제 비용이 드는 호출이라 IP당 10회/분·100회/일 제한. 응답(`ConsultationResponse`)에 `summary`/`ended_at` 필드 추가.
+  - 요약 프롬프트는 대화에 없는 약 정보(복용량 등)를 새로 만들지 못하게 강제한다. **화상 통화의 음성 내용은 서버가 받지 않아 요약에 포함되지 않는다**(요약 끝에 이 안내 문구가 붙음) — 음성까지 요약하려면 Daily.co 녹음/전사(유료, 별도 설정) 연동이 필요.
+- **음성 기록 · 약사 검토 요약 (2026-10-12, 한별 구현 이식 — `src/consult/conversation.py`, `src/api/routes/conversation.py`, `src/consult/ai.py`, `src/consult/worker.py`)**:
+  - 신원: `X-Moyak-User-Id`(한글은 encodeURIComponent) + `X-Moyak-Role: user|pharmacist` 헤더(실제 로그인 전 팀 방식), 또는 `Authorization: Bearer`(선택, `CONSULT_AUTH_SECRET`). 참여자(본인·담당 약사)만 접근.
+  - 흐름: `POST /consultations/{id}/session/claim`(약사가 담당 배정) → `POST .../session/consent`(양측 각자 동의, 둘 다 해야 녹음 가능) → `POST .../audio?client_id=&start_ms=`(본문=음성, webm/ogg/wav/mp3/mp4/m4a ≤20MiB, 같은 client_id 재전송은 중복 없음·실패 건은 재전사) → 서버 워커가 `gpt-4o-mini-transcribe`로 전사(원본 음성은 전사 후 삭제) → 약사 승인/거절 → `POST .../session/end`(담당 약사만, 전사 미완료·결정 전이면 409) → 워커가 `gpt-4o` 구조화 출력으로 **6항목 요약 초안**(status `draft`)(호소한 증상·상담 내용·복약 안내·주의사항·후속 안내·확인이 필요한 내용) → `GET .../summary`(약사: 초안, 사용자: 공개본만) → `POST .../summary/publish`(약사가 검토·수정한 6항목) → 기존 `summary`/`ended_at`에도 글로 저장돼 사용자 대기·화상 화면에 그대로 표시. 실패 시 `POST .../summary/retry`. 그 밖에 `GET .../session`, `GET .../audio`, `GET .../transcript`(약사만).
+  - 요약 재료 = 사전 챗봇 대화 + 음성 전사 + 상담 채팅(기존 `/messages`) + 승인 결과. 동의가 없으면 AI 처리 없이 종료. 요약 프롬프트는 대화에 없는 진단·용량·복용법 생성을 금지하고 불확실한 내용은 "확인이 필요한 내용"으로 분리.
+  - 약사가 연결(claim)한 상담은 기존 즉시 요약 `POST /consultations/{id}/end`를 막는다(검토 없는 공개 방지). 사용자 앱의 "상담 종료"는 약사 연결 시 통화에서 나가기만 하고, 요약은 약사 공개 후 표시. 약사 종료 후엔 채팅도 불가.
+  - **자동 녹음 (2026-10-12)**: 양측 동의가 끝나면 버튼 없이 녹음이 자동 시작(일시정지 가능)되고, **20초 조각**으로 잘라 자동 업로드한다. 조각의 `start_ms`는 서버가 `GET .../session`의 `recording_elapsed_ms`(양측 동의 시점부터 경과)로 알려준 공통 기준이라, 두 기기의 조각이 시간순으로 섞여 화자 표시된 하나의 대화록이 된다. 말소리가 거의 없는 조각은 올리지 않고(음량 측정), 잡음만 있어 전사 결과가 빈 조각은 실패가 아니라 빈 내용으로 완료 처리. 약사 "상담 종료"는 자기 마지막 조각을 올리고 전사가 끝날 때까지(최대 ~40초) 기다렸다가 종료. 전사 실패 조각은 종료를 막지 않고 요약 `limitations`에 명시, 요약할 대화가 하나도 없으면 요약 없이 종료.
+  - 소비자 앱에서 결과 보기: 화상 화면 "상담 결과 화면으로" → `/app/pharmacist-waiting/?id=<상담ID>`(그 상담을 표시 — 예전엔 대기 상담만 찾아 결정 후 새 상담이 생기던 버그 수정), 내정보 → "내 상담 내역" `/app/consult-history/`(처방약·거절 사유·공개된 요약 다시 보기). 약사가 연결하면 환자 화상 화면에 동의 창이 자동으로 뜬다(`onState`).
+  - 화면: 공용 컴포넌트 `static/vendor/consult-recording.js` — 약사 콘솔 카드(상담 연결·동의·자동 녹음 상태·시간순 전사 원문·종료·초안 6항목 수정·공개·재시도), 사용자 화상 화면 "🎙 녹음" 패널(동의·자동 녹음 상태·조각 전사 현황·실패 재전송, 녹음 중이면 툴바 버튼이 "🔴 녹음 중"). 각자 기기 마이크만 녹음(Daily 통화 전체 녹화 아님). 페이지를 떠나면 업로드 전 마지막 조각(최대 20초)은 사라지고, 약사가 먼저 종료하면 환자의 진행 중 조각은 반영되지 않는다. 워커는 서버 lifespan에서 1초 간격 실행. WebSocket 채팅은 이식하지 않음(기존 폴링 채팅 유지).
+- `POST /vending/purchases/pay` `{"machine_id", "purchase_ids": [...]}` — 키오스크 승인 약(cart2) 결제(모의). 자판기에 QR 로그인한 본인의 대기 중 승인 건만 결제 가능하며, 결제 완료 시 `paid_at` 기록 + **자판기 로그인 자동 해제**(welcome 화면 안내 문구와 일치). 응답 `{"total_amount", "purchases"}`. 승인 건 응답(`PurchaseResponse`)에 `price`/`paid_at` 필드 추가.
 - `POST /vending/machines/{machine_id}/rotate-qr` — 자판기가 주기적으로 새 QR 토큰 발급(기본 60초 유효) → 화면에 QR로 표시
 - `POST /vending/scan` — 앱이 QR 스캔 결과 전송 → 그 사용자의 대기 중인 승인 건 확인
 - `POST /vending/dispense` — 수령 확정 → 자판기 개방(모의) + 기록
 - `GET /consult-demo` — 세 패널(사용자 앱/약사 대시보드/자판기 화면)로 위 흐름을 브라우저에서 눈으로 확인할 수 있는 데모 페이지. 실제 QR 이미지도 렌더링됨(`qrcode` CDN 라이브러리).
 
 **중요한 설계 원칙**: AI(챗봇)는 이 흐름 어디에도 "승인" 권한이 없고, 사용자도 약품을 직접 지정하지 않는다. 어떤 약을 줄지는 항상 약사가 상담 내용을 보고 승인 시점에 정하며(마치 처방하듯), `pharmacist_id`가 명시적으로 호출하는 `/consultations/{id}/decision`에서만 이 결정이 발생한다. 모든 승인/수령 기록이 DB에 남는다(감사 로그 역할).
+
+**팀 Supabase DB 통합 (2026-10-13, `dev` 브랜치에서 진행 중 — 아직 master/Render 미반영)**:
+- `DATABASE_URL`을 팀 Supabase(Postgres) 주소로 바꾸면 상담·채팅·녹음·요약·승인·키오스크 데이터가 한별 서버와 같은 테이블에 저장된다(재시작해도 유지). 로컬 개발은 SQLite 유지 권장.
+- 우리 코드를 Supabase 구조에 맞춤(팀 DB 구조는 변경하지 않음): 자판기는 `code`(VM-001…)가 우리 코드의 자판기 id(Supabase 내부 UUID `id`는 DB가 생성), 상품·주문 id는 Postgres에서 uuid 타입(`UUIDString`), 채팅은 DB 컬럼 `text` + 자동 증가 id + `client_id`(코드·API에선 그대로 `content`).
+- 공유 DB(Postgres)에서는 테이블 생성·컬럼 추가·데모 자판기/상품 자동 생성을 하지 않는다(`is_shared_db`). 등록 안 된 자판기 코드는 404. 키오스크 기본 자판기는 `VM-001`(로컬 시드도 VM-001~005).
+- 로컬 SQLite는 시작 시 자동 변환(`_migrate_sqlite_to_shared_schema`: vending_machines.id→code, 채팅 테이블 재구성·기존 메시지 보존).
+- 상태값도 팀 Supabase(CHECK 제약)에 맞춤: 녹음 `pending/processing/done/failed`, 요약 `pending/processing/draft/published/failed` (예전 queued·completed·pending_review는 로컬 SQLite에서 자동 변환). API·화면도 같은 값을 쓴다.
+- 2026-10-13 검증: Supabase 읽기 전용 점검 후, 로컬 서버를 Supabase에 연결해 상담→채팅→녹음 전사→승인→AI 요약→검토·공개→상담 내역→키오스크 QR 로그인→결제→수령→의약외품 주문·결제·배출→미등록 자판기 404까지 26단계 전부 통과. 테스트 데이터(`itest_` 사용자)는 삭제하고 VM-001 상태·재고를 원래대로 복원(행 수 일치 확인). 한별 데이터는 전부 `is_sample=true`.
 
 **아직 스텁인 부분** (실제 서비스 전 반드시 교체 필요):
 - **사용자/약사 인증 없음**: `user_id`/`pharmacist_id`를 요청 바디로 그대로 받는다. 실제 인증 시스템이 붙으면 그 값으로 교체.

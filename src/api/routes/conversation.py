@@ -1,28 +1,28 @@
-import asyncio
-import json
-import os
-import re
+"""상담 음성 기록·AI 요약 API (한별 구현 이식, 2026-10-12). 로직은 src/consult/conversation.py.
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.encoders import jsonable_encoder
-from pydantic import ValidationError
+신원: `X-Moyak-User-Id` + `X-Moyak-Role: user|pharmacist` 헤더 (실제 로그인 전 팀 방식 — 요청이 밝힌 ID를 신뢰),
+또는 `Authorization: Bearer <토큰>` (CONSULT_AUTH_SECRET 설정 시). 참여자(본인·담당 약사)만 접근할 수 있다.
+채팅은 기존 `/consultations/{id}/messages`를 그대로 쓴다.
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from src.consult import conversation as service
-from src.consult.auth import Actor, current_actor, optional_actor, verify_token, claimed_actor
-from src.consult.db import get_db, SessionLocal
+from src.consult.auth import Actor, current_actor
+from src.consult.db import SessionLocal, get_db
 from src.consult.models import ConsultationAudio
-from src.consult.schemas import ClientID, MessageCreate, SummaryContent
+from src.consult.schemas import ClientID, SummaryContent
 
-router = APIRouter(prefix="/consultations/{cid}", tags=["consultation-conversation"])
+router = APIRouter(prefix="/consultations/{cid}", tags=["consultation-recording"])
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
-AUDIO_TYPES = {"audio/webm": "webm", "audio/wav": "wav", "audio/x-wav": "wav",
+AUDIO_TYPES = {"audio/webm": "webm", "audio/wav": "wav", "audio/x-wav": "wav", "audio/ogg": "ogg",
                "audio/mpeg": "mp3", "audio/mp4": "mp4", "audio/x-m4a": "m4a"}
 
 
 @router.post("/session/claim")
 def claim(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+    """약사가 상담을 맡는다 (이후 동의·녹음·검토 요약 흐름 사용 가능)."""
     return service.session_view(service.assign(db, cid, actor))
 
 
@@ -33,29 +33,15 @@ def session(cid: str, actor: Actor = Depends(current_actor), db: Session = Depen
 
 @router.post("/session/consent")
 def consent(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
-    """Call only after this participant explicitly accepts recording + AI processing."""
+    """참여자가 '음성 기록 및 AI 요약'에 직접 동의했을 때만 호출. 양측 모두 동의해야 녹음 업로드·요약 가능."""
     return service.consent(db, cid, actor)
-
-
-@router.post("/messages", status_code=201)
-def send(cid: str, payload: MessageCreate, actor: Actor | None = Depends(optional_actor),
-         db: Session = Depends(get_db)):
-    # 팀 규격: 헤더 없이 바디의 sender_id/sender_role로 보낼 수 있다.
-    actor = actor or claimed_actor(payload.sender_id, payload.sender_role)
-    return service.send(db, cid, actor, payload)
-
-
-@router.get("/messages")
-def messages(cid: str, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200),
-             actor: Actor | None = Depends(optional_actor), db: Session = Depends(get_db)):
-    return service.messages(db, cid, actor, after, limit)
 
 
 @router.post("/audio", status_code=202)
 async def upload(cid: str, request: Request, client_id: ClientID, start_ms: int = Query(..., ge=0, le=7200000),
                  actor: Actor = Depends(current_actor)):
-    # Validate access BEFORE reading an untrusted, potentially large request body.
-    def preflight():
+    """녹음 파일 업로드(본문 = 음성 바이트). 같은 client_id 재전송은 중복 없이 처리, 실패 건은 재전사."""
+    def preflight():  # 큰 본문을 읽기 전에 권한·동의부터 확인
         with SessionLocal() as db:
             _, room = service.participant(db, cid, actor)
             service.active(room)
@@ -63,7 +49,7 @@ async def upload(cid: str, request: Request, client_id: ClientID, start_ms: int 
     await run_in_threadpool(preflight)
     extension = AUDIO_TYPES.get(request.headers.get("content-type", "").split(";")[0].strip())
     if not extension:
-        raise HTTPException(415, "webm, wav, mp3, mp4, m4a 음성을 보내주세요.")
+        raise HTTPException(415, "webm, ogg, wav, mp3, mp4, m4a 음성을 보내주세요.")
     audio = bytearray()
     async for chunk in request.stream():
         if len(audio) + len(chunk) > MAX_AUDIO_BYTES:
@@ -71,6 +57,7 @@ async def upload(cid: str, request: Request, client_id: ClientID, start_ms: int 
         audio.extend(chunk)
     if not audio:
         raise HTTPException(422, "음성 파일이 비어 있습니다.")
+
     def save():
         with SessionLocal() as db:
             return service.upload(db, cid, actor, client_id, start_ms, extension, bytes(audio))
@@ -96,79 +83,23 @@ def transcript(cid: str, actor: Actor = Depends(current_actor), db: Session = De
 
 @router.post("/session/end")
 def end(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+    """담당 약사가 상담 종료 → (양측 동의 시) 백그라운드 요약 초안 생성."""
     return service.finish(db, cid, actor)
 
 
 @router.get("/summary")
 def summary(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+    """약사: 초안(draft)·공개본, 사용자: 공개된 요약만."""
     return service.summary(db, cid, actor)
 
 
 @router.post("/summary/publish")
-def publish(cid: str, payload: SummaryContent, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+def publish(cid: str, payload: SummaryContent, actor: Actor = Depends(current_actor),
+            db: Session = Depends(get_db)):
+    """약사가 검토·수정한 6항목 요약을 공개 → 사용자 화면에 표시."""
     return service.publish(db, cid, actor, payload)
 
 
 @router.post("/summary/retry")
 def retry(cid: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
     return service.retry_summary(db, cid, actor)
-
-
-@router.websocket("/messages/ws")
-async def socket(websocket: WebSocket, cid: str):
-    """First frame authenticates; DB-backed fanout works across API processes.
-    Flutter 모바일은 Origin을 보내지 않고, Flutter 웹은 CORS_ORIGINS에 등록된 출처만 허용한다."""
-    origin = websocket.headers.get('origin')
-    expected = ('https' if websocket.url.scheme == 'wss' else 'http') + '://' + websocket.headers.get('host', '')
-    allowed = {value.strip() for value in os.getenv('CORS_ORIGINS', '').split(',') if value.strip()}
-    pattern = os.getenv('CORS_ORIGIN_REGEX')
-    if (origin and origin != expected and origin not in allowed
-            and not (pattern and re.fullmatch(pattern, origin))):
-        await websocket.close(code=1008)
-        return
-    await websocket.accept()
-    try:
-        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
-        if len(raw) > 6000:
-            await websocket.close(code=1009)
-            return
-        hello = json.loads(raw)
-        token = hello.get("token")
-        actor = verify_token(token) if token else claimed_actor(hello.get('sender_id'), hello.get('sender_role'))
-        cursor = hello.get("after", 0)
-        if type(cursor) is not int or cursor < 0:
-            raise ValueError()
-
-        def fetch(after):
-            with SessionLocal() as db:
-                return service.messages(db, cid, actor, after, 200)
-
-        def save(payload):
-            with SessionLocal() as db:
-                return service.send(db, cid, actor, payload)
-
-        while True:
-            if token:
-                verify_token(token)  # Expired credentials terminate existing sockets.
-            rows = await run_in_threadpool(fetch, cursor)
-            if rows:
-                await websocket.send_json(jsonable_encoder({"type": "messages", "items": rows}))
-                cursor = rows[-1]["id"]
-            try:
-                raw = await asyncio.wait_for(websocket.receive_text(), timeout=0.5)
-            except asyncio.TimeoutError:
-                continue
-            if len(raw) > 20000:
-                await websocket.close(code=1009)
-                return
-            try:
-                payload = MessageCreate.model_validate_json(raw)
-                message = await run_in_threadpool(save, payload)
-                await websocket.send_json(jsonable_encoder({"type": "ack", "message": message}))
-            except (ValidationError, HTTPException) as error:
-                await websocket.send_json({"type": "error", "detail": (
-                    error.detail if isinstance(error, HTTPException) else "메시지 형식이 올바르지 않습니다.")})
-    except WebSocketDisconnect:
-        pass
-    except (HTTPException, ValueError, KeyError, TypeError, asyncio.TimeoutError):
-        await websocket.close(code=1008)

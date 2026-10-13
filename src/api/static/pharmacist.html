@@ -1,149 +1,307 @@
 <!doctype html>
 <html lang="ko">
 <head>
-<script src="/moyak-unified.js"></script>
+<script src="/static/vendor/chat-request-id.js"></script>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>모약이 — 약사 전용</title>
+<title>모약이 약사 콘솔</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&display=swap" />
 <style>
-  :root { color-scheme: light; }
-  body { font-family: sans-serif; max-width: 720px; margin: 30px auto; padding: 0 16px; color: #222; background: #fff; }
-  h1 { font-size: 20px; }
-  .note { color: #888; font-size: 13px; }
-  .id-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
-  .id-row input { flex: 1; padding: 6px 8px; font-size: 14px; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #ddd; }
-  .tab-btn {
-    -webkit-appearance: none;
-    appearance: none;
-    padding: 8px 16px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-    border-radius: 0;
-    background: #fff;
-    color: #222;
-    border-bottom: 2px solid transparent;
+  /* 앱(/app)과 같은 톤: 진한 갈색 글자, 베이지 배경, 모약 그린, 노란 포인트 */
+  :root {
+    color-scheme: light;
+    --ink: #3e2723;
+    --ink-soft: #7d6d6a;
+    --line: #e4ddd2;
+    --bg: #f7f3ee;
+    --paper: #ffffff;
+    --beige: #efebe9;
+    --green: #176b5b;
+    --green-dark: #105348;
+    --green-soft: #ddeee8;
+    --yellow: #ffd54f;
+    --cream: #fffde7;
+    --red: #c0392b;
+    --red-soft: #fdecea;
+    --radius: 16px;
+    --shadow: 0 2px 10px rgba(62, 39, 35, 0.06);
   }
-  .tab-btn.active { border-bottom-color: #222; font-weight: bold; }
-  .card { border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: #fafafa; }
-  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Gothic A1", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    font-size: 14px;
+  }
+  button, input, textarea { font-family: inherit; }
+
+  /* ---------- 상단 바 ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 24px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand img { width: 40px; height: 40px; object-fit: contain; }
+  .brand .name { font-weight: 800; font-size: 18px; letter-spacing: .5px; }
+  .brand .sub { font-size: 12px; color: var(--ink-soft); }
+  .topbar .spacer { flex: 1; }
+  .live-dot { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); }
+  .live-dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 0 3px #2ecc7133; }
+  .id-box {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--beige); border-radius: 99px; padding: 4px 6px 4px 14px;
+  }
+  .id-box label { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+  .id-box input {
+    border: none; background: var(--paper); border-radius: 99px;
+    padding: 7px 12px; width: 150px; font-size: 13px; color: var(--ink); outline: none;
+  }
+  .id-box input:focus { box-shadow: 0 0 0 2px var(--green); }
+  .id-box.missing input { box-shadow: 0 0 0 2px var(--yellow); }
+
+  /* ---------- 레이아웃 ---------- */
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 24px; max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .sidebar { position: sticky; top: 84px; align-self: start; display: flex; flex-direction: column; gap: 6px; }
+  .nav-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 12px 14px; border: none; border-radius: 12px;
+    background: transparent; color: var(--ink); font-size: 14px; font-weight: 700; cursor: pointer; text-align: left;
+  }
+  .nav-btn:hover { background: var(--beige); }
+  .nav-btn.active { background: var(--green); color: #fff; }
+  .nav-btn .count { min-width: 22px; padding: 1px 7px; border-radius: 99px; background: var(--yellow); color: var(--ink); font-size: 12px; text-align: center; }
+  .nav-btn .count:empty { display: none; }
+  .principle {
+    margin-top: 14px; padding: 14px; border-radius: 14px;
+    background: var(--cream); border: 1px solid #f1e3b8; font-size: 12px; line-height: 1.6; color: #593d0d;
+  }
+  .principle b { display: block; margin-bottom: 4px; font-size: 13px; }
+
+  main { min-width: 0; }
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .page-head h1 { margin: 0; font-size: 22px; font-weight: 800; }
+  .page-head p { margin: 4px 0 0; color: var(--ink-soft); font-size: 13px; }
+
+  /* ---------- 상담 카드 ---------- */
+  .card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-bottom: 18px; overflow: hidden;
+  }
+  .card-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-weight: 800; color: var(--green-dark); background: var(--green-soft);
+  }
+  .who { flex: 1; min-width: 160px; }
+  .who .uid { font-weight: 800; font-size: 15px; word-break: break-all; }
+  .who .meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; margin-left: 6px; vertical-align: middle; }
   .badge.pending { background: #fff3cd; color: #856404; }
-  .badge.approved { background: #d4edda; color: #155724; }
-  .badge.rejected { background: #f8d7da; color: #721c24; }
-  .chat-log { background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 8px; margin: 8px 0; font-size: 13px; max-height: 160px; overflow-y: auto; }
-  .chat-user, .chat-bot, .chat-plain { padding: 4px 8px; border-radius: 10px; margin: 3px 0; max-width: 85%; white-space: pre-wrap; }
-  .chat-user { background: #e8f0fe; margin-left: auto; text-align: right; }
-  .chat-bot { background: #fff3cd; }
-  .chat-plain { color: #888; }
-  .decide-row { display: flex; gap: 6px; margin-top: 8px; }
-  .decide-row input { flex: 1; padding: 6px 8px; font-size: 13px; }
-  .drug-search { position: relative; flex: 1; }
-  .drug-search input { width: 100%; }
+  .badge.approved { background: var(--green-soft); color: var(--green-dark); }
+  .badge.rejected { background: var(--red-soft); color: var(--red); }
+  .chip { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--beige); color: var(--ink-soft); }
+  .video-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 12px;
+    background: var(--ink); color: #fff; font-weight: 700; font-size: 13px; text-decoration: none;
+  }
+  .video-link:hover { background: #2a1a17; }
+
+  .card-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .col { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .col + .col { border-left: 1px solid var(--line); background: #fcfaf7; }
+  .section-title { font-size: 12px; font-weight: 800; color: var(--ink-soft); letter-spacing: .3px; margin-bottom: 6px; }
+
+  .chat-log {
+    background: var(--bg); border-radius: 12px; padding: 10px; font-size: 13px;
+    max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+  }
+  .chat-user, .chat-bot, .chat-plain { padding: 6px 10px; border-radius: 12px; max-width: 88%; white-space: pre-wrap; line-height: 1.5; }
+  .chat-user { background: var(--green-soft); align-self: flex-end; }
+  .chat-bot { background: var(--paper); border: 1px solid var(--line); align-self: flex-start; }
+  .chat-plain { color: var(--ink-soft); align-self: center; text-align: center; font-size: 12px; }
+
+  .live-chat { border: 1px solid var(--line); border-radius: 14px; background: var(--paper); padding: 12px; }
+  .live-chat-head { font-size: 13px; font-weight: 800; color: var(--green); margin-bottom: 8px; }
+  .live-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .live-empty { color: #aaa; font-size: 12px; }
+  .live-msg { padding: 6px 10px; border-radius: 12px; max-width: 82%; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+  .live-msg.user { background: var(--beige); align-self: flex-start; }
+  .live-msg.pharmacist { background: var(--green); color: #fff; align-self: flex-end; }
+  .live-input { display: flex; gap: 6px; margin-top: 8px; }
+  .summary-box { background: var(--cream); border: 1px solid #f1e3b8; border-radius: 12px; padding: 10px 12px; margin-top: 8px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+
+  /* ---------- 처방 결정 ---------- */
+  .decision { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .decision-title { font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .field label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 4px; }
+  .field .won { position: relative; }
+  .field .won::after { content: "원"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-soft); font-size: 13px; }
+  input, textarea {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; background: var(--paper); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13px; outline: none;
+  }
+  input:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px #176b5b22; }
+  .live-input input { flex: 1; width: auto; }
+  .drug-search { position: relative; }
   .drug-dropdown {
-    display: none;
-    position: absolute; left: 0; right: 0; top: calc(100% + 2px);
-    background: #fff; border: 1px solid #ccc; border-radius: 6px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-    max-height: 200px; overflow-y: auto; z-index: 5;
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(62, 39, 35, 0.12); max-height: 220px; overflow-y: auto; z-index: 5;
   }
   .drug-dropdown.open { display: block; }
-  .drug-option { padding: 7px 10px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
-  .drug-option:hover, .drug-option.hover { background: #f2f2f2; }
-  .drug-option .company { color: #888; font-size: 12px; white-space: nowrap; }
-  input, textarea {
-    -webkit-appearance: none;
-    appearance: none;
-    background: #fff;
-    color: #222;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-  }
+  .drug-option { padding: 9px 12px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .drug-option:hover, .drug-option.hover { background: var(--beige); }
+  .drug-option .company { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+  .picked { font-size: 12px; color: var(--green); font-weight: 700; min-height: 16px; }
+
   button {
-    -webkit-appearance: none;
-    appearance: none;
-    padding: 7px 14px;
-    font-size: 13px;
-    cursor: pointer;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #222;
-    color: #fff;
+    -webkit-appearance: none; appearance: none;
+    padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+    border-radius: 10px; border: none; background: var(--green); color: #fff;
   }
-  button.reject { background: #fff; color: #c0392b; border-color: #c0392b; }
-  a.video-link { display: inline-block; margin: 6px 0; }
-  .live-chat { border: 1px solid #cfe3dd; border-radius: 8px; background: #fff; margin: 8px 0; padding: 8px; }
-  .live-chat-head { font-size: 13px; font-weight: bold; color: #176b5b; margin-bottom: 6px; }
-  .live-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-  .live-empty { color: #999; font-size: 12px; }
-  .live-msg { padding: 5px 9px; border-radius: 10px; max-width: 80%; white-space: pre-wrap; word-break: break-word; }
-  .live-msg.user { background: #e8f0fe; align-self: flex-start; }
-  .live-msg.pharmacist { background: #d9efe8; align-self: flex-end; }
-  .live-input { display: flex; gap: 6px; margin-top: 6px; }
-  .live-input input { flex: 1; padding: 6px 8px; font-size: 13px; }
-  .end-btn { margin-top: 6px; background: #fff; color: #176b5b; border-color: #176b5b; }
-  .summary-box { background: #fffdf5; border: 1px solid #f1e3b8; border-radius: 6px; padding: 8px 10px; margin-top: 6px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
-  .queue-overview { background: #eef8f4; border: 1px solid #cfe3dd; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
-  .queue-title { font-size: 17px; font-weight: 700; color: #176b5b; }
-  .queue-title strong { font-size: 28px; margin: 0 5px; }
-  .queue-help { font-size: 13px; color: #526760; margin: 8px 0; line-height: 1.5; }
-  .queue-update { font-size: 12px; color: #526760; }
-  .patient-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-  .patient-heading b { overflow-wrap: anywhere; }
-  .queue-order { background: #176b5b; color: white; border-radius: 6px; padding: 5px 9px; font-size: 13px; }
-  .wait-time { font-size: 13px; color: #856404; font-weight: 700; margin-top: 6px; }
-  #pendingTab .card { border-left: 4px solid #d6b85b; padding: 16px; }
-  #pendingTab .card:first-of-type { border-left-color: #176b5b; }
+  button:hover { background: var(--green-dark); }
+  button:disabled { opacity: .5; cursor: default; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row > button { flex: 1; padding: 11px; font-size: 14px; }
+  button.reject { background: var(--paper); color: var(--red); border: 1.5px solid var(--red); }
+  button.reject:hover { background: var(--red-soft); }
+  .reject-box { display: none; flex-direction: column; gap: 8px; background: var(--red-soft); border-radius: 12px; padding: 10px; }
+  .reject-box.open { display: flex; }
+  .reject-box textarea { min-height: 60px; resize: vertical; }
+  .reject-box button { background: var(--red); }
+
+  .result { border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.6; }
+  .result.approved { background: var(--green-soft); color: var(--green-dark); }
+  .result.rejected { background: var(--red-soft); color: var(--red); }
+  .result b { display: block; font-size: 14px; margin-bottom: 2px; }
+
+  /* ---------- 빈 화면 / 알림 ---------- */
+  .empty { text-align: center; padding: 48px 16px; background: var(--paper); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--ink-soft); }
+  .empty img { width: 96px; opacity: .9; }
+  .empty b { display: block; color: var(--ink); font-size: 16px; margin: 10px 0 4px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 13px; font-weight: 700;
+    opacity: 0; pointer-events: none; transition: .25s; z-index: 50; max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--red); }
+
+  /* ---------- 좁은 화면 ---------- */
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 14px; }
+    .sidebar { position: static; flex-direction: row; flex-wrap: wrap; }
+    .nav-btn { width: auto; flex: 1; }
+    .principle { display: none; }
+    .card-body { grid-template-columns: 1fr; }
+    .col + .col { border-left: none; border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 560px) {
+    .topbar { padding: 10px 16px; flex-wrap: wrap; }
+    .brand .sub, .live-dot { display: none; }
+    .id-box { width: 100%; order: 3; }
+    .id-box input { flex: 1; width: auto; }
+    .card-head { padding: 14px 16px; }
+    .col { padding: 14px 16px; }
+  }
 </style>
 </head>
 <body>
-  <h1>🩺 모약이 약사 대시보드</h1>
-  <div class="id-row">
-    <label>약사 ID</label>
-    <input id="pharmacistId" />
+  <header class="topbar">
+    <div class="brand">
+      <img src="/app/main-home-connected/moyak-10.png" alt="" />
+      <div>
+        <div class="name">MOYAK 약사 콘솔</div>
+        <div class="sub">화상 상담 · 처방 승인 · 상담 요약 검토</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <span class="live-dot">5초마다 자동 새로고침</span>
+    <div class="id-box" id="idBox">
+      <label for="pharmacistId">약사 ID</label>
+      <input id="pharmacistId" placeholder="예: 약사01" autocomplete="off" />
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <button class="nav-btn active" data-tab="pending">🩺 대기 중 상담 <span class="count" id="pendingCount"></span></button>
+      <button class="nav-btn" data-tab="history">📋 처리 내역</button>
+      <div class="principle">
+        <b>💡 처방은 약사가 결정해요</b>
+        챗봇(AI)은 승인 권한이 없어요. 어떤 약을 줄지는 상담 내용을 보고 약사님이 직접 정하고, 모든 승인·거절은 기록으로 남아요.
+      </div>
+    </nav>
+
+    <main>
+      <section id="pendingTab">
+        <div class="page-head">
+          <div>
+            <h1>대기 중 상담</h1>
+            <p>환자의 챗봇 대화를 확인하고 화상 상담 후 처방을 승인하거나 거절해주세요.</p>
+          </div>
+        </div>
+        <div id="pendingList"></div>
+      </section>
+      <section id="historyTab" hidden>
+        <div class="page-head">
+          <div>
+            <h1>처리 내역</h1>
+            <p>내가 승인·거절한 상담이에요. 상담이 끝나지 않았다면 여기서 채팅·녹음·요약을 이어갈 수 있어요.</p>
+          </div>
+        </div>
+        <div id="historyList"></div>
+      </section>
+    </main>
   </div>
+  <div class="toast" id="toast"></div>
 
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="pending">대기 목록</button>
-    <button class="tab-btn" data-tab="history">처리 내역</button>
-  </div>
-
-  <section class="queue-overview" aria-label="상담 대기 현황">
-    <div class="queue-title">접속 중인 환자 <strong id="pendingCount">—</strong>명</div>
-    <p class="queue-help">최근 60초 안에 환자 대기·영상 화면의 접속이 확인된 상담입니다. 오래된 요청은 아래 별도 목록에 표시합니다.<br>‘약사 연결됨’은 담당 배정 상태이며 실제 영상 입장을 뜻하지 않습니다.</p>
-    <div id="queueUpdate" class="queue-update" role="status">대기 목록을 확인하고 있습니다.</div>
-  </section>
-  <div id="pendingTab"></div>
-  <details id="inactiveQueue"><summary>미접속·종료된 미처리 상담 <span id="inactiveCount">0</span>건</summary><p class="note">기록은 보존됩니다. 환자가 상담 화면에 다시 접속하면 활성 목록에 표시됩니다.</p><div id="inactiveList"></div></details>
-  <div id="historyTab" style="display:none"></div>
-
+<script src="/static/vendor/consult-recording.js"></script>
 <script>
+  const MASCOT = "/app/main-home-connected/moyak-10.png";
+  const DIRECT_PREFIX = "직접 상담 요청";
   const pharmacistIdEl = document.getElementById("pharmacistId");
   pharmacistIdEl.value = localStorage.getItem("moyak_pharmacist_id") || "";
+  const syncIdBox = () => document.getElementById("idBox").classList.toggle("missing", !pharmacistIdEl.value.trim());
+  pharmacistIdEl.addEventListener("input", syncIdBox);
   pharmacistIdEl.addEventListener("change", () => {
     localStorage.setItem("moyak_pharmacist_id", pharmacistIdEl.value);
   });
+  syncIdBox();
 
   function escapeHtml(s) {
     const div = document.createElement("div");
-    div.textContent = s;
+    div.textContent = s ?? "";
     return div.innerHTML;
   }
 
   function formatDate(isoString) {
-    const date = parseDate(isoString);
-    return date.toLocaleString();
+    if (!isoString) return "";
+    const date = new Date(isoString + "Z");
+    return date.toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
-  function parseDate(value) {
-    return new Date(/[zZ]$|[+-]\d{2}:\d{2}$/.test(value || '') ? value : value + 'Z');
+
+  let toastTimer = null;
+  function toast(message, isError) {
+    const el = document.getElementById("toast");
+    el.textContent = message;
+    el.classList.toggle("error", !!isError);
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
   }
-  function updateQueueCard(card, c, index) {
-    card.querySelector('.badge.pending').textContent = c.patient_queue_state === 'assigned' ? '약사 연결됨' : '상담 대기';
-    card.querySelector('.queue-order').textContent = `접수 순서 ${index + 1}`;
-    const minutes = Math.max(0, Math.floor((Date.now() - parseDate(c.created_at).getTime()) / 60000));
-    card.querySelector('.wait-time').textContent = Number.isFinite(minutes)
-      ? `요청 후 ${minutes < 1 ? '1분 미만' : minutes < 60 ? minutes + '분' : Math.floor(minutes / 60) + '시간 ' + minutes % 60 + '분'} 경과`
-      : '요청 시간 확인 필요';
+
+  function requirePharmacistId() {
+    if (pharmacistIdEl.value.trim()) return true;
+    toast("오른쪽 위에 약사 ID를 먼저 입력해주세요.", true);
+    pharmacistIdEl.focus();
+    return false;
   }
 
   async function api(method, path, body) {
@@ -158,8 +316,9 @@
   }
 
   function renderChatLog(summary) {
-    return summary
+    return (summary || "")
       .split("\n")
+      .filter((line) => line.trim())
       .map((line) => {
         let cls = "chat-plain";
         let text = line;
@@ -175,26 +334,44 @@
       .join("");
   }
 
-  // ---------- 화상 상담 중 채팅 + 상담 종료 요약 ----------
+  // 카드 머리: 환자 · 상태 · 진입 경로 · 화상 입장
+  function cardHead(c, badgeClass, badgeText, timeLabel, time) {
+    const direct = (c.chat_summary || "").startsWith(DIRECT_PREFIX);
+    return `
+      <div class="card-head">
+        <div class="avatar">${escapeHtml((c.user_id || "?").slice(0, 1).toUpperCase())}</div>
+        <div class="who">
+          <div class="uid">${escapeHtml(c.user_id)} <span class="badge ${badgeClass}">${badgeText}</span></div>
+          <div class="meta">${timeLabel} ${formatDate(time)}</div>
+        </div>
+        <span class="chip">${direct ? "⚡ 바로 상담 (챗봇 대화 없음)" : "💬 챗봇 상담 후 요청"}</span>
+        ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank" rel="noopener">🎥 화상 상담 입장</a>` : ""}
+      </div>`;
+  }
+
+  // ---------- 화상 상담 중 채팅 + 음성 기록·AI 요약 ----------
   // 카드가 화면에서 사라지면(승인/거절로 대기 목록에서 빠지는 등) 폴링도 스스로 멈춘다.
-  function attachLiveChat(card, c) {
+  function attachLiveChat(card, c, chatHost, recHost) {
     const box = document.createElement("div");
     box.className = "live-chat";
     box.innerHTML = `
       <div class="live-chat-head">💬 화상 상담 채팅 (환자와 실시간)</div>
-      <div class="live-list"><div class="live-empty">아직 메시지가 없습니다.</div></div>
+      <div class="live-list"><div class="live-empty">아직 메시지가 없어요.</div></div>
       <div class="live-input"><input placeholder="환자에게 보낼 메시지" maxlength="1000" /><button>보내기</button></div>
-      <button class="end-btn">상담 종료 및 대화 요약</button>
       <div class="summary-box" hidden></div>`;
-    card.appendChild(box);
-    MoyakUnified.attachPanel(c.id, card);
+    chatHost.appendChild(box);
+
+    // 음성 기록·AI 요약 패널: 상담 연결 → 양측 동의 → 자동 녹음·전사 → (승인/거절 후) 상담 종료 → 요약 검토·공개
+    const recBox = document.createElement("div");
+    recBox.className = "live-chat";
+    recHost.appendChild(recBox);
+    MoyakRecording.mount(recBox, { consultationId: c.id, actorId: () => pharmacistIdEl.value, role: "pharmacist" });
 
     const list = box.querySelector(".live-list");
     const input = box.querySelector(".live-input input");
     const seen = new Set();
     let timer = null;
 
-    const stopSocket = MoyakUnified.watchMessages(c.id, render);
     function render(messages) {
       let added = false;
       messages.forEach((m) => {
@@ -204,7 +381,7 @@
         added = true;
         const div = document.createElement("div");
         div.className = "live-msg " + m.sender_role;
-        div.textContent = (m.sender_role === "user" ? "환자: " : "나: ") + m.content;
+        div.textContent = m.content;
         list.appendChild(div);
       });
       if (added) list.scrollTop = list.scrollHeight;
@@ -212,17 +389,21 @@
 
     function showSummary(summary) {
       clearInterval(timer);
-      box.querySelector(".live-input")?.remove();
-      box.querySelector(".end-btn")?.remove();
+      const inputRow = box.querySelector(".live-input");
+      if (inputRow) inputRow.remove();
       const sb = box.querySelector(".summary-box");
       sb.textContent = "📝 상담 요약\n" + summary;
       sb.hidden = false;
     }
 
     async function refresh() {
-      if (!card.isConnected) { stopSocket(); return clearInterval(timer); }
+      if (!card.isConnected) return clearInterval(timer);
       try {
-        const consultation = await api("GET", `/consultations/${c.id}`);
+        const [consultation, messages] = await Promise.all([
+          api("GET", `/consultations/${c.id}`),
+          api("GET", `/consultations/${c.id}/messages`),
+        ]);
+        render(messages);
         if (consultation.summary) showSummary(consultation.summary);
       } catch (e) {
         // 다음 폴링에서 재시도
@@ -231,11 +412,7 @@
 
     async function send() {
       const text = input.value.trim();
-      if (!text) return;
-      if (!pharmacistIdEl.value) {
-        alert("약사 ID를 입력해주세요.");
-        return;
-      }
+      if (!text || !requirePharmacistId()) return;
       input.value = "";
       try {
         render([await api("POST", `/consultations/${c.id}/messages`, {
@@ -245,27 +422,12 @@
         })]);
       } catch (e) {
         input.value = text;
-        alert("메시지 전송 실패: " + e.message);
+        toast("메시지 전송 실패: " + e.message, true);
       }
     }
     box.querySelector(".live-input button").addEventListener("click", send);
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.isComposing) send();
-    });
-
-    box.querySelector(".end-btn").addEventListener("click", async (e) => {
-      if (!confirm("화상 상담을 종료하고 대화 내용을 요약할까요? 종료 후에는 채팅을 보낼 수 없습니다.")) return;
-      e.target.disabled = true;
-      e.target.textContent = "요약 생성 중...";
-      try {
-        const data = await api("POST", `/consultations/${c.id}/end`);
-        if(data.summary) showSummary(data.summary);
-        else alert("상담이 종료되었습니다. 음성 기록·AI 요약 패널에서 생성 상태를 확인하고 검토 후 공개해주세요.");
-      } catch (err) {
-        alert("상담 종료 실패: " + err.message);
-        e.target.disabled = false;
-        e.target.textContent = "상담 종료 및 대화 요약";
-      }
     });
 
     if (c.summary) {
@@ -289,7 +451,7 @@
   // 네이티브 <input list>+<datalist> 조합은 크롬 계열 브라우저에서 한글 IME 조합 중에
   // datalist 옵션을 갱신하면 입력 중이던 글자가 통째로 지워지는 버그가 있다
   // (예: "타이레"까지만 남고 사라짐). 그래서 직접 만든 드롭다운으로 대체한다.
-  function attachDrugSearch(nameInput, dropdown, resultsHolder) {
+  function attachDrugSearch(nameInput, dropdown, resultsHolder, pickedEl) {
     const closeDropdown = () => {
       dropdown.classList.remove("open");
       dropdown.innerHTML = "";
@@ -298,6 +460,7 @@
     const search = debounce(async () => {
       const q = nameInput.value.trim();
       resultsHolder.selectedSeq = ""; // 사용자가 다시 타이핑하면 이전 선택은 무효화
+      pickedEl.textContent = "";
       if (!q) {
         closeDropdown();
         return;
@@ -306,7 +469,7 @@
         const results = await api("GET", `/drugs/search?q=${encodeURIComponent(q)}`);
         resultsHolder.items = results;
         if (results.length === 0) {
-          dropdown.innerHTML = '<div class="drug-option" style="color:#888;cursor:default">검색 결과가 없습니다</div>';
+          dropdown.innerHTML = '<div class="drug-option" style="color:#999;cursor:default">검색 결과가 없어요</div>';
           dropdown.classList.add("open");
           return;
         }
@@ -318,7 +481,7 @@
           .join("");
         dropdown.classList.add("open");
       } catch (e) {
-        dropdown.innerHTML = '<div class="drug-option" style="color:#c0392b;cursor:default">약품 검색에 실패했습니다: ' + escapeHtml(e.message) + "</div>";
+        dropdown.innerHTML = '<div class="drug-option" style="color:#c0392b;cursor:default">약품 검색에 실패했어요: ' + escapeHtml(e.message) + "</div>";
         dropdown.classList.add("open");
       }
     }, 250);
@@ -332,6 +495,7 @@
       const item = resultsHolder.items[Number(opt.dataset.index)];
       nameInput.value = item.item_name;
       resultsHolder.selectedSeq = item.item_seq;
+      pickedEl.textContent = `✓ ${item.company} · 품목코드 ${item.item_seq}`;
       closeDropdown();
     });
 
@@ -345,103 +509,110 @@
   }
 
   // ---------- 탭 전환 ----------
-  document.querySelectorAll(".tab-btn").forEach((btn) => {
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       const isPending = btn.dataset.tab === "pending";
-      document.getElementById("pendingTab").style.display = isPending ? "block" : "none";
-      document.getElementById("historyTab").style.display = isPending ? "none" : "block";
+      document.getElementById("pendingTab").hidden = !isPending;
+      document.getElementById("historyTab").hidden = isPending;
       if (!isPending) loadHistory();
     });
   });
+
+  function emptyState(title, text) {
+    return `<div class="empty"><img src="${MASCOT}" alt="" /><b>${title}</b>${text}</div>`;
+  }
 
   // ---------- 대기 목록 ----------
   // 5초마다 자동 새로고침되는데, 매번 카드를 통째로 새로 그리면 약사가 입력 중이던
   // 약품명이 계속 지워지는 문제가 있었다. 그래서 이미 화면에 있는 카드는 건드리지 않고
   // 새로 들어온 상담만 추가, 더 이상 대기 중이 아닌 상담만 제거하는 방식으로 바꿨다.
   async function loadPending() {
-    const holder = document.getElementById("pendingTab");
+    const holder = document.getElementById("pendingList");
     try {
-      const all = await api("GET", "/consultations?status=pending");
-      const items = all.filter(c => c.patient_online && !c.ended_at);
-      const inactive = all.filter(c => !c.patient_online || c.ended_at);
-      document.getElementById('inactiveCount').textContent = inactive.length;
-      document.getElementById('inactiveList').innerHTML = inactive.map(c => `<div class="card"><b>환자 ID: ${escapeHtml(c.user_id)}</b><div class="note">${c.ended_at ? '상담 종료' : '접속 확인 안 됨'} · 신청 ${escapeHtml(formatDate(c.created_at))}</div></div>`).join('');
-      items.sort((a, b) => parseDate(a.created_at) - parseDate(b.created_at) || a.id.localeCompare(b.id));
-      document.getElementById('pendingCount').textContent = items.length;
-      document.querySelector('[data-tab="pending"]').textContent = `대기 목록 (${items.length})`;
-      document.getElementById('queueUpdate').textContent = `마지막 확인 ${new Date().toLocaleTimeString('ko-KR')} · 5초마다 자동 갱신`;
+      const items = await api("GET", "/consultations?status=pending");
+      document.getElementById("pendingCount").textContent = items.length || "";
 
-      const emptyNote = holder.querySelector("p.note");
-      if (emptyNote) emptyNote.remove();
-
-      if (items.length === 0) {
-        holder.querySelectorAll(".card[data-id]").forEach((el) => el.remove());
-        if (!holder.querySelector("p.note")) {
-          holder.innerHTML = '<p class="note">현재 접속이 확인된 대기 환자가 없습니다.</p>';
-        }
-        return;
-      }
+      const empty = holder.querySelector(".empty, .load-error");
+      if (empty) empty.remove();
 
       const currentIds = new Set(items.map((c) => c.id));
       holder.querySelectorAll(".card[data-id]").forEach((el) => {
         if (!currentIds.has(el.dataset.id)) el.remove();
       });
 
-      items.forEach((c, index) => {
-        const existing = holder.querySelector(`.card[data-id="${c.id}"]`);
-        if (existing) { updateQueueCard(existing, c, index); return; }
+      if (items.length === 0) {
+        holder.innerHTML = emptyState("대기 중인 상담이 없어요", "새 상담 요청이 들어오면 여기에 자동으로 나타나요.");
+        return;
+      }
+
+      items.forEach((c) => {
+        if (holder.querySelector(`.card[data-id="${c.id}"]`)) return; // 이미 떠있는 카드는 그대로 둠 (입력 중인 값 보존)
 
         const card = document.createElement("div");
         card.className = "card";
         card.dataset.id = c.id;
 
         const drugResults = { items: [], selectedSeq: "" };
+        const direct = (c.chat_summary || "").startsWith(DIRECT_PREFIX);
         card.innerHTML = `
-          <div class="patient-heading"><span class="queue-order"></span><b>환자 ID: ${escapeHtml(c.user_id)}</b><span class="badge pending">승인·거절 전</span></div>
-          <div class="note">신청 시각: ${formatDate(c.created_at)}</div>
-          <div class="wait-time"></div>
-          <div class="chat-log">${renderChatLog(c.chat_summary)}</div>
-          ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank">🎥 화상 상담 입장</a>` : ""}
-          <div class="decide-row">
-            <div class="drug-search">
-              <input class="drug-name" placeholder="처방할 약품명 검색" value="${escapeHtml(c.requested_drug_name || "")}" autocomplete="off" />
-              <div class="drug-dropdown"></div>
+          ${cardHead(c, "pending", "대기중", "신청", c.created_at)}
+          <div class="card-body">
+            <div class="col left">
+              <div>
+                <div class="section-title">상담 전 챗봇 대화</div>
+                <div class="chat-log">${direct ? '<div class="chat-plain">챗봇 대화 없이 바로 상담을 요청했어요. 화상으로 증상을 여쭤봐주세요.</div>' : renderChatLog(c.chat_summary)}</div>
+              </div>
             </div>
-          </div>
-          <div class="decide-row">
-            <input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="판매가 (원) — 키오스크 결제 금액" />
-          </div>
-          <div class="decide-row">
-            <button class="approve-btn">처방 승인</button>
-            <button class="reject reject-btn">거절</button>
+            <div class="col right">
+              <div class="decision">
+                <div class="decision-title">💊 처방 결정</div>
+                <div class="field drug-search">
+                  <label>처방할 약품</label>
+                  <input class="drug-name" placeholder="약품명 검색 후 목록에서 선택" value="${escapeHtml(c.requested_drug_name || "")}" autocomplete="off" />
+                  <div class="drug-dropdown"></div>
+                  <div class="picked"></div>
+                </div>
+                <div class="field">
+                  <label>판매가 (키오스크 결제 금액)</label>
+                  <div class="won"><input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="예: 3000" /></div>
+                </div>
+                <div class="btn-row">
+                  <button class="approve-btn">✓ 처방 승인</button>
+                  <button class="reject reject-btn">거절</button>
+                </div>
+                <div class="reject-box">
+                  <textarea class="reject-reason" maxlength="500" placeholder="거절 사유 (환자 화면에 그대로 보여요) 예: 대면 진료가 필요해 보여요."></textarea>
+                  <button class="reject-confirm">거절 확정</button>
+                </div>
+              </div>
+            </div>
           </div>
         `;
 
-        attachLiveChat(card, c);
-        card.insertBefore(card.querySelector(".live-chat"), card.querySelector(".decide-row"));
+        attachLiveChat(card, c, card.querySelector(".col.left"), card.querySelector(".col.right"));
 
         const nameInput = card.querySelector(".drug-name");
         const dropdown = card.querySelector(".drug-dropdown");
-        attachDrugSearch(nameInput, dropdown, drugResults);
+        attachDrugSearch(nameInput, dropdown, drugResults, card.querySelector(".picked"));
 
-        card.querySelector(".approve-btn").addEventListener("click", async () => {
+        card.querySelector(".approve-btn").addEventListener("click", async (e) => {
           const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || c.requested_drug_item_seq;
           if (!itemSeq) {
-            alert("목록에서 약품을 선택해주세요 (검색 후 자동완성에서 골라야 정확한 코드가 지정됩니다).");
+            toast("약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
+            nameInput.focus();
             return;
           }
           const priceText = card.querySelector(".drug-price").value.trim();
           const price = Number(priceText);
           if (priceText === "" || !Number.isInteger(price) || price < 0) {
-            alert("판매가를 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제됩니다).");
+            toast("판매가를 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제돼요).", true);
+            card.querySelector(".drug-price").focus();
             return;
           }
-          if (!pharmacistIdEl.value) {
-            alert("약사 ID를 입력해주세요.");
-            return;
-          }
+          if (!requirePharmacistId()) return;
+          e.target.disabled = true;
           try {
             const data = await api("POST", `/consultations/${c.id}/decision`, {
               pharmacist_id: pharmacistIdEl.value,
@@ -450,83 +621,95 @@
               drug_item_name: nameInput.value,
               price,
             });
-            alert(`승인 완료 — 처방약: ${data.approved_drug_name} (${price.toLocaleString()}원)`);
+            toast(`승인 완료 — ${data.approved_drug_name} (${price.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
             loadPending();
-          } catch (e) {
-            alert("오류: " + e.message);
+          } catch (err) {
+            toast("오류: " + err.message, true);
+          } finally {
+            e.target.disabled = false;
           }
         });
 
-        card.querySelector(".reject-btn").addEventListener("click", async () => {
-          if (!pharmacistIdEl.value) {
-            alert("약사 ID를 입력해주세요.");
-            return;
-          }
-          const reason = prompt("거절 사유를 입력해주세요.");
-          if (reason === null) return;
+        const rejectBox = card.querySelector(".reject-box");
+        card.querySelector(".reject-btn").addEventListener("click", () => {
+          rejectBox.classList.toggle("open");
+          if (rejectBox.classList.contains("open")) rejectBox.querySelector("textarea").focus();
+        });
+        card.querySelector(".reject-confirm").addEventListener("click", async (e) => {
+          if (!requirePharmacistId()) return;
+          e.target.disabled = true;
           try {
             await api("POST", `/consultations/${c.id}/decision`, {
               pharmacist_id: pharmacistIdEl.value,
               approve: false,
-              reason,
+              reason: rejectBox.querySelector("textarea").value.trim(),
             });
+            toast("거절 처리했어요. 환자 화면에 사유가 표시돼요.");
             loadPending();
-          } catch (e) {
-            alert("오류: " + e.message);
+          } catch (err) {
+            toast("오류: " + err.message, true);
+          } finally {
+            e.target.disabled = false;
           }
         });
 
         holder.appendChild(card);
-        updateQueueCard(card, c, index);
-      });
-      items.forEach((c, index) => {
-        const card = holder.querySelector(`.card[data-id="${c.id}"]`);
-        if (holder.children[index] !== card) holder.insertBefore(card, holder.children[index] || null);
       });
     } catch (e) {
-      document.getElementById('queueUpdate').textContent = '목록 갱신 실패: ' + e.message + ' · 기존 목록은 마지막 조회 결과입니다.';
+      holder.innerHTML = `<div class="empty load-error"><b>목록을 불러오지 못했어요</b>${escapeHtml(e.message)}</div>`;
     }
   }
 
   // ---------- 처리 내역 ----------
   async function loadHistory() {
-    const holder = document.getElementById("historyTab");
+    const holder = document.getElementById("historyList");
     if (!pharmacistIdEl.value) {
-      holder.innerHTML = '<p class="note">약사 ID를 입력하면 본인이 처리한 내역을 볼 수 있습니다.</p>';
+      holder.innerHTML = emptyState("약사 ID를 입력해주세요", "오른쪽 위에 약사 ID를 입력하면 내가 처리한 상담을 볼 수 있어요.");
       return;
     }
-    holder.innerHTML = "불러오는 중...";
+    holder.innerHTML = '<div class="empty">불러오는 중…</div>';
     try {
       const items = await api("GET", `/consultations?pharmacist_id=${encodeURIComponent(pharmacistIdEl.value)}`);
       if (items.length === 0) {
-        holder.innerHTML = '<p class="note">처리한 내역이 없습니다.</p>';
+        holder.innerHTML = emptyState("아직 처리한 상담이 없어요", "대기 중 상담에서 승인하거나 거절하면 여기에 모여요.");
         return;
       }
       holder.innerHTML = "";
       items.forEach((c) => {
         const card = document.createElement("div");
         card.className = "card";
-        const badgeClass = c.status === "approved" ? "approved" : "rejected";
-        const badgeText = c.status === "approved" ? "승인" : "거절";
+        const approved = c.status === "approved";
+        const direct = (c.chat_summary || "").startsWith(DIRECT_PREFIX);
         card.innerHTML = `
-          <div><b>${escapeHtml(c.user_id)}</b> <span class="badge ${badgeClass}">${badgeText}</span></div>
-          <div class="note">처리 시각: ${formatDate(c.decided_at)}</div>
-          ${c.approved_drug_name ? `<div>처방약: ${escapeHtml(c.approved_drug_name)}</div>` : ""}
-          ${c.decision_reason ? `<div>거절 사유: ${escapeHtml(c.decision_reason)}</div>` : ""}
-          <div class="chat-log">${renderChatLog(c.chat_summary)}</div>
+          ${cardHead(c, approved ? "approved" : "rejected", approved ? "승인" : c.status === "cancelled" ? "취소" : "거절", "처리", c.decided_at)}
+          <div class="card-body">
+            <div class="col left">
+              <div>
+                <div class="section-title">상담 전 챗봇 대화</div>
+                <div class="chat-log">${direct ? '<div class="chat-plain">챗봇 대화 없이 바로 온 상담이에요.</div>' : renderChatLog(c.chat_summary)}</div>
+              </div>
+            </div>
+            <div class="col right">
+              <div class="result ${approved ? "approved" : "rejected"}">
+                ${approved
+                  ? `<b>✓ 처방 승인</b>${escapeHtml(c.approved_drug_name || "")}`
+                  : `<b>거절</b>${escapeHtml(c.decision_reason || "사유 없음")}`}
+              </div>
+            </div>
+          </div>
         `;
-        // 처리(승인/거절) 후에도 화상 상담이 이어질 수 있으니, 아직 종료 전이면 채팅/종료를 계속 제공
-        if (c.status !== "cancelled") attachLiveChat(card, c);
         holder.appendChild(card);
+        // 처리(승인/거절) 후에도 화상 상담이 이어질 수 있으니, 아직 종료 전이면 채팅/녹음/요약을 계속 제공
+        if (c.status !== "cancelled") attachLiveChat(card, c, card.querySelector(".col.left"), card.querySelector(".col.right"));
       });
     } catch (e) {
-      holder.innerHTML = "오류: " + e.message;
+      holder.innerHTML = `<div class="empty"><b>내역을 불러오지 못했어요</b>${escapeHtml(e.message)}</div>`;
     }
   }
 
   loadPending();
   setInterval(() => {
-    loadPending();
+    if (!document.getElementById("pendingTab").hidden) loadPending();
   }, 5000);
 </script>
 </body>

@@ -40,6 +40,8 @@ data/scenario-integration-backup/
 data/team-integration-source/
 data/supabase-current-schema.json
 data/kiosk-codex-backup/
+data/dev-db-integration/
+data/dev-review/
 .pytest_tmp/
 
 # 노트북 체크포인트
