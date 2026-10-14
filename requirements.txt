@@ -28,3 +28,9 @@ pytest==8.3.3
 
 # Read-only PostgreSQL map catalog
 psycopg[binary]==3.3.6
+
+# 알약 사진 인식 (src/pills/) — 서버에는 화면이 없으므로 GUI 없는 headless 판을 쓴다.
+# 각인 읽기는 Google Cloud Vision(HTTP 호출)이라 추가 패키지가 없고, 오픈소스 대체인
+# easyocr 은 torch까지 끌고 와서 무거워 일부러 넣지 않았다 (없으면 각인만 건너뛴다).
+opencv-python-headless==4.10.0.84
+numpy==1.26.4

@@ -37,6 +37,13 @@ DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5011,126.8670")
 # 웹페이지에 노출되는 공개 키이고 등록한 도메인에서만 동작한다 — 그래도 코드에 직접 쓰지 않고 .env로만 관리.
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 
+# 알약 사진 각인(刻印) 읽기용 Google Cloud Vision API 키 (src/pills/ocr.py).
+# 없으면 각인을 읽지 않고 모양·색만으로 후보를 내므로 /pills/identify 자체는 계속 동작한다.
+GOOGLE_VISION_API_KEY = os.getenv("GOOGLE_VISION_API_KEY", "")
+
+# 알약 사진 검색이 쓸 Supabase(읽기 전용). 비어 있으면 DRUG_DATABASE_URL → MAP_DATABASE_URL 순으로 찾는다.
+PILL_DATABASE_URL = os.getenv("PILL_DATABASE_URL", "")
+
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'moyak.db'}")
 
 if not EYAK_SERVICE_KEY:

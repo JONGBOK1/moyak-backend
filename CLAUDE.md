@@ -149,6 +149,7 @@ moyak-backend/
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
 - [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` + 앱 지도 화면 `/app/map-screen/`(카카오 지도, `KAKAO_JS_KEY` 필요) — 가상 자판기는 동양미래대학교 주변 실제 장소, Supabase용 시드 SQL `scripts/supabase_demo_machines.sql` (2026-10-07 한별 동의 후 실행 완료: VM-001 좌표 보정, VM-006~009 추가, 재고 15건 — Render도 `MAP_DATABASE_URL`로 Supabase 조회 중)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
+- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장으로 약 후보를 찾는다. 모양·색은 OpenCV로, 각인은 Google Cloud Vision으로 읽고 Supabase `drug_pills`를 읽기 전용 조회. 실측 후보 정확도 70.0%(1위 48.3%, 평균 후보 9.5개), 모양 88.2%·색 76.5%. 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
 
 ## 8. 코딩 시 참고사항
 
@@ -210,3 +211,28 @@ moyak-backend/
 - **화상상담**: Daily.co 프리빌트 iframe으로 연결됨(`DAILY_API_KEY`/`DAILY_SUBDOMAIN` 필요). 다만 자체 디자인의 커스텀 통화 UI는 아니고 Daily 기본 UI 그대로 노출됨 — Figma 디자인과 통일하려면 Daily의 JS/Flutter SDK로 직접 UI를 짜야 함.
 - **자판기 하드웨어 없음**: MQTT로 실제 자판기에 개방 신호를 보내는 부분은 아직 없고, `/vending/dispense`가 성공 응답만 준다.
 - **DB는 SQLite** (`data/moyak.db`, `.env`의 `DATABASE_URL`로 교체 가능). **Render 무료 인스턴스는 디스크가 휘발성이라 재배포/재시작 시 초기화된다** — 실제 서비스로 갈 땐 Postgres 같은 영속 DB로 바꿔야 한다.
+
+## 10. 알약 사진 인식 (`src/pills/`)
+
+**목적**: 사용자가 약 이름을 모를 때 사진으로 약을 특정한다. 특정 뒤의 설명·병용금기·추천은 기존 RAG 체인이 그대로 한다.
+
+**흐름**: 사진 → 알약 영역 추출(`vision.py`) → 모양·색 판별 → 각인 읽기(`ocr.py`, Google Cloud Vision)
+→ Supabase `drug_pills` 조회(`search.py`, 읽기 전용) → 점수순 후보.
+
+- `POST /pills/identify` (multipart, 로그인 불필요, IP당 20회/분·300회/일, 8MB 이하) — 전체 스펙은 `docs/pills-api.md`.
+- `GET /pill-test` — 사진을 올려 바로 확인하는 테스트 페이지.
+- 설정: `GOOGLE_VISION_API_KEY`(없으면 각인 없이 모양·색만), `PILL_DATABASE_URL`(없으면 `DRUG_DATABASE_URL` → `MAP_DATABASE_URL`).
+- DB는 팀 Supabase를 **읽기 전용**으로만 쓴다(지도·DUR 보강과 같은 원칙). 주소가 없거나 OpenCV가 없으면
+  이 라우터만 503을 돌려주고 나머지 API는 평소대로 동작한다.
+
+**실측 정확도** (식약처 사진, 일반의약품): 모양 88.2% · 색 76.5% · 후보 안에 정답 70.0% · 1위 정답 48.3% · 평균 후보 9.5개.
+각인 없이 모양·색만 쓰면 후보 안에 정답이 9.2%로 떨어진다 — **각인이 읽히느냐가 전부다.**
+
+**고칠 때 반드시 지킬 것** (전부 실제로 한 번씩 틀렸던 것):
+- 각인 비교 규칙을 건드리면 `tests/test_pill_search.py`부터 돌린다.
+- 색은 측정값 기준 거리로만 정한다. 손으로 규칙을 덧붙였다가 76.5% → 68.9%로 떨어뜨린 적이 있다.
+- OCR에 한국어를 넣으면 `allowlist`를 포기해야 하고 영문 각인이 무너진다(62.2% → 21.6%). 영어로 못박아 둔 이유다.
+- 전처리는 CLAHE가 최선이다. 다른 6가지를 같은 사진 25장으로 재봤는데 전부 더 나빴다(`ocr.py` 주석의 표 참고).
+
+**아직 안 된 것**: 한글 각인(일반의약품 각인의 18%)은 못 읽는다. Google Vision 결제가 막혀 있으면
+오픈소스(easyocr)로 자동 대체되는데 정확도가 눈에 띄게 낮다.
