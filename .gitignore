@@ -17,6 +17,10 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# 알약 사진 캐시 / OCR 결과 캐시 (식약처에서 다시 받으면 되고, OCR 은 다시 읽으면 됨)
+data/pill_cache/
+data/ocr_cache.json
+
 # 상담/자판기 연동 로컬 DB (SQLite)
 data/*.db
 

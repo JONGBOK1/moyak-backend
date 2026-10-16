@@ -149,7 +149,7 @@ moyak-backend/
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
 - [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` + 앱 지도 화면 `/app/map-screen/`(카카오 지도, `KAKAO_JS_KEY` 필요) — 가상 자판기는 동양미래대학교 주변 실제 장소, Supabase용 시드 SQL `scripts/supabase_demo_machines.sql` (2026-10-07 한별 동의 후 실행 완료: VM-001 좌표 보정, VM-006~009 추가, 재고 15건 — Render도 `MAP_DATABASE_URL`로 Supabase 조회 중)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
-- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장으로 약 후보를 찾는다. 모양·색은 OpenCV로, 각인은 Google Cloud Vision으로 읽고 Supabase `drug_pills`를 읽기 전용 조회. 실측 후보 정확도 75.6%(1위 52.9%, 평균 후보 9.2개), 모양 88.2%·색 76.5%. 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
+- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장으로 약 후보를 찾는다. 모양·색은 OpenCV로, 각인은 Google Cloud Vision으로 읽고 Supabase `drug_pills`를 읽기 전용 조회. 실측 후보 정확도 81.5%(1위 59.7%, 평균 후보 11.6개), 모양 88.2%·색 76.5%. 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
 
 ## 8. 코딩 시 참고사항
 
@@ -225,9 +225,26 @@ moyak-backend/
 - DB는 팀 Supabase를 **읽기 전용**으로만 쓴다(지도·DUR 보강과 같은 원칙). 주소가 없거나 OpenCV가 없으면
   이 라우터만 503을 돌려주고 나머지 API는 평소대로 동작한다.
 
-**실측 정확도** (식약처 사진 119장, 일반의약품): 모양 88.2% · 색 76.5% · 후보 안에 정답 75.6% · 1위 정답 52.9% · 평균 후보 9.2개.
+**실측 정확도** (식약처 사진 119장, 일반의약품): 모양 88.2% · 색 76.5% · 후보 안에 정답 81.5% · 1위 정답 59.7% · 상위 5위 79.0% · 평균 후보 11.6개.
 각인을 Google Vision 이 아니라 오픈소스(easyocr)로 읽으면 70.0%/48.3%, 각인을 DB 에서 그대로 가져오면 91.6%/78.2%(상한선).
 각인 없이 모양·색만 쓰면 후보 안에 정답이 9.2%로 떨어진다 — **각인이 읽히느냐가 전부다.**
+
+**준비물**: `sql/015_fuzzystrmatch.sql` 을 Supabase 에 한 번 적용해야 한다. `search.py` 가 각인 한 글자
+오독을 보정하려고 `levenshtein()` 을 쓰는데, 그게 `fuzzystrmatch` 확장이라 없으면 각인 검색이 깨진다.
+
+**측정 도구** (고치기 전후를 숫자로 비교하는 용도 — 추측으로 고치지 말 것):
+
+```
+python scripts/check_pill_vision.py --miss            # 모양·색만 채점
+python scripts/check_pill_search.py --ocr google      # 사진→후보 전 과정, 진짜 성능
+python scripts/check_pill_search.py --ocr google --miss   # 놓친 건을 원인별로
+python scripts/check_pill_search.py --print           # 각인이 완벽할 때의 상한선
+python scripts/tune_pill_ocr.py                       # 전처리 방식 비교
+```
+
+사진은 `data/pill_cache/`, OCR 결과는 `data/ocr_cache.json` 에 저장해 다시 쓴다(둘 다 git 제외).
+Google Vision 은 사진 한 장에 2건을 부르고 무료가 월 1,000건이라 **캐시 없이 돌리면 한 번에 월 한도의
+1/4 이 날아간다.** `ocr.py` 의 전처리나 언어 설정을 고쳤을 때만 `--fresh` 로 다시 읽는다.
 
 **고칠 때 반드시 지킬 것** (전부 실제로 한 번씩 틀렸던 것):
 - 각인 비교 규칙을 건드리면 `tests/test_pill_search.py`부터 돌린다.
@@ -236,6 +253,8 @@ moyak-backend/
   Google은 `allowlist`가 없어 한글을 같이 읽게 하는 쪽이 낫다(같은 119장: 72.3% → 75.6%). 엔진을 바꿀 때 같이 확인할 것.
 - 전처리는 CLAHE가 최선이다. 다른 6가지를 같은 사진 25장으로 재봤는데 전부 더 나빴다(`ocr.py` 주석의 표 참고).
 
-**아직 안 된 것**: Google 과 상한선(91.6%) 사이 16pp 가 아직 못 읽는 각인이다. Google Vision 키가 없으면
+**아직 안 된 것**: 남은 22건은 각인 오독 6 · DB 에 각인이 없는 약(로고뿐) 5 · 색 틀림 5 ·
+모양 틀림 2 · 못 읽음 2 · 순위 밖 2 다. 색·모양은 각인이 맞았는데도 순위에서 밀린 경우라
+점수 조정 여지가 있고, '각인이 없는 약' 5건은 OCR 로는 못 고친다. Google Vision 키가 없으면
 오픈소스(easyocr)로 자동 대체되는데 정확도가 5pp 낮고, Render 무료 인스턴스에는 easyocr(torch)을 올릴 수 없어
 키가 없으면 각인 없이 9.2% 로 떨어진다.

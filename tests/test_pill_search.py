@@ -5,7 +5,7 @@
 """
 
 from src.pills.ocr import _clean
-from src.pills.search import _clean_imprint, _close
+from src.pills.search import _clean_imprint, _close, _tokens
 
 
 # --- DB 각인 다듬기 -------------------------------------------------
@@ -72,3 +72,52 @@ def test_clean_drops_lone_digit_but_keeps_letter():
 def test_clean_keeps_hangul_imprints():
     # 일반의약품 각인의 18% 가 한글이다 ("깅코탄", "제로민" 등).
     assert _clean("깅코탄") == "깅코탄"
+
+
+# --- OCR 결과를 토큰으로 쪼개기 ------------------------------------
+# 여기 있는 건 전부 실제로 놓쳤던 사진이다. 쪼개는 방식을 건드리면 바로 티가 난다.
+
+def test_tokens_keeps_hyphenated_imprint():
+    # 'F-N' 을 ['F','N'] 으로 쪼개면 둘 다 1글자라 버려지고, 각인 조건이 통째로
+    # 빠져 후보 30개 안에 정답이 안 들어왔다(화콜노즈정). 기호는 지우고 나서 쪼갠다.
+    # ('M' 은 1글자 토큰으로 따로 남는다 — 아래 test_tokens_keeps_single_letter 참고)
+    assert "FN" in _tokens("F-N M")
+    assert "F" not in _tokens("F-N M")
+
+
+def test_tokens_still_splits_on_space():
+    # 앞뒤 조각을 읽으면 서로 다른 각인이 공백으로 이어져 온다. 공백까지 지워
+    # 'DWMPG' 로 만들면 그런 각인은 세상에 없어 0건이 된다.
+    assert "DW" in _tokens("D-W MPG")
+    assert "MPG" in _tokens("D-W MPG")
+
+
+def test_tokens_adds_joined_form():
+    # OCR 이 한 덩어리 각인에 공백을 끼워 넣는다 — 'TYPENER' → 'TYPEN ER'.
+    # 붙인 형태가 있어야 부분일치(0.25)가 아니라 완전일치(0.45)를 받는다.
+    assert "TYPENER" in _tokens("TYPEN ER")
+
+
+def test_tokens_keeps_single_letter():
+    # 각인이 한 글자뿐인 일반의약품이 95개 있다('V+' → 'V').
+    # 버리면 완벽하게 읽고도 못 찾는다. 쓰는 쪽에서 완전일치만 인정한다.
+    assert _tokens("V+") == ["V"]
+
+
+def test_tokens_empty_input():
+    assert _tokens(None) == []
+    assert _tokens("  ") == []
+
+
+# --- 그리스 문자 ----------------------------------------------------
+# DB 가 라틴 대신 그리스 문자를 쓴 품목이 있다. 눈으로도 OCR 로도 구별이 안 된다.
+
+def test_greek_letters_compare_as_latin():
+    assert _clean_imprint("BPΛΛ") == "BPAA"       # 아니스펜8시간이알서방정
+    assert _clean_imprint("αP") == "AP"           # 에스알파플러스정
+    assert _clean_imprint("YPCΛ 100") == "YPCA100"  # 카로마스텐질정
+
+
+def test_greek_normalisation_matches_ocr_output():
+    # OCR 은 라틴으로 읽는다. 양쪽을 통일해야 같은 것으로 본다.
+    assert _tokens("BPAA")[0] == _clean_imprint("BPΛΛ")
