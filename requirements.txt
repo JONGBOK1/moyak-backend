@@ -32,5 +32,8 @@ psycopg[binary]==3.3.6
 # 알약 사진 인식 (src/pills/) — 서버에는 화면이 없으므로 GUI 없는 headless 판을 쓴다.
 # 각인 읽기는 Google Cloud Vision(HTTP 호출)이라 추가 패키지가 없고, 오픈소스 대체인
 # easyocr 은 torch까지 끌고 와서 무거워 일부러 넣지 않았다 (없으면 각인만 건너뛴다).
-opencv-python-headless==4.10.0.84
-numpy==1.26.4
+#
+# 정확도를 잰 조합: Python 3.13.3 / opencv-python-headless 5.0.0.93 / numpy 2.5.3
+# numpy 는 pandas 가 이미 끌고 오므로 여기서 또 고정하지 않는다 — 두 군데서 고정하면
+# 버전이 어긋나는 순간 설치가 통째로 막힌다. opencv 5 는 numpy 2 이상을 요구한다.
+opencv-python-headless==5.0.0.93
