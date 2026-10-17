@@ -4,7 +4,7 @@
 
     모양+색만            후보에 정답  9.2% · 1위 정답  0.0%
     + 각인 easyocr       후보에 정답 70.0% · 1위 정답 48.3% · 평균 후보 9.5개
-    + 각인 Google        후보에 정답 81.5% · 1위 정답 65.5% · 평균 후보 11.7개
+    + 각인 Google        후보에 정답 81.5% · 1위 정답 64.7% · 평균 후보 11.7개
     + 각인 DB 에서 가져옴  후보에 정답 91.6% · 1위 정답 78.2%  ← 상한선(OCR 이 완벽할 때)
 
 **91.6% 는 OCR 성능이 아니라 천장이다.** 각인을 DB 에서 그대로 넣었을 때의 값이라
@@ -146,6 +146,39 @@ def _read_easyocr(crop: np.ndarray) -> str | None:
     return _clean(" ".join(parts)) or None
 
 
+#: 글자가 이만큼도 안 나오면 제대로 못 읽은 것으로 보고 원형 각인을 의심한다.
+_WEAK_READ = 5
+
+
+#: 조각의 가로세로비가 이 안이면 둥근 알약으로 본다.
+_ROUND_ASPECT = 1.3
+
+
+def _is_roundish(crop: np.ndarray) -> bool:
+    h, w = crop.shape[:2]
+    return bool(h and w) and max(h, w) / min(h, w) <= _ROUND_ASPECT
+
+
+def _unwrap_circle(crop: np.ndarray) -> np.ndarray:
+    """원 테두리를 따라 둥글게 찍힌 각인을 직선으로 편다.
+
+    Google Vision 은 가로로 놓인 글자를 전제하므로 둥근 각인은 조각만 잡는다 —
+    실측에서 'LITHIUM' 을 'M H' 로만 읽었다. 극좌표로 펴면 원이 직선이 되어
+    같은 각인이 'M ITHIU' 로 나오고, 'ITHIU' 가 'LITHIUM' 에 들어 있으므로
+    부분일치로 찾아진다.
+    """
+    h, w = crop.shape[:2]
+    r = min(h, w) / 2.0
+    # 폭=반지름, 높이=둘레. 그대로면 글자가 세로로 서 있어서 90도 돌린다.
+    pol = cv2.warpPolar(crop, (int(r), int(2 * np.pi * r)), (w / 2.0, h / 2.0),
+                        r, cv2.WARP_POLAR_LINEAR)
+    strip = cv2.rotate(pol, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    # **두 번 이어 붙인다.** 원을 0도에서 잘라 펴므로 그 지점을 지나는 단어가 둘로
+    # 쪼개진다 — 'LITHIUM' 이 'M' + 'ITHIU' 로 갈렸다. 이어 붙이면 잘린 단어가
+    # 가운데에서 한 번은 온전하게 나타난다('LITHIU' / 뒤집으면 'LITHIUM').
+    return np.hstack([strip, strip])
+
+
 def read_many(crops: list, engine: str = "auto") -> str | None:
     """조각 여러 개를 읽어 합친다.
 
@@ -154,6 +187,9 @@ def read_many(crops: list, engine: str = "auto") -> str | None:
     실측상 25장 전부 조각이 2개 이상 잡혔다.
 
     검색은 어느 쪽 각인이든 맞으면 되므로 읽은 것을 전부 이어 붙여 넘긴다.
+
+    글자가 거의 안 나오면 **원형 각인을 의심해 한 번 더 읽는다**(`_unwrap_circle`).
+    항상 하지 않는 이유는 Google 호출이 그만큼 늘기 때문이다 — 못 읽었을 때만 쓴다.
     """
     seen: list[str] = []
     for c in crops[:2]:          # 셋째부터는 먼지일 가능성이 커서 읽지 않는다
@@ -163,6 +199,33 @@ def read_many(crops: list, engine: str = "auto") -> str | None:
         for token in (got or "").split():
             if token not in seen:
                 seen.append(token)
+
+    # **뭔가 읽히긴 했는데 너무 짧을 때만** 다시 읽는다. 아예 안 읽혔다면 각인이
+    # 없는 약일 가능성이 크고(일반의약품의 상당수가 로고·분할선뿐이다), 그런 사진에
+    # 억지로 한 번 더 읽으면 없는 글자를 만들어내 순위를 망친다.
+    #   조건 없음: 1위 63.0% / 5위 77.3%
+    #   둥근 것만: 1위 64.7% / 5위 78.2%
+    read_len = sum(len(t) for t in seen)
+    if 0 < read_len < _WEAK_READ and crops:
+        first = crops[0]
+        # **둥근 알약에만 쓴다.** 원을 펴는 방법이라 길쭉한 알약에 쓰면 글자가
+        # 뭉개져서 없는 글자를 만들어낸다 — 각인이 아예 없는 약에서 엉뚱한 토큰이
+        # 생겨 실측 1위 정확도가 65.5% → 63.0% 로 떨어졌다.
+        if first is not None and getattr(first, "size", 0) and _is_roundish(first):
+            try:
+                strip = _unwrap_circle(first)
+                # 각인이 시계/반시계 어느 쪽으로 돌아가 있는지 알 수 없어 양쪽을 본다.
+                # 실측에서 바로 편 쪽은 'LITHIU', 뒤집은 쪽은 'LITHIUM' 이 나왔다.
+                reads = [read_imprint(strip, engine=engine),
+                         read_imprint(cv2.flip(strip, -1), engine=engine)]
+            except Exception as exc:
+                logger.warning("원형 각인 펴기 실패: %s", type(exc).__name__)
+                reads = []
+            for got in reads:
+                for token in (got or "").split():
+                    if token not in seen:
+                        seen.append(token)
+
     return " ".join(seen) or None
 
 

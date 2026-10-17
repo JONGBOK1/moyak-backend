@@ -241,7 +241,10 @@ def find(
         # 실측 오답이 SSN→SSV, WIG→WLG, MBL→MSL 처럼 대부분 한 글자 차이였다.
         # levenshtein 은 fuzzystrmatch 확장이 제공한다(sql/015 참고).
         ors = []
-        for i, tok in enumerate(print_tokens[:5]):
+        # **긴 토큰부터 쓴다.** 조회 조건은 다섯 개까지만 넣는데, 읽은 순서대로
+        # 자르면 'M' 'H' 같은 쓸모없는 조각이 자리를 차지하고 정작 'LITHIUM' 이
+        # 잘려 나간다. 긴 각인일수록 겹치는 약이 적어 확실하다.
+        for i, tok in enumerate(sorted(print_tokens, key=len, reverse=True)[:5]):
             f_ = _CLEAN_SQL.format(col="print_front")
             b_ = _CLEAN_SQL.format(col="print_back")
             params[f"tok{i}"] = tok
