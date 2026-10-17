@@ -115,6 +115,15 @@ moyak-backend/
    - 응답: `{"answer": "string", "sources": ["string", ...], "evidence": [{"item_name", "field", "field_label", "text"}, ...]}`
      - `evidence`: 답변이 실제로 인용한 원본 청크 목록(신뢰도 어필용 — "AI 요약"이 아니라 식약처 원문 그대로임을 사용자에게 보여주기 위해 추가)
    - 헬스체크: `GET /health` → `{"status": "ok"}`
+   - **회원가입·로그인 (2026-10-17, `src/accounts/`, `src/api/routes/auth.py`)**: Supabase Auth 연동. 팀 `users.id`가 `auth.users`를 참조하므로 계정은 Supabase Auth에 만들고, 같은 UUID로 `public.users`(nickname=아이디, role)에 프로필을 저장한다. 공유 DB 구조는 변경하지 않음.
+     - `GET /auth/username-available?username=` → `{"username", "available"}` (회원가입 1단계 중복 확인)
+     - `POST /auth/signup` `{"username", "password"}` → 201 + 로그인 응답(가입 즉시 로그인). 409 중복, 422 형식 오류
+     - `POST /auth/login` `{"username", "password"}` → `{"access_token", "token_type": "bearer", "expires_in", "user": {"id", "username", "role"}}`. 401 아이디/비밀번호 불일치, 403 비활성 계정
+     - `GET /auth/me` (Bearer) → `{"id", "username", "role"}` — 앱 시작 시 저장된 토큰 확인용. 로그아웃은 앱에서 토큰 삭제(서버 저장 없음)
+     - 규칙은 앱(`input_validation.dart`)과 동일: 아이디 영문·숫자·밑줄 4~20자(대소문자 구분 없음), 비밀번호 8자 이상·영문+숫자+특수문자·공백 없음.
+     - 아이디는 내부적으로 `아이디@AUTH_EMAIL_DOMAIN`(기본 moyak.app) 이메일로 Supabase에 저장(관리자 API로 이메일 확인 없이 생성, 메일 발송 없음). 비밀번호는 Supabase가 저장·검증하고 이 서버는 보관하지 않는다.
+     - 토큰은 기존 상담 토큰(`CONSULT_AUTH_SECRET` 서명, 기본 14일). 앱은 이후 요청에 `Authorization: Bearer`를 붙이고, 상담 생성 등 팀 규격 API의 `user_id`에는 `user.id`를 넣는다. 약사 계정은 가입으로 만들 수 없고 `users.role`을 `pharmacist`로 바꿔 지정한다.
+     - `.env`: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`(서버 전용 비밀값) 필요. 없으면 가입·로그인 503. 요청량 제한: 가입 5회/분·30회/일, 로그인 10회/분.
    - 루트: `GET /` → 앱 첫 화면 `/app/splash/`로 리다이렉트 (서버 주소만 입력해도 앱 전체 흐름을 볼 수 있게)
    - 테스트용 페이지: `GET /chat-test` → 한국어 웹 UI (`src/api/static/chat_test.html`), 답변/출처/원문 근거를 브라우저에서 바로 확인 가능
    - **요청량 제한**: `/chat`은 IP당 15회/분, 200회/일로 제한(`slowapi`, `src/api/limiter.py`). 초과 시 `429` + `{"detail": "요청이 너무 많습니다..."}`. 실제 비용이 드는 엔드포인트라 남용 방지용. Render처럼 프록시 뒤에 배포할 때는 uvicorn에 `--proxy-headers`를 켜야 진짜 클라이언트 IP로 카운트된다(안 켜면 전부 같은 IP로 잡혀 프록시 하나가 전체 사용자의 한도를 공유하게 됨).

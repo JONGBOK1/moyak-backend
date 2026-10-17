@@ -6,9 +6,12 @@ HTTP(FastAPI 라우터)와 분리해서, DB 세션만 있으면 단독으로 테
 """
 
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 
 from src.consult import summary as summary_module
 from src.consult.db import is_shared_db
@@ -151,7 +154,8 @@ def cancel_consultation(db: Session, consultation_id: str) -> ConsultationReques
 
 
 def add_message(
-    db: Session, consultation_id: str, sender_role: str, sender_id: str, content: str
+    db: Session, consultation_id: str, sender_role: str, sender_id: str, content: str,
+    client_id: str | None = None,
 ) -> ConsultationMessage:
     """화상 상담 중 채팅 한 건 저장. 상담이 종료(요약 생성)된 뒤에는 더 보낼 수 없다."""
     consultation = get_consultation(db, consultation_id)
@@ -159,6 +163,18 @@ def add_message(
         raise InvalidStateError(f"알 수 없는 발신자 유형입니다: {sender_role}")
     if sender_role == MessageSender.USER and sender_id != consultation.user_id:
         raise InvalidStateError("본인의 상담에만 메시지를 보낼 수 있습니다.")
+    content = content.strip()
+    key = client_id or str(uuid.uuid4())
+    def existing_message():
+        return db.query(ConsultationMessage).filter_by(consultation_id=consultation_id,
+            sender_role=sender_role, sender_id=sender_id, client_id=key).first()
+    def check_existing(message):
+        if message.content != content:
+            raise InvalidStateError('같은 client_id로 다른 메시지를 보낼 수 없습니다.')
+        return message
+    existing = existing_message()
+    if existing:
+        return check_existing(existing)
     if consultation.ended_at is not None:
         raise InvalidStateError("이미 종료된 상담입니다.")
     room = db.get(ConsultationSession, consultation_id)
@@ -171,10 +187,17 @@ def add_message(
         raise InvalidStateError(f"메시지는 {MAX_MESSAGE_LENGTH}자 이하로 보내주세요.")
 
     message = ConsultationMessage(
-        consultation_id=consultation.id, sender_role=sender_role, sender_id=sender_id, content=content
+        consultation_id=consultation.id, sender_role=sender_role, sender_id=sender_id, content=content, client_id=key
     )
     db.add(message)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = existing_message()
+        if existing:
+            return check_existing(existing)
+        raise
     db.refresh(message)
     return message
 
@@ -294,9 +317,25 @@ def dispense(db: Session, purchase_id: str, machine_id: str) -> ApprovedPurchase
     if purchase.price is not None and purchase.paid_at is None:
         raise InvalidStateError("결제가 완료되지 않은 승인 건입니다. 결제 후 수령할 수 있습니다.")
 
-    purchase.status = PurchaseStatus.DISPENSED
-    purchase.dispensed_machine_id = machine_id
-    purchase.dispensed_at = _now()
+    now = _now()
+    # Claim first, then update stock and history in the SAME transaction.
+    changed = db.execute(update(ApprovedPurchase).where(
+        ApprovedPurchase.id == purchase_id, ApprovedPurchase.status == PurchaseStatus.PENDING,
+        ApprovedPurchase.expires_at > now,
+    ).values(status=PurchaseStatus.DISPENSED, dispensed_machine_id=machine_id, dispensed_at=now)).rowcount
+    if not changed:
+        db.rollback()
+        raise InvalidStateError('이미 수령했거나 만료된 승인 건입니다.')
+    if is_shared_db(db):
+        from src.consult.inventory import record_dispense, InventoryError
+        try:
+            record_dispense(db, purchase, machine_id, now)
+        except InventoryError as error:
+            db.rollback()
+            raise InvalidStateError(str(error)) from error
+        except Exception:
+            db.rollback()
+            raise
 
     machine = db.get(VendingMachine, machine_id)
     if machine is not None and machine.paired_purchase_id == purchase.id:

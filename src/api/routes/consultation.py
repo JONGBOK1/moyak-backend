@@ -51,6 +51,7 @@ class ConsultationResponse(BaseModel):
 
 
 class MessageCreateRequest(BaseModel):
+    client_id: str | None = Field(None, min_length=1, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
     sender_role: str = Field(..., pattern="^(user|pharmacist)$")
     sender_id: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1, max_length=1000)
@@ -58,6 +59,7 @@ class MessageCreateRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     id: int
+    client_id: str
     sender_role: str
     sender_id: str
     content: str
@@ -164,6 +166,7 @@ def send_message(
             sender_role=payload.sender_role,
             sender_id=payload.sender_id,
             content=payload.content,
+            client_id=payload.client_id,
         )
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

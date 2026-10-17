@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
-from src.api.routes import chat, consultation, conversation, drugs, shop, vending
+from src.api.routes import auth, chat, consultation, conversation, drugs, shop, vending
 from src.api.routes import map as map_routes
 from src.consult import worker
 from src.consult.db import SessionLocal, init_db
@@ -42,12 +42,27 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(0.1 if processed else 1)
 
     task = asyncio.create_task(process_queue())
+    async def expire_carts():
+        from src.consult.shop import expire_orders
+        def sweep():
+            with SessionLocal() as db:
+                expire_orders(db)
+        while True:
+            try:
+                await run_in_threadpool(sweep)
+            except Exception:
+                pass  # DB failure leaves carts for the next transactional sweep.
+            await asyncio.sleep(30)
+    expiry_task = asyncio.create_task(expire_carts())
     try:
         yield
     finally:
         task.cancel()
+        expiry_task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        with suppress(asyncio.CancelledError):
+            await expiry_task
 
 
 app = FastAPI(title="MOYAK 모약이 API", lifespan=lifespan)
@@ -62,6 +77,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(consultation.router)
 app.include_router(conversation.router)
