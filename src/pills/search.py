@@ -39,6 +39,25 @@ _COLOR_NEIGHBORS: dict[str, tuple[str, ...]] = {
     "검정": ("회색", "갈색", "남색"),
 }
 
+#: 후보 점수 배점. **손으로 고치지 말고 반드시 재고 나서 고칠 것** —
+#: `python scripts/check_pill_search.py --n 120 --ocr google` 으로 전후를 비교한다.
+#: (점수 계산만 바꾸면 OCR 캐시가 그대로 쓰여서 Google 호출 없이 즉시 돌아간다)
+W_SHAPE = 0.30          # 모양이 정확히 같다
+W_SHAPE_NEAR = 0.12     # 혼동이 잦은 이웃 모양
+W_COLOR = 0.25          # 색이 정확히 같다
+W_COLOR_NEAR = 0.10     # 혼동이 잦은 이웃 색
+W_PRINT_EXACT = 0.45    # 각인이 통째로 같다 — 거의 확정
+W_PRINT_PART = 0.25     # 각인 일부가 들어 있다
+W_PRINT_NEAR = 0.15     # 한 글자 차이
+W_PRINT_LEN = 0.04      # 각인 한 글자당 가산점 ('CT' 보다 'CRWSOB100' 이 확실하다)
+W_PRINT_LEN_MAX = 0.12
+W_ASPECT = 0.14         # 가로세로비가 거의 같다
+W_ASPECT_NEAR = 0.07
+
+#: 한 후보가 받을 수 있는 최대 점수. 화면에 보여줄 때 이 값으로 나눠 0~100 으로 만든다.
+MAX_SCORE = W_SHAPE + W_COLOR + W_PRINT_EXACT + W_PRINT_LEN_MAX + W_ASPECT
+
+
 #: 각인에 그리스 문자를 쓴 품목이 있다. 눈으로는 라틴 문자와 구별이 안 되고 OCR 도
 #: 라틴으로 읽는다 — 실측에서 'BPΛΛ'→'BPAA', 'αP'→'AP', 'YPCΛ 100'→'YPCA 100' 으로
 #: 3건을 놓쳤다. OCR 이 틀린 게 아니라 DB 가 다른 글자를 쓴 것이므로, 양쪽을 라틴으로
@@ -253,17 +272,17 @@ def find(
     for r in rows:
         score, matched = 0.0, []
         if shape and r["drug_shape"] == shape:
-            score += 0.30
+            score += W_SHAPE
             matched.append("모양")
         elif shape and r["drug_shape"] in _SHAPE_NEIGHBORS.get(shape, ()):
-            score += 0.12
+            score += W_SHAPE_NEAR
 
         row_color = (r["color_class1"] or "").split(",")[0].strip()
         if color and row_color == color:
-            score += 0.25
+            score += W_COLOR
             matched.append("색")
         elif color and row_color in _COLOR_NEIGHBORS.get(color, ()):
-            score += 0.10
+            score += W_COLOR_NEAR
 
         if print_tokens:
             front = _clean_imprint(r["print_front"])
@@ -273,19 +292,19 @@ def find(
             label = ""
             for tok in print_tokens:
                 if tok in (front, back):
-                    cur, lab = 0.45, "각인 일치"       # 통째로 같다 — 거의 확정
+                    cur, lab = W_PRINT_EXACT, "각인 일치"       # 통째로 같다 — 거의 확정
                 elif len(tok) == 1:
                     continue                          # 한 글자는 완전일치만 인정한다
                 elif front and tok in front or back and tok in back:
-                    cur, lab = 0.25, "각인 부분일치"
+                    cur, lab = W_PRINT_PART, "각인 부분일치"
                 elif _close(tok, front) or _close(tok, back):
-                    cur, lab = 0.15, "각인 비슷함"     # 한 글자 차이
+                    cur, lab = W_PRINT_NEAR, "각인 비슷함"     # 한 글자 차이
                 else:
                     continue
                 # **긴 각인일수록 확실하다.** 'CT' 는 수십 개 약과 겹치지만
                 # 'CRWSOB100' 이 맞으면 그 약 하나다. 길이에 따라 가산점을 준다.
                 # ('마크' 를 지우면 각인이 짧아져 1위 정확도가 50% → 45% 로 떨어졌다)
-                cur += min(0.12, max(0, len(tok) - 2) * 0.04)
+                cur += min(W_PRINT_LEN_MAX, max(0, len(tok) - 2) * W_PRINT_LEN)
                 if cur > best:
                     best, label = cur, lab
             if best:
@@ -300,10 +319,10 @@ def find(
             try:
                 diff = abs(float(r["leng_long"]) / float(r["leng_short"]) - aspect)
                 if diff <= 0.2:
-                    score += 0.14
+                    score += W_ASPECT
                     matched.append("비율")
                 elif diff <= 0.5:
-                    score += 0.07
+                    score += W_ASPECT_NEAR
             except ZeroDivisionError:
                 pass
 
@@ -322,5 +341,9 @@ def find(
     out.sort(key=lambda t: (-t[0], t[1].item_name))
     picked = out[:limit]
     for raw, c in picked:
-        c.score = round(min(1.0, raw), 3)
+        # **자르지 않고 만점 대비 비율로 바꾼다.** 1.0 에서 자르면 근거가 다른 후보들이
+        # 전부 100 으로 같아져 화면에서 구별이 안 된다 — 실제로 1~3위가 모두 100 이면서
+        # 색도 각인도 다른 약이었다. 만점(모양+색+각인+길이+비율)으로 나누면
+        # "가능한 근거 중 얼마나 맞았나" 가 되고 순위도 그대로 보인다.
+        c.score = round(min(1.0, raw / MAX_SCORE), 3)
     return [c for _, c in picked]
