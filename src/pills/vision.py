@@ -125,8 +125,14 @@ def _find_pill(bgr: np.ndarray) -> list:
         cx, cy = x + cw / 2, y + ch / 2
         # 가운데로부터의 거리 (0=정중앙, 1=모서리)
         off = ((cx - w / 2) ** 2 + (cy - h / 2) ** 2) ** 0.5 / ((w ** 2 + h ** 2) ** 0.5 / 2)
-        # 크고 가운데에 있을수록 높은 점수
-        cands.append((ratio * (1.0 - 0.6 * off), c))
+        # **배경과 얼마나 다른가** 도 같이 본다. 크고 가운데에 있는 것만 고르면,
+        # 책상 그림자처럼 임계값을 겨우 넘은 넓은 얼룩이 알약을 이긴다 — 실제
+        # 사용자 사진에서 배경을 알약으로 잡아 노란 알약을 '회색' 이라고 답했다.
+        # 진짜 알약은 배경에서 훨씬 멀리 떨어져 있다.
+        m = np.zeros((h, w), np.uint8)
+        cv2.drawContours(m, [c], -1, 255, -1)
+        far = float(np.mean(dist[m > 0])) / thr      # 1.0 = 임계값 수준, 클수록 확실
+        cands.append((ratio * (1.0 - 0.6 * off) * min(far, 3.0), c))
 
     if not cands:
         return []

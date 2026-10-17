@@ -149,7 +149,7 @@ moyak-backend/
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
 - [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` + 앱 지도 화면 `/app/map-screen/`(카카오 지도, `KAKAO_JS_KEY` 필요) — 가상 자판기는 동양미래대학교 주변 실제 장소, Supabase용 시드 SQL `scripts/supabase_demo_machines.sql` (2026-10-07 한별 동의 후 실행 완료: VM-001 좌표 보정, VM-006~009 추가, 재고 15건 — Render도 `MAP_DATABASE_URL`로 Supabase 조회 중)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
-- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장으로 약 후보를 찾는다. 모양·색은 OpenCV로, 각인은 Google Cloud Vision으로 읽고 Supabase `drug_pills`를 읽기 전용 조회. 실측 후보 정확도 81.5%(1위 59.7%, 평균 후보 11.6개), 모양 88.2%·색 76.5%. 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
+- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장으로 약 후보를 찾는다. 모양·색은 OpenCV로, 각인은 Google Cloud Vision으로 읽고 Supabase `drug_pills`를 읽기 전용 조회. 실측 후보 정확도 81.5%(1위 65.5%, 평균 후보 11.7개), 모양 88.2%·색 77.3%. 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
 
 ## 8. 코딩 시 참고사항
 
@@ -225,7 +225,7 @@ moyak-backend/
 - DB는 팀 Supabase를 **읽기 전용**으로만 쓴다(지도·DUR 보강과 같은 원칙). 주소가 없거나 OpenCV가 없으면
   이 라우터만 503을 돌려주고 나머지 API는 평소대로 동작한다.
 
-**실측 정확도** (식약처 사진 119장, 일반의약품): 모양 88.2% · 색 76.5% · 후보 안에 정답 81.5% · 1위 정답 59.7% · 상위 5위 79.0% · 평균 후보 11.6개.
+**실측 정확도** (식약처 사진 119장, 일반의약품): 모양 88.2% · 색 77.3% · 후보 안에 정답 81.5% · 1위 정답 65.5% · 상위 5위 79.8% · 평균 후보 11.7개.
 각인을 Google Vision 이 아니라 오픈소스(easyocr)로 읽으면 70.0%/48.3%, 각인을 DB 에서 그대로 가져오면 91.6%/78.2%(상한선).
 각인 없이 모양·색만 쓰면 후보 안에 정답이 9.2%로 떨어진다 — **각인이 읽히느냐가 전부다.**
 

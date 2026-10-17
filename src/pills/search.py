@@ -249,7 +249,7 @@ def find(
                LIMIT 1200"""
     rows = session.execute(text(sql), params).mappings().all()
 
-    out: list[Candidate] = []
+    out: list[tuple[float, Candidate]] = []
     for r in rows:
         score, matched = 0.0, []
         if shape and r["drug_shape"] == shape:
@@ -307,13 +307,20 @@ def find(
             except ZeroDivisionError:
                 pass
 
-        out.append(Candidate(
+        out.append((score, Candidate(
             item_seq=r["item_seq"], item_name=r["item_name"], entp_name=r["entp_name"],
             drug_shape=r["drug_shape"], color_class1=r["color_class1"],
             print_front=r["print_front"], print_back=r["print_back"],
             item_image=r["item_image"], etc_otc_name=r["etc_otc_name"],
-            score=round(min(1.0, score), 3), matched=matched,
-        ))
+            score=0.0, matched=matched,
+        )))
 
-    out.sort(key=lambda c: (-c.score, c.item_name))
-    return out[:limit]
+    # **자르기 전의 점수로 정렬한다.** 다 더하면 1.26 까지 나오는데 1.0 으로 먼저
+    # 자르고 정렬하면 상위권이 전부 동점이 되고, 순위가 이름순으로 정해져 버린다 —
+    # 실제 사용자 사진에서 정답(클로틴정)이 1.0 동점 셋 중 이름순 3위로 밀렸다.
+    # 자르는 것은 화면에 숫자를 보여줄 때만 한다.
+    out.sort(key=lambda t: (-t[0], t[1].item_name))
+    picked = out[:limit]
+    for raw, c in picked:
+        c.score = round(min(1.0, raw), 3)
+    return [c for _, c in picked]
