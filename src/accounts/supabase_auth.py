@@ -3,6 +3,8 @@
 - 가입: service_role 키로 관리자 API를 호출해 이메일 확인 없이 계정을 만든다(가짜 이메일이라 확인 메일을 받을 수 없음).
 - 로그인: anon 키로 비밀번호 로그인(grant_type=password)을 호출해 맞으면 사용자 UUID를 돌려받는다.
 """
+import re
+
 import requests
 
 from src import config
@@ -54,13 +56,15 @@ def health() -> dict:
         "anon_key": bool(config.SUPABASE_ANON_KEY),
         "service_role_key": bool(config.SUPABASE_SERVICE_ROLE_KEY),
         "token_secret": len(config.CONSULT_AUTH_SECRET) >= 32,
+        # 형식만 확인: https://<프로젝트ID>.supabase.co 이어야 한다 (주소 자체는 보여주지 않음)
+        "supabase_url_format_ok": bool(re.fullmatch(r"https://[a-z0-9]+\.supabase\.co", config.SUPABASE_URL)),
         "supabase_auth_http": None,
     }
     if config.SUPABASE_URL and config.SUPABASE_ANON_KEY:
         try:
             result["supabase_auth_http"] = _call("GET", "/auth/v1/health", config.SUPABASE_ANON_KEY).status_code
-        except AuthUnavailable:
-            result["supabase_auth_http"] = "unreachable"
+        except AuthUnavailable as error:
+            result["supabase_auth_http"] = "unreachable: " + type(error.__cause__).__name__
     return result
 
 
