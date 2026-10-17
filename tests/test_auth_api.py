@@ -219,3 +219,13 @@ def test_supabase_requests(monkeypatch):
     replies.append(FakeResponse(500, {}))
     with pytest.raises(supabase_auth.AuthUnavailable):
         supabase_auth.sign_in("a@moyak.app", PASSWORD)
+
+
+def test_status_reports_configuration_without_values(setup, monkeypatch):
+    client, _, _ = setup
+    monkeypatch.setattr(config, "SUPABASE_URL", "")
+    monkeypatch.setattr(config, "SUPABASE_ANON_KEY", "anon-secret-value")
+    body = client.get("/auth/status").json()
+    assert body["supabase_url"] is False and body["anon_key"] is True and body["token_secret"] is True
+    assert body["supabase_auth_http"] is None
+    assert "anon-secret-value" not in str(body)

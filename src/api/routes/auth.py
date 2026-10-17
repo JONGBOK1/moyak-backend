@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from src.accounts import service, users
+from src.accounts import service, supabase_auth, users
 from src.api.limiter import limiter
 from src.consult.auth import verify_token
 from src.consult.db import get_db
@@ -70,3 +70,9 @@ def me(authorization: str = Header(default=""), db: Session = Depends(get_db)):
     if user is None or not user["is_active"] or user["deleted_at"] is not None:
         raise HTTPException(401, "로그인이 필요합니다.")
     return service.profile(user)
+
+
+@router.get("/status")
+def status():
+    """배포 환경 점검용: 로그인 설정이 들어갔는지(true/false)와 Supabase Auth 응답 코드. 키 값은 보여주지 않는다."""
+    return supabase_auth.health()

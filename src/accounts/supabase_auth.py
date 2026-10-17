@@ -35,7 +35,33 @@ def _call(method: str, path: str, key: str, **kwargs) -> requests.Response:
     try:
         return requests.request(method, config.SUPABASE_URL + path, headers=_headers(key), timeout=TIMEOUT, **kwargs)
     except requests.RequestException as error:
-        raise AuthUnavailable("Supabase Auth에 연결하지 못했습니다.") from error
+        raise AuthUnavailable(f"Supabase Auth에 연결하지 못했습니다 ({type(error).__name__})") from error
+
+
+def _reason(response: requests.Response) -> str:
+    """Supabase 오류 응답의 오류 코드만 꺼낸다(키·개인정보 없음)."""
+    try:
+        body = response.json()
+        return str(body.get("error_code") or body.get("error") or body.get("code") or "")[:60]
+    except ValueError:
+        return ""
+
+
+def health() -> dict:
+    """설정 여부와 Supabase Auth 응답 코드만 보여주는 진단 (값은 노출하지 않음)."""
+    result = {
+        "supabase_url": bool(config.SUPABASE_URL),
+        "anon_key": bool(config.SUPABASE_ANON_KEY),
+        "service_role_key": bool(config.SUPABASE_SERVICE_ROLE_KEY),
+        "token_secret": len(config.CONSULT_AUTH_SECRET) >= 32,
+        "supabase_auth_http": None,
+    }
+    if config.SUPABASE_URL and config.SUPABASE_ANON_KEY:
+        try:
+            result["supabase_auth_http"] = _call("GET", "/auth/v1/health", config.SUPABASE_ANON_KEY).status_code
+        except AuthUnavailable:
+            result["supabase_auth_http"] = "unreachable"
+    return result
 
 
 def create_user(email: str, password: str, username: str) -> str:
@@ -50,7 +76,7 @@ def create_user(email: str, password: str, username: str) -> str:
         if "exist" in body or "registered" in body:
             raise AccountExists()
     if not response.ok:
-        raise AuthUnavailable(f"Supabase 계정 생성 실패 (HTTP {response.status_code})")
+        raise AuthUnavailable(f"Supabase 계정 생성 실패 (HTTP {response.status_code} {_reason(response)})")
     user_id = response.json().get("id")
     if not user_id:
         raise AuthUnavailable("Supabase 응답에 사용자 ID가 없습니다.")
@@ -74,7 +100,7 @@ def sign_in(email: str, password: str) -> str:
     if response.status_code in (400, 401):
         raise InvalidCredentials()
     if not response.ok:
-        raise AuthUnavailable(f"Supabase 로그인 실패 (HTTP {response.status_code})")
+        raise AuthUnavailable(f"Supabase 로그인 실패 (HTTP {response.status_code} {_reason(response)})")
     user_id = (response.json().get("user") or {}).get("id")
     if not user_id:
         raise AuthUnavailable("Supabase 응답에 사용자 ID가 없습니다.")

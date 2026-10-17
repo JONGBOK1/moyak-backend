@@ -1,4 +1,5 @@
 """회원가입·로그인 흐름. 앱 화면 규칙(utils/input_validation.dart)과 같은 검사를 서버에서도 한다."""
+import logging
 import re
 
 from fastapi import HTTPException
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from src import config
 from src.accounts import supabase_auth, users
 from src.consult.auth import issue_token
+
+logger = logging.getLogger(__name__)
 
 USERNAME = re.compile(r"^[A-Za-z0-9_]{4,20}$")
 
@@ -31,6 +34,8 @@ def email_for(username: str) -> str:
 
 
 def _unavailable(error: Exception) -> HTTPException:
+    # 원인(설정 누락·연결 실패·Supabase HTTP 상태)만 남기고 키 값은 남기지 않는다 — Render Logs에서 확인
+    logger.warning("Supabase Auth unavailable: %s", error)
     return HTTPException(503, "로그인 서비스를 사용할 수 없습니다. 잠시 후 다시 시도해주세요.")
 
 
