@@ -51,6 +51,10 @@ data/dev-review/
 **/.git/
 data/map-backend-release/
 data/map-release/
+# 작업용 스크립트·스크린샷·Flutter 코드 사본 (백엔드 저장소에 올리지 않음)
+data/*.py
+data/*.png
+data/flutter-integration/
 **/.dart_tool/
 **/build/
 **/coverage/
