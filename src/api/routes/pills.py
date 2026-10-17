@@ -41,8 +41,7 @@ NO_CV = "서버에 이미지 처리 라이브러리(opencv-python-headless)가 �
 # 가져오기만 해 두고, 실제 호출 시점에 503으로 알린다.
 try:
     from src.pills import search
-    from src.pills.ocr import read_many
-    from src.pills.vision import analyze
+    from src.pills.vision import analyze_and_read
 
     _IMPORT_ERROR: str | None = None
 except Exception as exc:  # pragma: no cover - 배포 환경 의존
@@ -116,7 +115,8 @@ async def identify(
         )
 
     try:
-        seen = analyze(raw)
+        # 배경이 넓거나 각인이 안 읽히면 가운데를 잘라 다시 해 본다.
+        seen, imprint = analyze_and_read(raw)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -124,7 +124,6 @@ async def identify(
     if seen.confidence < 0.4:
         notes.append("알약을 또렷하게 찾지 못했습니다. 배경이 단순한 곳에서 다시 찍어 보세요.")
 
-    imprint = read_many(seen.crops) if seen.crops else None
     if not imprint:
         notes.append("각인을 읽지 못해 모양과 색으로만 찾았습니다. 후보가 많을 수 있습니다.")
 

@@ -42,7 +42,7 @@ from sqlalchemy import text  # noqa: E402
 from src.pills.db import read_only  # noqa: E402
 from src.pills import search  # noqa: E402
 from src.pills.ocr import read_many  # noqa: E402
-from src.pills.vision import analyze  # noqa: E402
+from src.pills.vision import analyze, analyze_and_read  # noqa: E402
 
 CACHE = PROJECT_ROOT / "data" / "pill_cache"
 #: OCR 결과 캐시. 키는 "품목코드|엔진" 이다.
@@ -105,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="각인을 실제 OCR 로 읽음 — 이게 진짜 성능이다")
     parser.add_argument("--miss", action="store_true",
                         help="후보에 정답이 없는 건을 원인별로 보여준다")
+    parser.add_argument("--retry", action="store_true",
+                        help="실패하면 가운데를 잘라 다시 한다 (API 가 실제로 하는 것)")
     parser.add_argument("--fresh", action="store_true",
                         help="OCR 캐시를 쓰지 않고 다시 읽는다 (ocr.py 를 고쳤으면 필수)")
     args = parser.parse_args(argv)
@@ -143,6 +145,14 @@ def main(argv: list[str] | None = None) -> int:
             # 각인 출처 세 가지: DB(상한선) / 실제 OCR(진짜 성능) / 없음
             if args.use_print:
                 imprint = r["print_front"]
+            elif args.ocr and args.retry:
+                key = f"{r['item_seq']}|{args.ocr}|retry"
+                if key in cache:
+                    imprint = cache[key]
+                    cache_hits[0] += 1
+                else:
+                    got, imprint = analyze_and_read(path.read_bytes(), engine=args.ocr)
+                    cache[key] = imprint
             elif args.ocr and got.crop is not None:
                 key = f"{r['item_seq']}|{args.ocr}"
                 if key in cache:

@@ -261,6 +261,45 @@ def _classify_color(bgr: np.ndarray, mask: np.ndarray) -> tuple[str, float, dict
     return best, conf, detail
 
 
+#: 알약을 못 찾았다고 보고 다시 시도할 때 잘라 볼 크기 (가운데 정사각형 비율).
+RETRY_SCALES = (0.70, 0.50)
+#: 윤곽 하나가 화면의 이만큼을 넘으면 알약이 아니라 배경을 집은 것으로 본다.
+BACKGROUND_RATIO = 0.35
+
+
+def looks_like_background(bgr: np.ndarray, contours: list) -> bool:
+    """집어낸 것이 알약이 아니라 배경인지 본다.
+
+    그늘이 진 책상에서는 그림자 덩어리가 화면의 절반을 넘게 잡힌다(실측 53%).
+    알약이 화면의 3분의 1 보다 클 일은 거의 없다.
+    """
+    if not contours:
+        return True
+    h, w = bgr.shape[:2]
+    return cv2.contourArea(contours[0]) / (h * w) > BACKGROUND_RATIO
+
+
+def center_square(image_bytes: bytes, keep: float) -> bytes | None:
+    """가운데 정사각형만 잘라 같은 형식으로 돌려준다.
+
+    사용자는 알약을 가운데 놓고 찍는다. 배경을 덜어내면 그림자가 임계값을
+    오염시키는 문제가 줄어든다 — 실측에서 실패한 사진 3장 중 2장이 이렇게
+    해서 정답이 됐다.
+    """
+    arr = np.frombuffer(image_bytes, np.uint8)
+    bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if bgr is None:
+        return None
+    h, w = bgr.shape[:2]
+    side = int(min(h, w) * keep)
+    if side < 60:
+        return None
+    y0, x0 = max(0, h // 2 - side // 2), max(0, w // 2 - side // 2)
+    ok, buf = cv2.imencode(".jpg", bgr[y0:y0 + side, x0:x0 + side],
+                           [cv2.IMWRITE_JPEG_QUALITY, 95])
+    return buf.tobytes() if ok else None
+
+
 def analyze(image_bytes: bytes) -> PillVision:
     """사진 한 장을 분석한다. 알약을 못 찾으면 confidence 가 0 에 가깝게 나온다."""
     arr = np.frombuffer(image_bytes, np.uint8)
@@ -301,3 +340,51 @@ def analyze(image_bytes: bytes) -> PillVision:
         detail={"shape": shape_detail, "color": color_detail,
                 "found": len(contours)},
     )
+
+
+def analyze_and_read(image_bytes: bytes, engine: str = "auto"):
+    """사진을 분석하고 각인까지 읽는다. 실패하면 **가운데를 잘라 다시 해 본다.**
+
+    배경이 넓고 그늘이 지면 알약이 전경으로 잡히지 않는다(`_find_pill` 설명 참고).
+    사용자는 알약을 가운데 놓고 찍으므로, 가장자리를 덜어내면 그림자가 빠지면서
+    임계값이 정상으로 돌아온다 — 실측에서 실패한 사진 3장 중 2장이 이렇게 풀렸다.
+
+    **다시 하는 기준을 추측으로 두지 않는다.** 각인을 못 읽었거나 집어낸 것이
+    화면의 3분의 1을 넘을 때, 즉 **눈에 보이게 실패했을 때만** 다시 한다.
+    잘 된 사진은 건드리지 않으므로 Google 호출도 그때만 늘어난다.
+
+    여러 번 해 본 것 중 고르는 순서 (앞의 것이 우선):
+      1) **배경을 집지 않았다**   — 배경을 집었으면 거기서 읽은 각인도 가짜다.
+         실제로 나무 책상 사진에서 나뭇결을 'A 13' 으로 읽고, 그걸 믿는 바람에
+         제대로 집은 쪽(가운데 70%)을 버린 적이 있다.
+      2) 각인을 읽었다           — 각인이 전부다
+      3) 모양 판별이 더 또렷하다
+
+    돌려주는 값: (PillVision, 각인 문자열 또는 None)
+    """
+    from src.pills.ocr import read_many        # 순환 import 를 피해 여기서 가져온다
+
+    def attempt(raw):
+        got = analyze(raw)
+        imp = read_many(got.crops, engine=engine) if got.crops else None
+        bgr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        bg = bgr is None or looks_like_background(bgr, _find_pill(bgr))
+        return (not bg, bool(imp), got.confidence), got, imp
+
+    rank, best, imprint = attempt(image_bytes)
+    if rank[0] and rank[1]:              # 배경도 아니고 각인도 읽혔으면 더 볼 것 없다
+        return best, imprint
+
+    for keep in RETRY_SCALES:
+        sub = center_square(image_bytes, keep)
+        if sub is None:
+            continue
+        try:
+            r2, got, imp = attempt(sub)
+        except ValueError:
+            continue
+        if r2 > rank:
+            rank, best, imprint = r2, got, imp
+        if rank[0] and rank[1]:
+            break
+    return best, imprint
