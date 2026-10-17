@@ -25,9 +25,13 @@ def _secret() -> bytes:
     return config.CONSULT_AUTH_SECRET.encode()
 
 
+MAX_TOKEN_TTL = 30 * 86400  # 앱 로그인 토큰(기본 14일)까지 허용
+
+
 def issue_token(subject: str, role: str, ttl: int = 3600) -> str:
-    """Internal integration point, never expose as an unauthenticated HTTP endpoint."""
-    if not subject or role not in {"user", "pharmacist"} or not 1 <= ttl <= 86400:
+    """Internal integration point, never expose as an unauthenticated HTTP endpoint.
+    앱 로그인(`/auth/login`)은 Supabase Auth가 비밀번호를 확인한 뒤에만 이 함수를 부른다."""
+    if not subject or role not in {"user", "pharmacist"} or not 1 <= ttl <= MAX_TOKEN_TTL:
         raise ValueError("Invalid token claims")
     payload = base64.urlsafe_b64encode(json.dumps({
         "sub": subject, "role": role, "exp": int(time.time()) + ttl,

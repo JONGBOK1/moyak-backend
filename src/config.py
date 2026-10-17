@@ -30,6 +30,17 @@ CONSULT_SUMMARY_MODEL = os.getenv("CONSULT_SUMMARY_MODEL", "gpt-4o")
 # Bearer 토큰 서명용(선택, 32자 이상). 비어 있으면 토큰 대신 X-Moyak-User-Id/X-Moyak-Role 헤더(팀 방식)만 사용
 CONSULT_AUTH_SECRET = os.getenv("CONSULT_AUTH_SECRET", "")
 
+# 앱 로그인 (Supabase Auth) — 팀 users.id가 auth.users를 참조하므로 계정은 Supabase Auth에 만든다.
+# 프로젝트 URL·anon 키·service_role 키는 Supabase 대시보드 > Project Settings > API.
+# service_role 키는 서버 전용 비밀값(앱·웹페이지에 절대 넣지 않음).
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+SUPABASE_ANON_KEY = (os.getenv("SUPABASE_ANON_KEY") or "").strip()
+SUPABASE_SERVICE_ROLE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+# 앱은 '아이디'로 가입하지만 Supabase Auth는 이메일이 필요해 내부적으로 "아이디@도메인"으로 변환한다(메일 발송 없음).
+AUTH_EMAIL_DOMAIN = (os.getenv("AUTH_EMAIL_DOMAIN") or "").strip() or "moyak.app"
+# 로그인 토큰 유효기간(초). 기본 14일 — 만료되면 앱에서 다시 로그인.
+AUTH_TOKEN_TTL_SECONDS = int((os.getenv("AUTH_TOKEN_TTL_SECONDS") or "").strip() or 14 * 86400)
+
 # 지도 화면의 기본 중심 좌표 "위도,경도" — 위치 권한이 없을 때 이 위치를 보여준다. 기본값: 동양미래대학교
 DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5011,126.8670")
 

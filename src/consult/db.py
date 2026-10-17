@@ -27,6 +27,9 @@ def init_db() -> None:
     _migrate_sqlite_to_shared_schema()
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
+    from src.accounts.users import create_local_table
+
+    create_local_table(engine)  # 앱 로그인 프로필(팀 Supabase의 users와 같은 구조)
 
 
 def _migrate_sqlite_to_shared_schema() -> None:
