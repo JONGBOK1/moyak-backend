@@ -33,9 +33,15 @@ CONSULT_AUTH_SECRET = os.getenv("CONSULT_AUTH_SECRET", "")
 # 앱 로그인 (Supabase Auth) — 팀 users.id가 auth.users를 참조하므로 계정은 Supabase Auth에 만든다.
 # 프로젝트 URL·anon 키·service_role 키는 Supabase 대시보드 > Project Settings > API.
 # service_role 키는 서버 전용 비밀값(앱·웹페이지에 절대 넣지 않음).
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
-SUPABASE_ANON_KEY = (os.getenv("SUPABASE_ANON_KEY") or "").strip()
-SUPABASE_SERVICE_ROLE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+# 키·주소에는 공백이 있을 수 없으므로, 대시보드에 붙여넣을 때 섞인 줄바꿈·공백을 모두 제거한다
+# (Render에서 긴 키에 줄바꿈이 끼어 HTTP 헤더 오류로 로그인이 503이 났던 문제 방지)
+def _compact(name: str) -> str:
+    return "".join((os.getenv(name) or "").split())
+
+
+SUPABASE_URL = _compact("SUPABASE_URL").rstrip("/")
+SUPABASE_ANON_KEY = _compact("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = _compact("SUPABASE_SERVICE_ROLE_KEY")
 # 앱은 '아이디'로 가입하지만 Supabase Auth는 이메일이 필요해 내부적으로 "아이디@도메인"으로 변환한다(메일 발송 없음).
 AUTH_EMAIL_DOMAIN = (os.getenv("AUTH_EMAIL_DOMAIN") or "").strip() or "moyak.app"
 # 로그인 토큰 유효기간(초). 기본 14일 — 만료되면 앱에서 다시 로그인.
