@@ -95,7 +95,8 @@ moyak-backend/
 5. **STEP 4 - 인덱싱**: Pinecone 인덱스(dimension 1536, metric cosine)에 upsert
 6. **STEP 5 - RAG 체인**: LangChain으로 검색+생성 체인 구성. 질문을 세 유형으로 분기 처리한다(`src/rag/chain.py`).
    - **specific(특정 약 질문)**: 필드 혼합 `top_k=5` 검색 후 프롬프트 컨텍스트로 삽입 (기존 방식)
-   - **symptom(증상 기반 추천)**: ① GPT-4o-mini로 질문을 임상 키워드로 변환(`build_symptom_query`) → ② 효능(`field=efficacy`) 필드만 Pinecone 메타데이터 필터링해 후보 약 최대 3개 선정 → ③ 후보별 전체 필드(효능/사용법/주의사항 등)를 `item_seq` 필터로 모아 컨텍스트 구성 → ④ 추천 이유+복용법+주의사항을 포함하도록 별도 프롬프트(`RECOMMEND_SYSTEM_PROMPT`)로 생성. 후보가 실제로 증상과 무관하면 추천하지 않고 거부하도록 강제.
+   - **symptom(증상 기반 추천)**: ① GPT-4o-mini로 질문을 임상 키워드로 변환(`build_symptom_query`) → ② 효능(`field=efficacy`) 필드만 Pinecone 메타데이터 필터링해 후보 약 최대 3개 선정 → ③ 후보별 전체 필드(효능/사용법/주의사항 등)를 `item_seq` 필터로 모아 컨텍스트 구성 → ④ 별도 프롬프트(`RECOMMEND_SYSTEM_PROMPT`)로 생성. 후보가 실제로 증상과 무관하면 추천하지 않고 거부하도록 강제.
+     - **답변 형식 (2026-10-19 시인성 강화)**: 약마다 `💊 N. 약품명` → `· 추천 이유:` → `· 성분:`(주성분 정보 있을 때만) → `· 주의:`(가장 중요한 1가지) 블록을 빈 줄로 구분. 복용법·자세한 주의사항은 처음엔 생략하고 "궁금한 약을 말씀해 주시면 자세히"로 후속 질문 유도. 마크다운 기호(`**` 등) 금지(앱이 원문을 그대로 표시). 서버가 이 형식을 나눠 `/chat` 응답 `recommendations: [{rank, item_name, reason, ingredient, caution}]`로도 준다(`parse_recommendations`, 추천이 아니면 빈 배열) → 웹 챗봇은 약마다 카드로 표시.
    - **interaction(병용/상호작용 확인)**: ① GPT-4o-mini로 질문에 언급된 약 이름을 추출(`extract_drug_names`, 최대 3개) → ② 각 약 이름을 실제 등록 품목에 매칭해 전체 필드를 `item_seq` 필터로 모음(`_resolve_drug_docs`) → ③ 전용 프롬프트(`INTERACTION_SYSTEM_PROMPT`)로 답변 생성. **가장 중요한 규칙**: 자료에 특정 조합에 대한 언급이 없다고 "안전하다"고 결론 내리지 않고, "확인되지 않음 + 약사 상담"으로 답하도록 강제한다(e약은요 상호작용 데이터는 완전한 약물-약물 매트릭스가 아니라 각 약이 자체적으로 명시한 일반 문구이기 때문).
    - 질문 유형 분류는 `classify_intent`(GPT-4o-mini)가 담당하며, 대화 후속 질문 재작성(`rewrite_standalone_question`) 이후에 실행된다.
    - **특수 대상자(임산부/소아/고령자) 안전 필터**: 유형 분류와 별개로 `detect_population`(GPT-4o-mini)이 질문에서 임산부/소아/고령자 언급을 감지한다. specific 질문에서 감지되면, 일반 top_k 검색 대신 `extract_drug_names`+`_resolve_drug_docs`(interaction과 동일한 방식)로 정확한 약의 전체 필드(주의사항/경고 포함)를 확실히 가져온다 — "임산부가 먹어도 돼?" 같은 수식어가 top_k 검색을 엉뚱한 약으로 새게 만드는 문제를 막기 위함. symptom 질문에서 감지되면 `RECOMMEND_SYSTEM_PROMPT`의 규칙에 따라 후보 중 해당 대상자 금기 약을 제외하고, 안전한 후보가 없으면 추천하지 않는다.
@@ -112,7 +113,7 @@ moyak-backend/
    - 요청: `POST /chat` `{"question": "string", "history": [{"role": "user"|"assistant", "content": "string"}, ...]}`
      - `history`: 이전 대화 턴(선택, 기본값 빈 배열). 서버는 세션을 저장하지 않는 완전 무상태(stateless) 방식이라, 프론트가 대화 기록을 들고 있다가 매 요청마다 함께 보낸다.
      - 후속 질문(예: "부작용은?")은 검색 전에 GPT-4o-mini로 독립형 질문("활명수의 부작용은?")으로 재작성한 뒤 검색한다(`rewrite_standalone_question`). 이 재작성은 검색에만 쓰이고, 최종 답변 생성에는 원래 질문 + history 전체가 그대로 전달된다.
-   - 응답: `{"answer": "string", "sources": ["string", ...], "evidence": [{"item_name", "field", "field_label", "text"}, ...]}`
+   - 응답: `{"answer": "string", "sources": ["string", ...], "evidence": [{"item_name", "field", "field_label", "text"}, ...], "recommendations": [{"rank", "item_name", "reason", "ingredient", "caution"}, ...]}` (`recommendations`는 증상 추천 답변일 때만 채워짐, 2026-10-19 추가)
      - `evidence`: 답변이 실제로 인용한 원본 청크 목록(신뢰도 어필용 — "AI 요약"이 아니라 식약처 원문 그대로임을 사용자에게 보여주기 위해 추가)
    - 헬스체크: `GET /health` → `{"status": "ok"}`
    - **회원가입·로그인 (2026-10-17, `src/accounts/`, `src/api/routes/auth.py`)**: Supabase Auth 연동. 팀 `users.id`가 `auth.users`를 참조하므로 계정은 Supabase Auth에 만들고, 같은 UUID로 `public.users`(nickname=아이디, role)에 프로필을 저장한다. 공유 DB 구조는 변경하지 않음.

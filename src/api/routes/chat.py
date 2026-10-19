@@ -26,10 +26,20 @@ class EvidenceItem(BaseModel):
     text: str
 
 
+class RecommendationItem(BaseModel):
+    rank: int
+    item_name: str
+    reason: str = ""
+    ingredient: str = ""
+    caution: str = ""
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: list[str]
     evidence: list[EvidenceItem]
+    # 증상 기반 추천 답변일 때만 채워짐(약마다 카드로 그리기용). 그 외 질문은 빈 목록 — answer를 그대로 보여주면 된다.
+    recommendations: list[RecommendationItem] = []
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -42,4 +52,5 @@ def chat(request: Request, payload: ChatRequest) -> ChatResponse:
         llm=request.app.state.llm,
         rewrite_llm=request.app.state.rewrite_llm,
     )
-    return ChatResponse(answer=result["answer"], sources=result["sources"], evidence=result["evidence"])
+    return ChatResponse(answer=result["answer"], sources=result["sources"], evidence=result["evidence"],
+                        recommendations=result.get("recommendations", []))

@@ -235,6 +235,37 @@ def _get_candidate_item_seqs(search_query: str, vector_store) -> list[str]:
     return seqs
 
 
+_REC_HEADING = re.compile(r"^\s*💊\s*(?:(\d+)\s*[.)]\s*)?(.+?)\s*$")  # 번호는 LLM이 빼먹기도 해서 선택
+_REC_FIELDS = {"추천 이유": "reason", "성분": "ingredient", "주의": "caution"}
+
+
+def parse_recommendations(answer: str) -> list[dict]:
+    """증상 추천 답변(💊 N. 약품명 / · 추천 이유 / · 성분 / · 주의 형식)을 앱이 카드로 그릴 수 있게 나눈다.
+
+    형식이 맞지 않으면 빈 목록 — 앱은 answer 원문을 그대로 보여주면 된다.
+    """
+    items, current = [], None
+    for line in (answer or "").splitlines():
+        heading = _REC_HEADING.match(line)
+        if heading:
+            current = {"rank": int(heading.group(1) or len(items) + 1), "item_name": heading.group(2).strip(),
+                       "reason": "", "ingredient": "", "caution": ""}
+            items.append(current)
+            continue
+        if current is None:
+            continue
+        text = line.strip().lstrip("·•-").strip()
+        if not text:
+            continue
+        label, sep, value = text.partition(":")
+        key = _REC_FIELDS.get(label.strip())
+        if sep and key:
+            current[key] = value.strip()
+        elif text.startswith(("복용법이나", "정확한 진단", "[참고")):
+            current = None  # 마무리 문장부터는 카드에 넣지 않는다
+    return items
+
+
 def _ask_symptom(question: str, search_query: str, history: list[dict], vector_store, llm, rewrite_llm) -> dict:
     efficacy_query = build_symptom_query(search_query, rewrite_llm)
     candidate_seqs = _get_candidate_item_seqs(efficacy_query, vector_store)
@@ -263,7 +294,7 @@ def _ask_symptom(question: str, search_query: str, history: list[dict], vector_s
 
     answer = llm.invoke(messages).content
     sources, evidence = _extract_cited(docs + extra_docs, answer)
-    return {"answer": answer, "sources": sources, "evidence": evidence}
+    return {"answer": answer, "sources": sources, "evidence": evidence, "recommendations": parse_recommendations(answer)}
 
 
 def extract_drug_names(question: str, rewrite_llm) -> list[str]:
