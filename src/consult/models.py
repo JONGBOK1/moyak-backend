@@ -77,6 +77,9 @@ class ConsultationRequest(Base):
     # 화상 상담 종료 시 생성하는 대화 요약 (챗봇 대화 + 상담 중 채팅 기준, 음성 내용은 포함 안 됨)
     summary = Column(String, nullable=True)
     ended_at = Column(DateTime, nullable=True)
+    # 사용자가 앱에서 고른 키오스크(자판기 code, 예: VM-001). 있으면 약사는 그 키오스크 재고에 있는 약만 승인할 수 있다.
+    # 팀 Supabase에는 scripts/supabase_consultation_machine_code.sql 로 추가 (2026-10-19)
+    machine_code = Column(String, nullable=True)
 
     purchase = relationship("ApprovedPurchase", back_populates="consultation", uselist=False)
     messages = relationship(

@@ -356,7 +356,8 @@
       };
     } else {
       $("selectBtn").onclick = () => {
-        sessionStorage.setItem(SELECTED_KEY, JSON.stringify({ id: d.id, name: d.name, address: d.address }));
+        // code(VM-001…)는 상담 신청 때 함께 보내 약사가 이 자판기 재고에서만 처방하게 한다
+        sessionStorage.setItem(SELECTED_KEY, JSON.stringify({ id: d.id, code: d.code || d.id, name: d.name, address: d.address }));
         location.href = "/app/main-home-connected/";
       };
     }

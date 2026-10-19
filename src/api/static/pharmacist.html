@@ -159,6 +159,18 @@
   .drug-option:hover, .drug-option.hover { background: var(--beige); }
   .drug-option .company { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
   .picked { font-size: 12px; color: var(--green); font-weight: 700; min-height: 16px; }
+  .chip.kiosk { background: var(--cream); color: #8b6914; border: 1px solid #f1e3b8; }
+  .kiosk-note { font-size: 12px; line-height: 1.5; color: #8b6914; background: var(--cream); border: 1px solid #f1e3b8; border-radius: 10px; padding: 8px 10px; }
+  .kiosk-note.plain { color: var(--ink-soft); background: var(--bg); border-color: var(--line); }
+  .stock-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+  .stock-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; width: 100%;
+    background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; font-weight: 700;
+  }
+  .stock-item:hover { background: var(--beige); }
+  .stock-item.selected { border-color: var(--green); background: var(--green-soft); }
+  .stock-item:disabled { opacity: .45; }
+  .stock-item .meta { font-size: 12px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
 
   button {
     -webkit-appearance: none; appearance: none;
@@ -345,6 +357,7 @@
           <div class="meta">${timeLabel} ${formatDate(time)}</div>
         </div>
         <span class="chip">${direct ? "⚡ 바로 상담 (챗봇 대화 없음)" : "💬 챗봇 상담 후 요청"}</span>
+        ${c.machine_code ? `<span class="chip kiosk">📍 키오스크 ${escapeHtml(c.machine_code)}</span>` : ""}
         ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank" rel="noopener">🎥 화상 상담 입장</a>` : ""}
       </div>`;
   }
@@ -437,6 +450,47 @@
     // 카드가 아직 화면에 붙기 전일 수 있어서 첫 조회는 한 틱 뒤로 미룬다
     setTimeout(refresh, 0);
     timer = setInterval(refresh, 3000);
+  }
+
+  // ---------- 환자가 고른 키오스크 재고에서만 처방 ----------
+  // 키오스크가 지정된 상담이면 검색 대신 그 키오스크의 의약품 재고 목록에서 고른다(서버도 재고 없는 약 승인을 거절).
+  // 재고 정보가 없는 DB(로컬 시연)면 기존처럼 검색해서 처방한다.
+  async function setupKioskStock(card, c, drugResults, nameInput) {
+    const box = card.querySelector(".kiosk-box");
+    const search = card.querySelector(".drug-search");
+    const priceInput = card.querySelector(".drug-price");
+    if (!c.machine_code) {
+      box.innerHTML = '<div class="kiosk-note plain">환자가 키오스크를 고르지 않았어요. 환자가 받을 키오스크에 재고가 있는 약인지 확인해주세요.</div>';
+      return;
+    }
+    let data;
+    try {
+      data = await api("GET", `/vending/machines/${encodeURIComponent(c.machine_code)}/medicines`);
+    } catch (e) {
+      box.innerHTML = `<div class="kiosk-note">키오스크 ${escapeHtml(c.machine_code)} 재고를 불러오지 못했어요: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+    const where = `📍 ${escapeHtml(data.machine_name)} (${escapeHtml(data.machine_code)})`;
+    if (!data.restricted) {
+      box.innerHTML = `<div class="kiosk-note plain">${where} — 이 서버에는 의약품 재고 정보가 없어 검색으로 처방해요.</div>`;
+      return;
+    }
+    search.style.display = "none";
+    const inStock = data.items.filter((m) => m.stock > 0);
+    box.innerHTML = `<div class="kiosk-note">${where} 재고에 있는 약만 처방할 수 있어요.${inStock.length ? "" : "<br><b>재고가 있는 약이 없어요.</b> 거절하고 다른 키오스크를 안내해주세요."}</div>
+      <div class="stock-list">${data.items.map((m, i) => `
+        <button type="button" class="stock-item" data-i="${i}" ${m.stock > 0 ? "" : "disabled"}>
+          <span>${escapeHtml(m.item_name)}</span>
+          <span class="meta">${m.stock > 0 ? `${m.stock}개` : "품절"}${m.price != null ? ` · ${m.price.toLocaleString()}원` : ""}</span>
+        </button>`).join("")}</div>`;
+    box.querySelectorAll(".stock-item").forEach((btn) => btn.addEventListener("click", () => {
+      const m = data.items[Number(btn.dataset.i)];
+      box.querySelectorAll(".stock-item").forEach((b) => b.classList.toggle("selected", b === btn));
+      nameInput.value = m.item_name;
+      drugResults.items = [m];
+      drugResults.selectedSeq = m.item_seq;
+      if (m.price != null) priceInput.value = m.price; // 키오스크 판매가로 채움(수정 가능)
+    }));
   }
 
   // ---------- 약품 검색 자동완성 ----------
@@ -568,6 +622,7 @@
             <div class="col right">
               <div class="decision">
                 <div class="decision-title">💊 처방 결정</div>
+                <div class="kiosk-box"></div>
                 <div class="field drug-search">
                   <label>처방할 약품</label>
                   <input class="drug-name" placeholder="약품명 검색 후 목록에서 선택" value="${escapeHtml(c.requested_drug_name || "")}" autocomplete="off" />
@@ -596,11 +651,12 @@
         const nameInput = card.querySelector(".drug-name");
         const dropdown = card.querySelector(".drug-dropdown");
         attachDrugSearch(nameInput, dropdown, drugResults, card.querySelector(".picked"));
+        setupKioskStock(card, c, drugResults, nameInput);
 
         card.querySelector(".approve-btn").addEventListener("click", async (e) => {
           const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || c.requested_drug_item_seq;
           if (!itemSeq) {
-            toast("약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
+            toast(c.machine_code ? "키오스크 재고 목록에서 처방할 약을 골라주세요." : "약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
             nameInput.focus();
             return;
           }

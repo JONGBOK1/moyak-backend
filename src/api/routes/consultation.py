@@ -18,6 +18,9 @@ class ConsultationCreateRequest(BaseModel):
     )
     requested_drug_item_seq: str | None = None
     requested_drug_name: str | None = None
+    machine_code: str | None = Field(
+        None, max_length=40, description="사용자가 앱에서 고른 키오스크 code(예: VM-001). 있으면 약사는 그 키오스크 재고에 있는 약만 승인 가능"
+    )
 
 
 class ConsultationDecisionRequest(BaseModel):
@@ -45,6 +48,7 @@ class ConsultationResponse(BaseModel):
     approved_drug_name: str | None = None
     summary: str | None = None  # 화상 상담 종료 시 생성된 대화 요약
     ended_at: datetime | None = None
+    machine_code: str | None = None  # 사용자가 고른 키오스크
 
     class Config:
         from_attributes = True
@@ -79,13 +83,17 @@ def _to_response(consultation) -> ConsultationResponse:
 
 @router.post("", response_model=ConsultationResponse)
 def create_consultation(payload: ConsultationCreateRequest, db: Session = Depends(get_db)) -> ConsultationResponse:
-    consultation = service.create_consultation(
-        db,
-        user_id=payload.user_id,
-        chat_summary=payload.chat_summary,
-        requested_drug_item_seq=payload.requested_drug_item_seq,
-        requested_drug_name=payload.requested_drug_name,
-    )
+    try:
+        consultation = service.create_consultation(
+            db,
+            user_id=payload.user_id,
+            chat_summary=payload.chat_summary,
+            requested_drug_item_seq=payload.requested_drug_item_seq,
+            requested_drug_name=payload.requested_drug_name,
+            machine_code=payload.machine_code,
+        )
+    except service.NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return _to_response(consultation)
 
 

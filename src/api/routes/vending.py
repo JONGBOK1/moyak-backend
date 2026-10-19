@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.consult import service
 from src.consult.db import get_db
+from src.consult.models import VendingMachine
 
 router = APIRouter(prefix="/vending", tags=["vending"])
 
@@ -111,6 +112,33 @@ def rotate_qr(machine_id: str, name: str | None = None, db: Session = Depends(ge
         qr_token_expires_at=machine.qr_token_expires_at,
         qr_svg=svg,
     )
+
+
+class MedicineItem(BaseModel):
+    item_seq: str
+    item_name: str
+    stock: int
+    price: int | None = None
+
+
+class MachineMedicinesResponse(BaseModel):
+    machine_code: str
+    machine_name: str
+    restricted: bool  # True면 이 목록에 있는(재고 1개 이상) 약만 승인 가능
+    items: list[MedicineItem]
+
+
+@router.get("/machines/{machine_id}/medicines", response_model=MachineMedicinesResponse)
+def machine_medicines(machine_id: str, db: Session = Depends(get_db)) -> MachineMedicinesResponse:
+    """약사 콘솔용: 환자가 고른 키오스크의 의약품 재고. 재고 정보가 없는 DB(로컬 시연)면 restricted=false."""
+    from src.consult.inventory import machine_medicines as load
+
+    machine = db.get(VendingMachine, machine_id)
+    if machine is None:
+        raise HTTPException(status_code=404, detail=f"키오스크를 찾을 수 없습니다: {machine_id}")
+    items = load(db, machine_id)
+    return MachineMedicinesResponse(machine_code=machine.id, machine_name=machine.name,
+                                    restricted=items is not None, items=items or [])
 
 
 @router.get("/machines/{machine_id}/session", response_model=SessionResponse)

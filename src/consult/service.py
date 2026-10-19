@@ -56,8 +56,15 @@ def create_consultation(
     chat_summary: str | None = None,
     requested_drug_item_seq: str | None = None,
     requested_drug_name: str | None = None,
+    machine_code: str | None = None,
 ) -> ConsultationRequest:
+    machine_code = (machine_code or "").strip() or None
+    if machine_code is not None:
+        machine = db.get(VendingMachine, machine_code)
+        if machine is None or not machine.is_active:
+            raise NotFoundError(f"선택한 키오스크를 찾을 수 없습니다: {machine_code}")
     consultation = ConsultationRequest(
+        machine_code=machine_code,
         user_id=user_id,
         chat_summary=chat_summary or DIRECT_REQUEST_SUMMARY,
         room_url=video.create_room(),
@@ -118,6 +125,18 @@ def decide_consultation(
             raise InvalidStateError("승인하려면 약품 정보(item_seq, item_name)가 필요합니다.")
         if price is not None and price < 0:
             raise InvalidStateError("가격은 0원 이상이어야 합니다.")
+        if consultation.machine_code:
+            # 사용자가 고른 키오스크에서 바로 받을 수 있는 약만 승인 (재고 정보가 있는 DB에서만)
+            from src.consult.inventory import machine_medicines
+
+            stock = machine_medicines(db, consultation.machine_code)
+            if stock is not None:
+                item = next((m for m in stock if m["item_seq"] == str(item_seq)), None)
+                if item is None or item["stock"] < 1:
+                    raise InvalidStateError(
+                        f"환자가 선택한 키오스크({consultation.machine_code})에 재고가 없는 약입니다. 키오스크 재고 목록에서 골라주세요.")
+                if price is None:
+                    price = item["price"]  # 가격을 따로 안 넣으면 키오스크 판매가
 
         consultation.status = ConsultationStatus.APPROVED
         purchase = ApprovedPurchase(
