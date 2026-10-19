@@ -29,7 +29,8 @@ class ConsultationDecisionRequest(BaseModel):
     reason: str | None = None
     drug_item_seq: str | None = None
     drug_item_name: str | None = None
-    price: int | None = Field(None, ge=0)  # 약사가 안내하는 판매가(원), 키오스크 결제 금액
+    price: int | None = Field(None, ge=0)  # 결제 금액(원, 수량 전체 총액). 키오스크 지정 상담에서 비우면 판매가 × 수량
+    quantity: int = Field(1, ge=1, le=10)  # 처방 수량
 
 
 class ConsultationResponse(BaseModel):
@@ -49,6 +50,7 @@ class ConsultationResponse(BaseModel):
     summary: str | None = None  # 화상 상담 종료 시 생성된 대화 요약
     ended_at: datetime | None = None
     machine_code: str | None = None  # 사용자가 고른 키오스크
+    approved_quantity: int | None = None  # 승인된 수량
 
     class Config:
         from_attributes = True
@@ -78,6 +80,7 @@ def _to_response(consultation) -> ConsultationResponse:
     if consultation.purchase is not None:
         response.approved_purchase_id = consultation.purchase.id
         response.approved_drug_name = consultation.purchase.drug_item_name
+        response.approved_quantity = consultation.purchase.quantity or 1
     return response
 
 
@@ -146,6 +149,7 @@ def decide_consultation(
             drug_item_seq=payload.drug_item_seq,
             drug_item_name=payload.drug_item_name,
             price=payload.price,
+            quantity=payload.quantity,
         )
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

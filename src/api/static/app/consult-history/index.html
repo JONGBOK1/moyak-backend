@@ -124,7 +124,7 @@
     const direct = (c.chat_summary || "").startsWith(DIRECT_PREFIX);
     let result;
     if (c.status === "approved") {
-      result = `<div class="h-result ok"><span>처방약</span><b>${esc(c.approved_drug_name || "-")}</b>
+      result = `<div class="h-result ok"><span>처방약</span><b>${esc(c.approved_drug_name || "-")}${c.approved_quantity > 1 ? ` × ${c.approved_quantity}개` : ""}</b>
         <small>가까운 자판기에서 QR을 스캔하면 받을 수 있어요</small></div>`;
     } else if (c.status === "rejected") {
       result = `<div class="h-result no"><span>약사 안내</span><b>${esc(c.decision_reason || "사유가 따로 전달되지 않았어요")}</b></div>`;

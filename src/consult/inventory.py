@@ -22,6 +22,7 @@ def record_dispense(db, purchase, machine_code, now):
     user_id = identifier(users.c.id, user_id)
     if db.execute(select(users.c.id).where(users.c.id == user_id)).scalar_one_or_none() is None:
         raise InventoryError('등록된 사용자가 아닙니다.')
+    qty = purchase.quantity or 1  # 약사가 처방한 수량만큼 차감
     machine_id = db.execute(select(machines.c.id).where(
         machines.c.code == machine_code, machines.c.is_active.is_(True))).scalar_one_or_none()
     if machine_id is None:
@@ -29,13 +30,13 @@ def record_dispense(db, purchase, machine_code, now):
     changed = db.execute(update(inventory).where(
         inventory.c.machine_id == machine_id,
         inventory.c.item_seq == purchase.drug_item_seq,
-        inventory.c.stock >= 1).values(stock=inventory.c.stock - 1, updated_at=now)).rowcount
+        inventory.c.stock >= qty).values(stock=inventory.c.stock - qty, updated_at=now)).rowcount
     if changed != 1:
         raise InventoryError('이 자판기에 해당 약품의 재고가 없습니다.')
     db.execute(insert(purchases).values(
         id=identifier(purchases.c.id, uuid.uuid4()), user_id=user_id, machine_id=machine_id,
         item_seq=purchase.drug_item_seq, item_name=purchase.drug_item_name,
-        quantity=1, price=purchase.price or 0, purchased_at=now))
+        quantity=qty, price=purchase.price or 0, purchased_at=now))
 
 
 

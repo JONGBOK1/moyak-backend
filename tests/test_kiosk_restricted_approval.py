@@ -85,3 +85,23 @@ def test_only_in_stock_medicine_of_selected_kiosk_can_be_approved(client):
 def test_without_selected_kiosk_any_medicine_can_be_approved(client):
     cid = client.post("/consultations", json={"user_id": "u1"}).json()["id"]
     assert approve(client, cid, "196800036", "판콜에이내복액", price=1500).status_code == 200
+
+
+def test_quantity_limited_by_kiosk_stock_and_price_is_unit_times_quantity(client):
+    """약 수량 선택 (2026-10-19): 재고(12개)를 넘으면 거절, 가격을 안 넣으면 판매가 × 수량."""
+    cid = client.post("/consultations", json={"user_id": "u1", "machine_code": "VM-001"}).json()["id"]
+    body = {"pharmacist_id": "p1", "approve": True, "drug_item_seq": TYLENOL[0], "drug_item_name": TYLENOL[1]}
+    too_many = client.post(f"/consultations/{cid}/decision", json={**body, "quantity": 13})
+    assert too_many.status_code == 422  # API 상한 10개
+    assert client.post(f"/consultations/{cid}/decision", json={**body, "quantity": 0}).status_code == 422
+    ok = client.post(f"/consultations/{cid}/decision", json={**body, "quantity": 3})
+    assert ok.status_code == 200 and ok.json()["approved_quantity"] == 3
+    purchase = client.get("/vending/purchases", params={"user_id": "u1"}).json()[0]
+    assert (purchase["quantity"], purchase["price"]) == (3, 3500 * 3)
+
+
+def test_quantity_over_stock_is_rejected(client):
+    cid = client.post("/consultations", json={"user_id": "u1", "machine_code": "VM-002"}).json()["id"]
+    over = client.post(f"/consultations/{cid}/decision", json={
+        "pharmacist_id": "p1", "approve": True, "drug_item_seq": "196800036", "drug_item_name": "판콜에이내복액", "quantity": 6})
+    assert over.status_code == 409 and "5개" in over.json()["detail"]  # VM-002 재고 5개

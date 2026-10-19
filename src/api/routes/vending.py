@@ -42,7 +42,8 @@ class PurchaseResponse(BaseModel):
     drug_item_name: str
     approved_by: str
     status: str
-    price: int | None = None  # 약사가 승인 시 입력한 판매가(원). None이면 결제 없이 수령
+    price: int | None = None  # 결제 금액(원, 수량 전체 총액). None이면 결제 없이 수령
+    quantity: int = 1  # 처방 수량
     paid_at: datetime | None = None
     created_at: datetime
     expires_at: datetime

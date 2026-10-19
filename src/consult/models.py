@@ -124,6 +124,8 @@ class ApprovedPurchase(Base):
     # 약사가 승인 시 안내하는 판매가(원). 가격이 있으면 키오스크에서 결제(paid_at)해야 수령 가능.
     # 가격 도입 전 승인 건은 NULL — 결제 없이 수령 가능(기존 동작 유지).
     price = Column(Integer, nullable=True)
+    # 약사가 처방한 수량(2026-10-19). price는 이 수량 전체의 결제 금액(총액), 수령 시 키오스크 재고를 이만큼 차감
+    quantity = Column(Integer, nullable=False, default=1)
     paid_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_now, nullable=False)
     expires_at = Column(DateTime, nullable=False)

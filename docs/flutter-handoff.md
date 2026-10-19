@@ -279,3 +279,8 @@ API 스펙이 바뀌면 이 문서와 [`CLAUDE.md`](../CLAUDE.md)를 같이 갱�
 - 회원가입 때 이름도 받으려면 `POST /auth/signup` 바디에 `"name": "홍길동"`(선택) 추가
 - 이미 가입한 계정은 마이페이지에서 `PATCH /auth/me` `{"name": "홍길동"}` + `Authorization: Bearer <토큰>`으로 입력·수정 → 응답은 `/auth/me`와 같은 형식
 - 이름 규칙: 한글 또는 영문(공백·점 허용) 40자 이내. 어기면 422 + 안내 메시지(`detail`)
+
+
+## 추가 (2026-10-19): 처방 수량
+- 약사가 승인할 때 수량을 정한다. 상담 응답에 `approved_quantity`, 승인 건(`GET /vending/purchases`, QR 스캔 응답의 `purchase`)에 `quantity`가 추가됨
+- `price`는 그 수량 전체의 결제 금액(총액). 화면에는 "약 이름 × N개 / 총 금액"으로 표시 권장

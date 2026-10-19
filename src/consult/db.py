@@ -72,7 +72,7 @@ def _migrate_sqlite_to_shared_schema() -> None:
 # create_all은 이미 있는 테이블에 새 컬럼을 추가하지 않는다. 로컬 SQLite를 지우지 않고도
 # 새 컬럼이 반영되도록, 나중에 추가된 nullable 컬럼만 여기서 ALTER TABLE로 보강한다.
 _LATE_COLUMNS = {
-    "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME"},  # SQLite 전용(Postgres는 init_db에서 건너뜀)
+    "approved_purchases": {"price": "INTEGER", "paid_at": "DATETIME", "quantity": "INTEGER NOT NULL DEFAULT 1"},  # SQLite 전용(Postgres는 init_db에서 건너뜀)
     "consultation_requests": {"summary": "VARCHAR", "ended_at": "DATETIME", "machine_code": "VARCHAR"},
     "vending_machines": {
         "address": "VARCHAR",

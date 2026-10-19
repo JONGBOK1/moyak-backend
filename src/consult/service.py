@@ -39,6 +39,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+MAX_PURCHASE_QUANTITY = 10  # 한 번에 처방할 수 있는 최대 수량(재고가 더 적으면 재고까지)
+
+
 class NotFoundError(Exception):
     pass
 
@@ -107,6 +110,7 @@ def decide_consultation(
     drug_item_seq: str | None = None,
     drug_item_name: str | None = None,
     price: int | None = None,
+    quantity: int = 1,
 ) -> ConsultationRequest:
     consultation = db.get(ConsultationRequest, consultation_id)
     if consultation is None:
@@ -125,6 +129,8 @@ def decide_consultation(
             raise InvalidStateError("승인하려면 약품 정보(item_seq, item_name)가 필요합니다.")
         if price is not None and price < 0:
             raise InvalidStateError("가격은 0원 이상이어야 합니다.")
+        if not 1 <= quantity <= MAX_PURCHASE_QUANTITY:
+            raise InvalidStateError(f"수량은 1~{MAX_PURCHASE_QUANTITY}개로 정해주세요.")
         if consultation.machine_code:
             # 사용자가 고른 키오스크에서 바로 받을 수 있는 약만 승인 (재고 정보가 있는 DB에서만)
             from src.consult.inventory import machine_medicines
@@ -135,8 +141,11 @@ def decide_consultation(
                 if item is None or item["stock"] < 1:
                     raise InvalidStateError(
                         f"환자가 선택한 키오스크({consultation.machine_code})에 재고가 없는 약입니다. 키오스크 재고 목록에서 골라주세요.")
-                if price is None:
-                    price = item["price"]  # 가격을 따로 안 넣으면 키오스크 판매가
+                if item["stock"] < quantity:
+                    raise InvalidStateError(
+                        f"키오스크({consultation.machine_code})에 {item['item_name']} 재고가 {item['stock']}개뿐입니다. 수량을 줄여주세요.")
+                if price is None and item["price"] is not None:
+                    price = item["price"] * quantity  # 가격을 따로 안 넣으면 키오스크 판매가 × 수량
 
         consultation.status = ConsultationStatus.APPROVED
         purchase = ApprovedPurchase(
@@ -146,6 +155,7 @@ def decide_consultation(
             drug_item_name=item_name,
             approved_by=pharmacist_id,
             price=price,
+            quantity=quantity,
             expires_at=_now() + timedelta(minutes=PURCHASE_VALID_MINUTES),
         )
         db.add(purchase)

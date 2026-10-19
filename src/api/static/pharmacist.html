@@ -170,6 +170,11 @@
   .stock-item:hover { background: var(--beige); }
   .stock-item.selected { border-color: var(--green); background: var(--green-soft); }
   .stock-item:disabled { opacity: .45; }
+  .qty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .qty-btn { width: 36px; height: 36px; padding: 0; border-radius: 10px; font-size: 18px; background: var(--paper); color: var(--green); border: 1.5px solid var(--green); }
+  .qty-btn:hover { background: var(--green-soft); }
+  .qty-val { min-width: 28px; text-align: center; font-size: 18px; font-weight: 800; }
+  .qty-hint { font-size: 12px; color: var(--ink-soft); }
   .stock-item .meta { font-size: 12px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
 
   button {
@@ -489,7 +494,9 @@
       nameInput.value = m.item_name;
       drugResults.items = [m];
       drugResults.selectedSeq = m.item_seq;
-      if (m.price != null) priceInput.value = m.price; // 키오스크 판매가로 채움(수정 가능)
+      card.qty.unit = m.price; // 키오스크 판매가(1개)
+      card.qty.max = Math.min(10, m.stock); // 재고보다 많이 처방할 수 없음
+      card.qty.set(card.qty.value); // 금액 = 판매가 × 수량 으로 채움(수정 가능)
     }));
   }
 
@@ -630,7 +637,16 @@
                   <div class="picked"></div>
                 </div>
                 <div class="field">
-                  <label>판매가 (키오스크 결제 금액)</label>
+                  <label>수량</label>
+                  <div class="qty">
+                    <button type="button" class="qty-btn" data-d="-1" aria-label="수량 줄이기">−</button>
+                    <span class="qty-val">1</span><span>개</span>
+                    <button type="button" class="qty-btn" data-d="1" aria-label="수량 늘리기">+</button>
+                    <span class="qty-hint">최대 10개</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>결제 금액 (수량 전체, 키오스크 결제 총액)</label>
                   <div class="won"><input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="예: 3000" /></div>
                 </div>
                 <div class="btn-row">
@@ -651,6 +667,18 @@
         const nameInput = card.querySelector(".drug-name");
         const dropdown = card.querySelector(".drug-dropdown");
         attachDrugSearch(nameInput, dropdown, drugResults, card.querySelector(".picked"));
+        // 수량: 키오스크 재고 약을 고르면 그 재고까지, 아니면 10개까지. 단가를 알면 금액을 자동 계산
+        card.qty = {
+          value: 1, max: 10, unit: null,
+          set(v) {
+            this.value = Math.max(1, Math.min(this.max, v));
+            card.querySelector(".qty-val").textContent = this.value;
+            card.querySelector(".qty-hint").textContent = this.unit != null
+              ? `${this.unit.toLocaleString()}원 × ${this.value}개 · 최대 ${this.max}개` : `최대 ${this.max}개`;
+            if (this.unit != null) card.querySelector(".drug-price").value = this.unit * this.value;
+          },
+        };
+        card.querySelectorAll(".qty-btn").forEach((b) => b.addEventListener("click", () => card.qty.set(card.qty.value + Number(b.dataset.d))));
         setupKioskStock(card, c, drugResults, nameInput);
 
         card.querySelector(".approve-btn").addEventListener("click", async (e) => {
@@ -676,8 +704,9 @@
               drug_item_seq: itemSeq,
               drug_item_name: nameInput.value,
               price,
+              quantity: card.qty.value,
             });
-            toast(`승인 완료 — ${data.approved_drug_name} (${price.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
+            toast(`승인 완료 — ${data.approved_drug_name} × ${card.qty.value}개 (${price.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
             loadPending();
           } catch (err) {
             toast("오류: " + err.message, true);
@@ -748,7 +777,7 @@
             <div class="col right">
               <div class="result ${approved ? "approved" : "rejected"}">
                 ${approved
-                  ? `<b>✓ 처방 승인</b>${escapeHtml(c.approved_drug_name || "")}`
+                  ? `<b>✓ 처방 승인</b>${escapeHtml(c.approved_drug_name || "")}${c.approved_quantity > 1 ? ` × ${c.approved_quantity}개` : ""}`
                   : `<b>거절</b>${escapeHtml(c.decision_reason || "사유 없음")}`}
               </div>
             </div>

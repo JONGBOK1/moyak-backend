@@ -305,7 +305,7 @@
 
     if (data.status === "approved") {
       document.getElementById("statusLabel").textContent = "약사가 처방을 완료했어요";
-      document.getElementById("queueNumber").textContent = "처방약: " + (data.approved_drug_name || "-");
+      document.getElementById("queueNumber").textContent = "처방약: " + (data.approved_drug_name || "-") + (data.approved_quantity > 1 ? ` × ${data.approved_quantity}개` : "");
       document.getElementById("step2Icon").innerHTML = '<img class="check" src="check0.svg" />';
       document.getElementById("step2Badge").style.display = "none";
       document.getElementById("step3Icon").innerHTML = '<img class="check" src="check0.svg" />';
