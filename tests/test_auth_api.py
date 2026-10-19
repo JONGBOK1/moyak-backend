@@ -105,7 +105,9 @@ def test_token_identifies_user_in_consultation_api(setup):
     # 토큰으로 본인 확인 통과(약사 배정 전이라 409), 남의 상담은 403
     assert client.get(f"/consultations/{mine}/session", headers=auth).status_code == 409
     assert client.get(f"/consultations/{other}/session", headers=auth).status_code == 403
-    expired = {"Authorization": "Bearer " + session["access_token"][:-1] + "0"}
+    # 서명 끝 글자를 확실히 다른 글자로 바꾼다(원래 "0"으로 고정 → 끝 글자가 이미 "0"이면 위조가 안 돼 1/16 확률로 실패)
+    token = session["access_token"]
+    expired = {"Authorization": "Bearer " + token[:-1] + ("1" if token[-1] == "0" else "0")}
     assert client.get(f"/consultations/{mine}/session", headers=expired).status_code == 401
 
 
