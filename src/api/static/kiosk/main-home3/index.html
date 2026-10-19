@@ -167,8 +167,7 @@
         location.href = `/kiosk/main-home2/?machine=${encodeURIComponent(machineId)}`;
         return;
       }
-      // 실명 데이터가 없어서 디자인의 "지*민 님" 대신 일반 호칭을 쓴다.
-      q(".div6").textContent = "연동 회원 님";
+      q(".div6").textContent = `${session.user_display_name || "연동 회원"} 님`; // 가입한 사용자는 가린 실명(이*복)
     } catch (e) {
       q(".div12").textContent = "정보를 불러오지 못했습니다: " + e.message;
     }

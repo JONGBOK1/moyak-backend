@@ -121,7 +121,7 @@ moyak-backend/
      - `POST /auth/signup` `{"username", "password"}` → 201 + 로그인 응답(가입 즉시 로그인). 409 중복, 422 형식 오류
      - `POST /auth/login` `{"username", "password"}` → `{"access_token", "token_type": "bearer", "expires_in", "user": {"id", "username", "role"}}`. 401 아이디/비밀번호 불일치, 403 비활성 계정
      - `GET /auth/me` (Bearer) → `{"id", "username", "name", "role"}` — 앱 시작 시 저장된 토큰 확인 + 마이페이지 실명 표시. 로그아웃은 앱에서 토큰 삭제(서버 저장 없음)
-     - **실명 (2026-10-19)**: 팀 Supabase `users.name`(varchar 40). `POST /auth/signup`에 선택 항목 `name`, 로그인·`/auth/me` 응답 `user.name`(입력 전이면 null). `PATCH /auth/me` `{"name"}`(Bearer, 본인만)으로 나중에 입력·수정. 한글·영문(공백·점 허용) 40자 이내, 아니면 422.
+     - **실명 (2026-10-19)**: 팀 Supabase `users.name`(varchar 40). `POST /auth/signup`에 선택 항목 `name`, 로그인·`/auth/me` 응답 `user.name`(입력 전이면 null). `PATCH /auth/me` `{"name"}`(Bearer, 본인만)으로 나중에 입력·수정. 한글·영문(공백·점 허용) 40자 이내, 아니면 422. 키오스크는 QR 로그인한 사용자의 가린 실명을 `GET /vending/machines/{id}/session`의 `user_display_name`(이종복→이*복, 김철→김*, `mask_name`)으로 받아 "이*복 님"으로 표시(가입 안 한 시연용 ID·이름 미입력이면 null → "연동 회원 님"). 앱은 QR 스캔(`POST /vending/scan`)의 `user_id`에 로그인 응답의 `user.id`를 보내야 이름이 연결된다.
      - 규칙은 앱(`input_validation.dart`)과 동일: 아이디 영문·숫자·밑줄 4~20자(대소문자 구분 없음), 비밀번호 8자 이상·영문+숫자+특수문자·공백 없음.
      - 아이디는 내부적으로 `아이디@AUTH_EMAIL_DOMAIN`(기본 moyak.app) 이메일로 Supabase에 저장(관리자 API로 이메일 확인 없이 생성, 메일 발송 없음). 비밀번호는 Supabase가 저장·검증하고 이 서버는 보관하지 않는다.
      - 토큰은 기존 상담 토큰(`CONSULT_AUTH_SECRET` 서명, 기본 14일). 앱은 이후 요청에 `Authorization: Bearer`를 붙이고, 상담 생성 등 팀 규격 API의 `user_id`에는 `user.id`를 넣는다. 약사 계정은 가입으로 만들 수 없고 `users.role`을 `pharmacist`로 바꿔 지정한다.

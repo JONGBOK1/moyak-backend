@@ -273,3 +273,11 @@ API 스펙이 바뀌면 이 문서와 [`CLAUDE.md`](../CLAUDE.md)를 같이 갱�
 - 회원가입 때 이름도 받으려면 `POST /auth/signup` 바디에 `"name": "홍길동"`(선택) 추가
 - 이미 가입한 계정은 마이페이지에서 `PATCH /auth/me` `{"name": "홍길동"}` + `Authorization: Bearer <토큰>`으로 입력·수정 → 응답은 `/auth/me`와 같은 형식
 - 이름 규칙: 한글 또는 영문(공백·점 허용) 40자 이내. 어기면 422 + 안내 메시지(`detail`)
+
+## 추가 (2026-10-19): 회원가입 실명 → 마이페이지 "이종복 님" → 키오스크 "이*복 님"
+서버는 준비 완료(Supabase `users.name` 사용). 앱에서 할 일:
+1. **회원가입 화면**: 이름 입력칸 1개 추가 → `POST /auth/signup` 바디에 `"name": "이종복"` 추가 (기존 `username`, `password`는 그대로)
+   - 규칙: 한글 또는 영문(공백·점 허용) 40자 이내. 어기면 422 + `detail` 메시지를 그대로 보여주면 됨
+2. **마이페이지**: "게스트 사용자" 대신 `GET /auth/me`(Bearer)의 `name`으로 `"${name} 님"` 표시. `name`이 null이면(예전 가입자) `"${username} 님"` + 이름 등록 버튼 → `PATCH /auth/me` `{"name"}`
+3. **키오스크 QR 스캔**: `POST /vending/scan`의 `user_id`에 로그인 응답의 `user.id`(UUID)를 보낼 것 → 키오스크 화면에 "이*복 님"이 뜸
+   - 키오스크(Flutter 키오스크 앱)는 `GET /vending/machines/{id}/session` 응답의 `user_display_name`(이미 가려진 이름)을 그대로 "○*○ 님"으로 표시, null이면 "연동 회원 님"
