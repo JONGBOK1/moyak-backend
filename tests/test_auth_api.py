@@ -231,3 +231,27 @@ def test_status_reports_configuration_without_values(setup, monkeypatch):
     assert body["supabase_url"] is False and body["anon_key"] is True and body["token_secret"] is True
     assert body["supabase_auth_http"] is None
     assert "anon-secret-value" not in str(body)
+
+
+def test_real_name_on_signup_and_mypage(setup):
+    """마이페이지 실명 표시 (2026-10-19): 가입 때 선택 입력 → 로그인·/auth/me 응답에 name."""
+    client, _, _ = setup
+    body = client.post("/auth/signup", json={"username": "grandma_01", "password": PASSWORD, "name": " 김  모약 "}).json()
+    assert body["user"]["name"] == "김 모약"  # 앞뒤·중복 공백 정리
+    auth = {"Authorization": f"Bearer {body['access_token']}"}
+    assert client.get("/auth/me", headers=auth).json()["name"] == "김 모약"
+    login = client.post("/auth/login", json={"username": "grandma_01", "password": PASSWORD}).json()
+    assert login["user"]["name"] == "김 모약"
+
+
+def test_existing_account_can_set_name_later(setup):
+    client, _, _ = setup
+    body = signup(client).json()  # 이름 없이 가입한 기존 계정
+    assert body["user"]["name"] is None
+    auth = {"Authorization": f"Bearer {body['access_token']}"}
+    updated = client.patch("/auth/me", json={"name": "Kim Moyak"}, headers=auth)
+    assert updated.status_code == 200 and updated.json()["name"] == "Kim Moyak"
+    assert client.get("/auth/me", headers=auth).json()["name"] == "Kim Moyak"
+    assert client.patch("/auth/me", json={"name": "홍길동123"}, headers=auth).status_code == 422  # 숫자 불가
+    assert client.patch("/auth/me", json={"name": "  "}, headers=auth).status_code == 422
+    assert client.patch("/auth/me", json={"name": "홍길동"}).status_code == 401  # 토큰 없으면 불가

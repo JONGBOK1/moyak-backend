@@ -29,6 +29,19 @@ def check_password(password: str) -> None:
         raise HTTPException(422, "비밀번호는 영문, 숫자, 특수문자를 포함해 공백 없이 8자 이상 입력해주세요.")
 
 
+NAME = re.compile(r"^[가-힣A-Za-z][가-힣A-Za-z .·]{0,39}$")
+
+
+def normalize_name(name: str | None) -> str | None:
+    """실명: 한글·영문(공백·점 허용) 1~40자. 비우면 None(선택 항목)."""
+    name = " ".join((name or "").split())
+    if not name:
+        return None
+    if not NAME.fullmatch(name):
+        raise HTTPException(422, "이름은 한글 또는 영문으로 40자 이내로 입력해주세요.")
+    return name
+
+
 def email_for(username: str) -> str:
     return f"{username}@{config.AUTH_EMAIL_DOMAIN}"
 
@@ -50,16 +63,17 @@ def _session(user) -> dict:
 
 
 def profile(user) -> dict:
-    return {"id": str(user["id"]), "username": user["nickname"], "role": user["role"]}
+    return {"id": str(user["id"]), "username": user["nickname"], "name": user.get("name"), "role": user["role"]}
 
 
 def username_available(db: Session, username: str) -> bool:
     return users.find_by_email(db, email_for(normalize_username(username))) is None
 
 
-def signup(db: Session, username: str, password: str) -> dict:
+def signup(db: Session, username: str, password: str, name: str | None = None) -> dict:
     username = normalize_username(username)
     check_password(password)
+    name = normalize_name(name)
     email = email_for(username)
     if users.find_by_email(db, email) is not None:
         raise HTTPException(409, "이미 사용 중인 아이디입니다.")
@@ -70,7 +84,7 @@ def signup(db: Session, username: str, password: str) -> dict:
     except supabase_auth.AuthUnavailable as error:
         raise _unavailable(error) from error
     try:
-        users.add(db, user_id, email, username)
+        users.add(db, user_id, email, username, name)
         db.commit()
     except Exception as error:
         db.rollback()
@@ -103,3 +117,13 @@ def login(db: Session, username: str, password: str) -> dict:
     users.mark_login(db, user_id)
     db.commit()
     return _session(users.find_by_id(db, user_id))
+
+
+def update_name(db: Session, user_id: str, name: str | None) -> dict:
+    """마이페이지에서 실명 입력·수정 (가입 때 이름을 안 받은 기존 계정용)."""
+    name = normalize_name(name)
+    if name is None:
+        raise HTTPException(422, "이름을 입력해주세요.")
+    users.set_name(db, user_id, name)
+    db.commit()
+    return profile(users.find_by_id(db, user_id))
