@@ -55,3 +55,27 @@ def set_name(db: Session, user_id: str, name: str) -> None:
 def mark_login(db: Session, user_id: str) -> None:
     now = _now()
     db.execute(update(users).where(users.c.id == user_id).values(last_login_at=now, updated_at=now))
+
+
+
+def mask_name(name: str | None) -> str | None:
+    """키오스크 화면용 이름 가리기: 이종복 → 이*복, 김철 → 김*, 남궁민수 → 남**수 (공공장소 화면이라 실명을 그대로 띄우지 않음)."""
+    name = "".join((name or "").split())
+    if not name:
+        return None
+    if len(name) <= 2:
+        return name[0] + "*" * (len(name) - 1)
+    return name[0] + "*" * (len(name) - 2) + name[-1]
+
+
+def display_name(db: Session, user_id: str | None) -> str | None:
+    """사용자 ID로 가린 실명을 찾는다. 가입하지 않은 시연용 ID·이름 미입력·조회 실패면 None."""
+    import uuid
+
+    try:
+        uuid.UUID(str(user_id))  # 팀 users.id는 UUID — 시연용 임의 ID로 조회하면 Postgres 타입 오류
+        row = find_by_id(db, str(user_id))
+    except Exception:
+        db.rollback()
+        return None
+    return mask_name(row["name"]) if row else None

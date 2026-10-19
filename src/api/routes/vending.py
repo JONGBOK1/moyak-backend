@@ -63,6 +63,8 @@ class SessionResponse(BaseModel):
     machine_id: str
     paired: bool  # 유효한 QR 로그인 여부 (승인된 구매 건 유무와 무관)
     user_id: str | None = None
+    # 키오스크 화면 표시용 가린 실명(예: 이*복). 가입·이름 입력 전이면 null → "연동 회원 님"
+    user_display_name: str | None = None
     purchase: PurchaseResponse | None = None
 
 
@@ -149,7 +151,10 @@ def get_session(machine_id: str, db: Session = Depends(get_db)) -> SessionRespon
         machine, user_id, purchase = service.get_machine_session(db, machine_id=machine_id)
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return SessionResponse(machine_id=machine.id, paired=user_id is not None, user_id=user_id, purchase=purchase)
+    from src.accounts.users import display_name
+
+    return SessionResponse(machine_id=machine.id, paired=user_id is not None, user_id=user_id,
+                           user_display_name=display_name(db, user_id) if user_id else None, purchase=purchase)
 
 
 @router.post("/scan", response_model=ScanResponse)

@@ -104,7 +104,7 @@
       }
 
       // 실명 데이터가 없어서 디자인의 "지*민님" 대신 일반 호칭을 쓴다.
-      q(".div6").textContent = "회원님 환영합니다";
+      q(".div6").textContent = `${data.user_display_name ? data.user_display_name + " " : "회원"}님 환영합니다`; // 가린 실명(이*복)
       // 승인 건 유무에 따라 로그인 홈이 다르다 (main-home2: 승인 약 있음 / main-home3: 없음)
       const home = data.purchase ? "main-home2" : "main-home3";
       nextUrl = `/kiosk/${home}/?machine=${encodeURIComponent(machineId)}`;

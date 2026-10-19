@@ -284,3 +284,12 @@ API 스펙이 바뀌면 이 문서와 [`CLAUDE.md`](../CLAUDE.md)를 같이 갱�
 ## 추가 (2026-10-19): 처방 수량
 - 약사가 승인할 때 수량을 정한다. 상담 응답에 `approved_quantity`, 승인 건(`GET /vending/purchases`, QR 스캔 응답의 `purchase`)에 `quantity`가 추가됨
 - `price`는 그 수량 전체의 결제 금액(총액). 화면에는 "약 이름 × N개 / 총 금액"으로 표시 권장
+
+
+## 추가 (2026-10-19): 회원가입 실명 → 마이페이지 "이종복 님" → 키오스크 "이*복 님"
+서버는 준비 완료(Supabase `users.name` 사용). 앱에서 할 일:
+1. **회원가입 화면**: 이름 입력칸 1개 추가 → `POST /auth/signup` 바디에 `"name": "이종복"` 추가 (기존 `username`, `password`는 그대로)
+   - 규칙: 한글 또는 영문(공백·점 허용) 40자 이내. 어기면 422 + `detail` 메시지를 그대로 보여주면 됨
+2. **마이페이지**: "게스트 사용자" 대신 `GET /auth/me`(Bearer)의 `name`으로 `"${name} 님"` 표시. `name`이 null이면(예전 가입자) `"${username} 님"` + 이름 등록 버튼 → `PATCH /auth/me` `{"name"}`
+3. **키오스크 QR 스캔**: `POST /vending/scan`의 `user_id`에 로그인 응답의 `user.id`(UUID)를 보낼 것 → 키오스크 화면에 "이*복 님"이 뜸
+   - 키오스크(Flutter 키오스크 앱)는 `GET /vending/machines/{id}/session` 응답의 `user_display_name`(이미 가려진 이름)을 그대로 "○*○ 님"으로 표시, null이면 "연동 회원 님"
