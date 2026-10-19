@@ -17,6 +17,7 @@ users = Table(
     Column("id", UUIDString, primary_key=True),
     Column("email", String, unique=True),
     Column("nickname", String),
+    Column("name", String),  # 실명(마이페이지 표시용, 2026-10-19). 팀 Supabase users.name varchar(40)
     Column("role", String, nullable=False, default="user"),
     Column("is_active", Boolean, nullable=False, default=True),
     Column("last_login_at", DateTime),
@@ -28,6 +29,11 @@ users = Table(
 
 def create_local_table(engine: Engine) -> None:
     users.create(bind=engine, checkfirst=True)
+    from sqlalchemy import inspect, text
+
+    if "name" not in {c["name"] for c in inspect(engine).get_columns("users")}:  # 예전 로컬 SQLite users 테이블
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
 
 
 def find_by_email(db: Session, email: str):
@@ -38,8 +44,12 @@ def find_by_id(db: Session, user_id: str):
     return db.execute(select(users).where(users.c.id == user_id)).mappings().first()
 
 
-def add(db: Session, user_id: str, email: str, username: str) -> None:
-    db.execute(insert(users).values(id=user_id, email=email, nickname=username, role="user"))
+def add(db: Session, user_id: str, email: str, username: str, name: str | None = None) -> None:
+    db.execute(insert(users).values(id=user_id, email=email, nickname=username, name=name, role="user"))
+
+
+def set_name(db: Session, user_id: str, name: str) -> None:
+    db.execute(update(users).where(users.c.id == user_id).values(name=name, updated_at=_now()))
 
 
 def mark_login(db: Session, user_id: str) -> None:
