@@ -51,6 +51,7 @@
   .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
   .card h2{margin:0 0 10px;font-size:.95rem;font-weight:600}
   .shot{width:100%;border-radius:8px;display:block;background:var(--sunken)}
+  .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
 
   .kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;
       border-bottom:1px solid var(--line);font-size:.88rem}
@@ -97,8 +98,9 @@
   <h1>알약 인식 테스트</h1>
   <p class="lede">사진을 올리면 모양·색·각인을 읽고 후보 약을 찾습니다. 챗봇에 붙일 API를 그대로 호출합니다.</p>
   <p class="lede" style="font-size:.82rem;margin-top:.5rem">
-    식약처 사진 119장 실측 — <b>후보 안에 정답 81.5%</b> · 상위 5위 안 80% ·
-    1위가 정답 65% · 모양 88% · 색 77%.
+    실측 — 식약처 사진 119장 <b>1위 93%</b> · 실사진 <b>3위 안 71%</b>
+    (앞뒤 두 장을 올리면 약 기준 90%) · 폰 사진 흉내 3위 안 70%.
+    1위가 확실하지 않으면 후보들의 식약처 사진과 비교해 순위를 다시 매깁니다(5~15초). Claude 가 안 되면 OpenCV+Google 로 넘어가며 그때는 1위 75%.
     <br><b>점수는 확률이 아닙니다.</b> 모양·색·각인·비율 중 얼마나 맞았는지를
     0~100으로 나타낸 값입니다 — 94점이 "94% 확실"이라는 뜻이 아닙니다.
     <b>1위를 정답으로 단정하지 마세요</b> — 여러 개 보여주고 고르게 하는 것이 맞습니다.
@@ -107,8 +109,8 @@
 
 <label class="drop" id="drop">
   <div class="big">사진을 끌어다 놓거나 클릭해서 고르세요</div>
-  <div class="sm">JPEG · PNG · 8MB 이하</div>
-  <input type="file" id="file" accept="image/*">
+  <div class="sm">한 장, 또는 <b>앞면·뒷면 두 장</b>을 한꺼번에 (두 장이면 훨씬 정확) · JPEG · PNG · 8MB 이하</div>
+  <input type="file" id="file" accept="image/*" multiple>
 </label>
 
 <div class="row">
@@ -120,7 +122,7 @@
   <div>
     <div class="card">
       <h2>올린 사진</h2>
-      <img class="shot" id="shot" alt="" style="display:none">
+      <div class="shots" id="shots"></div>
       <div class="empty" id="shotEmpty">아직 없음</div>
     </div>
     <div class="card" style="margin-top:12px">
@@ -161,25 +163,29 @@ const drop = $("drop");
 ["dragleave","drop"].forEach((e) =>
   drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", (ev) => {
-  const f = ev.dataTransfer.files?.[0];
-  if (f) send(f);
+  const fs = [...(ev.dataTransfer.files || [])];
+  if (fs.length) send(fs);
 });
 $("file").addEventListener("change", (ev) => {
-  const f = ev.target.files?.[0];
-  if (f) send(f);
+  const fs = [...(ev.target.files || [])];
+  if (fs.length) send(fs);
 });
 
-async function send(file) {
+async function send(files) {
+  // 두 장까지만 쓴다 — 첫 장은 앞면, 둘째 장은 뒷면으로 보낸다.
+  files = files.slice(0, 2);
   // 올린 사진을 먼저 보여준다 — 분석을 기다리는 동안 빈 화면을 안 보게
-  const url = URL.createObjectURL(file);
-  $("shot").src = url; $("shot").style.display = "block"; $("shotEmpty").style.display = "none";
+  $("shots").innerHTML = files.map((f) =>
+    `<img class="shot" src="${URL.createObjectURL(f)}" alt="">`).join("");
+  $("shotEmpty").style.display = "none";
 
   $("detected").innerHTML = '<div class="bar"><i></i></div>';
-  $("result").innerHTML = '<div class="empty">찾는 중…<br><span class="hint">각인을 읽는 데 몇 초 걸립니다</span></div>';
+  $("result").innerHTML = '<div class="empty">찾는 중…<br><span class="hint">각인을 읽고, 헷갈리면 후보 사진과 비교합니다 (5~15초)</span></div>';
   $("cnt").textContent = ""; $("raw").style.display = "none";
 
   const fd = new FormData();
-  fd.append("file", file);
+  fd.append("file", files[0]);
+  if (files[1]) fd.append("back", files[1]);
 
   let res, data;
   try {
@@ -206,7 +212,11 @@ async function send(file) {
       <span class="v mono">${d.aspect}</span></div>` : ""}
     <div class="kv"><span class="k">확신도</span>
       <span class="v mono">${Math.round(d.confidence * 100)}%</span></div>
-    ${data.note ? `<div class="note warn">${esc(data.note)}</div>` : ""}`;
+    ${d.engine ? `<div class="kv"><span class="k">엔진</span>
+      <span class="v mono">${esc(d.engine)}</span></div>` : ""}
+    <div class="kv"><span class="k">후보 사진 비교</span>
+      <span class="v">${d.reranked ? "했음 — 순위를 다시 매김" : "안 함 (1위가 확실하거나 꺼짐)"}</span></div>
+    ${data.note ?`<div class="note warn">${esc(data.note)}</div>` : ""}`;
 
   const list = data.candidates || [];
   $("cnt").textContent = list.length ? `${list.length}개` : "";

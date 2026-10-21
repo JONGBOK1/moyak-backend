@@ -160,7 +160,7 @@ moyak-backend/
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
 - [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` + 앱 지도 화면 `/app/map-screen/`(카카오 지도, `KAKAO_JS_KEY` 필요) — 가상 자판기는 동양미래대학교 주변 실제 장소, Supabase용 시드 SQL `scripts/supabase_demo_machines.sql` (2026-10-07 한별 동의 후 실행 완료: VM-001 좌표 보정, VM-006~009 추가, 재고 15건 — Render도 `MAP_DATABASE_URL`로 Supabase 조회 중)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
-- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장으로 약 후보를 찾는다. 모양·색은 OpenCV로, 각인은 Google Cloud Vision으로 읽고 Supabase `drug_pills`를 읽기 전용 조회. 실측 후보 정확도 81.5%(1위 64.7%, 평균 후보 11.7개), 모양 88.2%·색 77.3%. 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
+- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장(또는 앞면+뒷면)으로 약 후보를 찾는다. Claude(claude-opus-5-5)가 모양·색·각인·로고를 판정하고 Supabase `drug_pills`를 읽기 전용 조회, 1위가 불확실하면 후보 사진과 비교해 재순위. 키가 없거나 실패하면 예전 방식(OpenCV + Google Vision)으로 자동 대체. 식약처 119장 1위 93.3%, 실사진 3위 안 71.4%. 앱 챗봇 화면 "+" 버튼으로 사진 → 후보 카드 → 고른 약으로 `/chat` (2026-10-21). 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
 
 ## 8. 코딩 시 참고사항
 
@@ -227,17 +227,27 @@ moyak-backend/
 
 **목적**: 사용자가 약 이름을 모를 때 사진으로 약을 특정한다. 특정 뒤의 설명·병용금기·추천은 기존 RAG 체인이 그대로 한다.
 
-**흐름**: 사진 → 알약 영역 추출(`vision.py`) → 모양·색 판별 → 각인 읽기(`ocr.py`, Google Cloud Vision)
-→ Supabase `drug_pills` 조회(`search.py`, 읽기 전용) → 점수순 후보.
+**흐름** (전 과정 `src/pills/identify.py`, 2026-10-21 개정):
+사진(앞뒤 2장 가능) → Claude 가 원래 사진 + 가운데 확대 사진으로 모양·색·각인·로고 판정(`vision_llm.py`·`vision_claude.py`)
+→ Supabase `drug_pills` 조회(`search.py`, 읽기 전용) → 1위가 불확실하면 상위 10개 후보의 식약처 사진을 한 장으로 모아
+Claude 에게 다시 고르게 함(`rerank.py`). Claude 가 안 되면(키 없음·크레딧 소진·서버 하루 상한 초과) 예전 방식
+— 알약 영역 추출(`vision.py`) → 모양·색 판별 → 각인 읽기(`ocr.py`, Google Cloud Vision) — 으로 자동 대체.
 
-- `POST /pills/identify` (multipart, 로그인 불필요, IP당 20회/분·300회/일, 8MB 이하) — 전체 스펙은 `docs/pills-api.md`.
+- `POST /pills/identify` (multipart `file` + 선택 `back`, 로그인 불필요, IP당 10회/분·100회/일, 8MB 이하, 5~15초) — 전체 스펙은 `docs/pills-api.md`.
+  응답에 `detected.engine`(누가 판정했나)·`detected.reranked`·`confident`(1위가 확실한가)·`message`(챗봇 말풍선 문구).
+- 앱 챗봇 화면(`static/app/chatbot/`) 입력창 왼쪽 "+" → 사진 → 후보 카드 3개 → 누르면 그 약 이름으로 `/chat` 질문.
+  **1위를 정답으로 단정하지 않고 사용자가 고르게 한다** — 약 설명은 기존 RAG 가 한다.
 - `GET /pill-test` — 사진을 올려 바로 확인하는 테스트 페이지.
-- 설정: `GOOGLE_VISION_API_KEY`(없으면 각인 없이 모양·색만), `PILL_DATABASE_URL`(없으면 `DRUG_DATABASE_URL` → `MAP_DATABASE_URL`).
+- 설정: `ANTHROPIC_API_KEY`(없으면 예전 방식), `PILL_LLM_MODEL`(기본 claude-opus-5-5, 비우면 LLM 끔), `PILL_RERANK`(기본 1),
+  `PILL_LLM_DAILY_LIMIT`(서버 전체 하루 최대 사진 수, 기본 300 — 넘으면 예전 방식), `GOOGLE_VISION_API_KEY`(예전 방식의 각인),
+  `PILL_DATABASE_URL`(없으면 `DRUG_DATABASE_URL` → `MAP_DATABASE_URL`).
+- 비용: 사진 1장 평균 약 2센트(판정 1.4 + 필요 시 재순위 1.2).
 - DB는 팀 Supabase를 **읽기 전용**으로만 쓴다(지도·DUR 보강과 같은 원칙). 주소가 없거나 OpenCV가 없으면
   이 라우터만 503을 돌려주고 나머지 API는 평소대로 동작한다.
 
-**실측 정확도** (식약처 사진 119장, 일반의약품): 모양 88.2% · 색 77.3% · 후보 안에 정답 81.5% · 1위 정답 64.7% · 상위 5위 78.2% · 평균 후보 11.7개.
-각인을 Google Vision 이 아니라 오픈소스(easyocr)로 읽으면 70.0%/48.3%, 각인을 DB 에서 그대로 가져오면 91.6%/78.2%(상한선).
+**실측 정확도** (Claude): 식약처 119장(일반의약품) 1위 93.3%·3위 안 93.3% / 실사진 14장(전체 의약품) 3위 안 71.4%,
+앞뒤 두 장이면 약 기준 10개 중 9개 / 폰 사진 흉내 59장 3위 안 69.5%. 경과는 `docs/pill_recognition_status.md`.
+예전 방식(OpenCV + Google): 모양 88.2% · 색 77.3% · 후보 안에 정답 81.5% · 1위 64.7% · 상위 5위 78.2%.
 각인 없이 모양·색만 쓰면 후보 안에 정답이 9.2%로 떨어진다 — **각인이 읽히느냐가 전부다.**
 
 **준비물**: `sql/015_fuzzystrmatch.sql` 을 Supabase 에 한 번 적용해야 한다. `search.py` 가 각인 한 글자

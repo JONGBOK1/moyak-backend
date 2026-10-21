@@ -37,3 +37,7 @@ psycopg[binary]==3.3.6
 # numpy 는 pandas 가 이미 끌고 오므로 여기서 또 고정하지 않는다 — 두 군데서 고정하면
 # 버전이 어긋나는 순간 설치가 통째로 막힌다. opencv 5 는 numpy 2 이상을 요구한다.
 opencv-python-headless==5.0.0.93
+
+# 알약 사진 판정 (src/pills/vision_claude.py) — Claude 가 모양·색·각인을 한 번에 본다.
+# 키(ANTHROPIC_API_KEY)가 없으면 위 OpenCV + Google Vision 방식으로 자동으로 넘어간다.
+anthropic==1.15.0

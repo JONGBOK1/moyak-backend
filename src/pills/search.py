@@ -51,11 +51,24 @@ W_PRINT_PART = 0.25     # 각인 일부가 들어 있다
 W_PRINT_NEAR = 0.15     # 한 글자 차이
 W_PRINT_LEN = 0.04      # 각인 한 글자당 가산점 ('CT' 보다 'CRWSOB100' 이 확실하다)
 W_PRINT_LEN_MAX = 0.12
+W_PRINT_BOTH = 0.20     # 앞뒤 각인이 둘 다 통째로 같다
+W_PRINT_ALL = 0.15      # 읽은 조각(2자 이상)이 전부 이 약의 각인 안에 있다
+#   같은 119장, 1위 정답:  0 → 0.05 → 0.10 → 0.20
+#     Google  67.2 → 72.3 → 72.3 → 74.8 %
+#     LLM     68.9 → 71.4 → 72.3 → 77.3 %   (후보 안 정답은 0.05 부터 그대로)
 W_ASPECT = 0.14         # 가로세로비가 거의 같다
 W_ASPECT_NEAR = 0.07
+W_LOGO = 0.20           # 사진에 로고가 있고, DB 각인에도 '마크' 가 있다
+#   Claude 판정 기준 (후보 안 / 1위):        0           0.10        0.20        0.30
+#     119장 (가중치를 고른 사진)          93.3/84.9   94.1/84.9   94.1/84.9   94.1/84.9
+#     새 500장 (확인용)                  96.8/87.6   97.6/88.4   97.8/88.6   97.8/88.8
+#   119장에선 0.10~0.30 이 똑같아 앞뒤 각인 가산점과 같은 0.20 으로 뒀다.
+#   크게 안 오르는 이유: 로고 약끼리는 여전히 동점이다(삼각형·파랑·로고 약이 3개 등).
+#   그걸 가르려면 로고 모양 자체를 비교해야 한다.
 
 #: 한 후보가 받을 수 있는 최대 점수. 화면에 보여줄 때 이 값으로 나눠 0~100 으로 만든다.
-MAX_SCORE = W_SHAPE + W_COLOR + W_PRINT_EXACT + W_PRINT_LEN_MAX + W_ASPECT
+MAX_SCORE = (W_SHAPE + W_COLOR + W_PRINT_EXACT + W_PRINT_LEN_MAX + max(W_PRINT_BOTH, W_PRINT_ALL)
+             + W_ASPECT + W_LOGO)
 
 
 #: 각인에 그리스 문자를 쓴 품목이 있다. 눈으로는 라틴 문자와 구별이 안 되고 OCR 도
@@ -101,6 +114,17 @@ _SHAPE_NEIGHBORS: dict[str, tuple[str, ...]] = {
 }
 
 
+#: 각인에서 서로 헷갈리는 숫자와 글자. 비교할 때만 한쪽으로 모은다.
+#: 실측(폰 사진 흉내): 'IB' 를 '1B', 'BZ' 를 'B2' 로 읽었다. 두 글자라 한 글자 차이
+#: 허용(3자 이상만)에도 안 걸려서 못 찾았다.
+_CONFUSE_FROM, _CONFUSE_TO = "01258", "OIZSB"
+_CONFUSE = str.maketrans(_CONFUSE_FROM, _CONFUSE_TO)
+
+
+def _canon(t: str) -> str:
+    return t.translate(_CONFUSE)
+
+
 def _clean_imprint(s: str | None) -> str:
     """DB 각인을 비교용으로 다듬는다. `_CLEAN_SQL` 과 똑같이 맞춰야 한다.
 
@@ -108,6 +132,13 @@ def _clean_imprint(s: str | None) -> str:
     """
     t = _to_latin((s or "").upper()).replace("마크", "").replace("분할선", "")
     return re.sub(r"[ \-./+]", "", t)
+
+
+def _parts(print_text: str | None) -> list[str]:
+    """읽은 글자를 공백 등에서 쪼갠 조각. `_tokens` 의 앞부분이다(붙여 만든 것은 없다)."""
+    text_ = _to_latin((print_text or "").upper())
+    text_ = re.sub(r"[\-./+]", "", text_)
+    return [t for t in re.split(r"[^A-Z0-9가-힣]+", text_) if t]
 
 
 def _tokens(print_text: str | None) -> list[str]:
@@ -129,6 +160,7 @@ def _tokens(print_text: str | None) -> list[str]:
     # 버리면 완벽하게 읽고도 못 찾는다. 대신 `find` 에서 **완전히 같을 때만** 쓴다 —
     # 부분일치로 쓰면 'M' 하나가 수백 개와 맞아 후보가 터진다.
     out = [t for t in re.split(r"[^A-Z0-9가-힣]+", text_) if t]
+    parts = list(out)
 
     # **붙여 쓴 형태도 후보로 넣는다.** OCR 은 한 덩어리 각인에 공백을 끼워 넣을 때가
     # 있다 — 실측에서 'TYPENER' 를 'TYPEN ER' 로 읽어, 부분일치(0.25)밖에 못 받고
@@ -139,6 +171,15 @@ def _tokens(print_text: str | None) -> list[str]:
         joined = "".join(long_)
         if len(joined) <= 12 and joined not in out:
             out.append(joined)
+
+    # **이웃한 두 조각도 붙여 본다 — 한 글자 조각까지.** 분할선 양쪽 글자는 떨어져
+    # 읽힌다: DB 'A분할선C'('AC'), 'M분할선Z'('MZ') 를 'A C', 'M Z D' 로 읽는다.
+    # 위의 '전부 붙이기' 는 한 글자를 빼고 붙여서 이걸 못 만든다. 실측에서 각인을 맞게
+    # 읽고도 이 때문에 순위 밖으로 밀린 게 비전 LLM 기준 3건이었다.
+    for a, b in zip(parts, parts[1:]):
+        pair = a + b
+        if len(pair) <= 12 and pair not in out:
+            out.append(pair)
     return out
 
 
@@ -185,6 +226,7 @@ def find(
     color: str | None,
     print_text: str | None = None,
     aspect: float | None = None,
+    has_logo: bool | None = None,
     otc_only: bool = True,
     limit: int = 20,
 ) -> list[Candidate]:
@@ -192,6 +234,9 @@ def find(
 
     `otc_only` 가 참이면 일반의약품만 본다. 자판기에서 파는 건 일반의약품뿐이고,
     후보가 25,350개에서 5,587개로 줄어 정확도가 크게 오른다.
+
+    `has_logo` 는 비전 LLM 이 "글자가 아닌 로고가 새겨져 있다" 고 본 것이다
+    (`vision_llm`). 참이면 DB 각인에 '마크' 가 있는 약에 가산점을 준다.
     """
     shapes = [shape] + list(_SHAPE_NEIGHBORS.get(shape or "", ())) if shape else []
     colors = [color] + list(_COLOR_NEIGHBORS.get(color or "", ())) if color else []
@@ -200,6 +245,11 @@ def find(
     # 이걸 공백만 지워 'D-WMPG' 로 조회하면 그런 각인은 세상에 없어서 0건이 된다.
 
     print_tokens = _tokens(print_text)
+    # 한 글자 조각도 넣는다 — 'PK분할선H' 를 'H PK' 로 순서를 바꿔 읽었을 때 'H' 까지 봐야 잡힌다.
+    # 대신 전부 합쳐 3자 이상일 때만 쓴다('A B' 처럼 짧으면 우연히 다 들어 있는 약이 너무 많다).
+    read_parts = _parts(print_text)
+    if sum(map(len, read_parts)) < 3:
+        read_parts = []
 
     sql = """
         SELECT item_seq, item_name, entp_name, drug_shape, color_class1,
@@ -211,10 +261,18 @@ def find(
     params: dict = {}
     if otc_only:
         sql += " AND etc_otc_name = '일반의약품'"
-    if shapes:
+    # **각인을 읽었으면 모양·색으로도 거르지 않는다** (아래 비율과 같은 이유).
+    # 각인을 맞게 읽고도 모양·색이 이웃 범위 밖으로 틀리면 정답이 SQL 에서 통째로 빠진다 —
+    # 비전 LLM 으로 재보니 놓친 20건 중 9건이 "각인은 맞음 · 모양/색 틀림" 이었다
+    # (연질캡슐 갈색→자주, 삼각형→원형 등). 거르지 않아도 점수에서 모양·색 가산점은
+    # 그대로 주므로 맞는 쪽이 위로 온다. 같은 119장(이웃 토큰 붙이기 포함):
+    #   Google  후보 안 81.5% → 85.7% · 1위 64.7% → 67.2% · 5위 78.2% → 82.4%
+    #   LLM     후보 안 83.2% → 93.3% · 1위 63.9% → 68.9% · 5위 78.2% → 86.6%
+    # 대가는 후보 수(평균 12개 → 21개)다. 각인이 걸러 주므로 조회 결과는 300행을 안 넘었다.
+    if shapes and not print_tokens:
         sql += " AND drug_shape = ANY(:shapes)"
         params["shapes"] = shapes
-    if colors:
+    if colors and not print_tokens:
         # color_class1 은 "노랑, 투명" 처럼 복합값이 올 수 있어 앞글자로 맞춘다.
         sql += " AND (color_class1 = ANY(:colors) OR split_part(color_class1, ',', 1) = ANY(:colors))"
         params["colors"] = colors
@@ -253,23 +311,41 @@ def find(
                 # 'M' 하나가 수백 개와 맞는다.
                 ors.append(f"({f_} = :tok{i} OR {b_} = :tok{i})")
                 continue
+            conf = f"'{_CONFUSE_FROM}', '{_CONFUSE_TO}'"
             ors.append(f"""(
                   {f_} LIKE :pat{i} OR {b_} LIKE :pat{i}
                OR levenshtein({f_}, :tok{i}) <= :d{i}
                OR levenshtein({b_}, :tok{i}) <= :d{i}
+               OR translate({f_}, {conf}) = :canon{i}
+               OR translate({b_}, {conf}) = :canon{i}
             )""")
             params[f"pat{i}"] = f"%{tok}%"
             # 짧은 각인에 거리 1 을 허용하면 후보가 폭발한다("AB" 는 수백 개와 거리 1).
             params[f"d{i}"] = 1 if len(tok) >= 3 else 0
+            # 헷갈리는 글자(1/I, 2/Z ...)를 한쪽으로 모은 뒤 통째로 같으면 후보로 넣는다.
+            params[f"canon{i}"] = _canon(tok)
         sql += " AND (" + " OR ".join(ors) + ")"
 
     # 후보를 넉넉히 가져와 파이썬에서 점수를 매긴다.
     # **정렬 없이 자르면 안 된다** — PostgreSQL 이 아무 순서로나 주기 때문에
     # 정답이 잘려 나갈 수 있다. 각인이 있는 것부터 가져오면 쓸모 있는 쪽이 남는다.
-    sql += """ ORDER BY (print_front IS NOT NULL AND print_front <> '') DESC,
+    # 로고를 봤으면 '마크' 가 있는 약부터 가져온다 — 1200 에서 잘리더라도 그쪽이 남게.
+    logo_first = ("(coalesce(print_front, '') LIKE '%마크%' OR coalesce(print_back, '') LIKE '%마크%') DESC,"
+                  if has_logo else "")
+    sql += f""" ORDER BY {logo_first}
+                        (print_front IS NOT NULL AND print_front <> '') DESC,
                         item_seq
                LIMIT 1200"""
     rows = session.execute(text(sql), params).mappings().all()
+
+    # **각인으로 하나도 못 찾았으면 각인을 빼고 다시 찾는다.** 각인이 있으면 모양·색으로
+    # 거르지 않으므로(위 참고) 각인을 잘못 읽으면 후보가 통째로 0개가 된다 — 실제로
+    # 나무 위 원형 알약의 로고를 '9L' 로 읽어 빈 목록이 나왔다. 빈 화면보다는
+    # 모양·색으로 찾은 후보를 보여주는 게 낫다. 각인이 맞은 후보가 없다는 건
+    # 호출한 쪽에서 `matched` 에 '각인' 이 없는 것으로 알 수 있다.
+    if print_tokens and not rows:
+        return find(session, shape=shape, color=color, print_text=None, aspect=aspect,
+                    has_logo=has_logo, otc_only=otc_only, limit=limit)
 
     out: list[tuple[float, Candidate]] = []
     for r in rows:
@@ -299,9 +375,19 @@ def find(
                 elif len(tok) == 1:
                     continue                          # 한 글자는 완전일치만 인정한다
                 elif front and tok in front or back and tok in back:
-                    cur, lab = W_PRINT_PART, "각인 부분일치"
+                    # **얼마나 덮었는지에 따라 준다.** 'KJCX10' 은 'KJCX100' 의 7자 중 6자라
+                    # 거의 맞은 것인데, 고정 점수(0.25)를 주면 짧은 'KJ' 가 통째로 맞은 다른 약
+                    # (0.45)에 진다 — 실사진에서 셀렉시브캡슐이 그래서 10위 밖이었다.
+                    # 짧은 조각('AC' 가 'ACT' 의 2/3)까지 후하게 치면 식약처 500장에서 1위가
+                    # 2장 줄었다. 4자 이상 읽었을 때만 덮은 비율을 쓴다.
+                    cover = (max(len(tok) / len(f) for f in (front, back) if f and tok in f)
+                             if len(tok) >= 4 else 0.0)
+                    cur = W_PRINT_PART + (W_PRINT_EXACT - W_PRINT_PART) * cover * cover
+                    lab = "각인 부분일치"
                 elif _close(tok, front) or _close(tok, back):
                     cur, lab = W_PRINT_NEAR, "각인 비슷함"     # 한 글자 차이
+                elif _canon(tok) in (_canon(front), _canon(back)):
+                    cur, lab = W_PRINT_NEAR, "각인 비슷함"     # 1/I, 2/Z 같은 헷갈리는 글자
                 else:
                     continue
                 # **긴 각인일수록 확실하다.** 'CT' 는 수십 개 약과 겹치지만
@@ -310,9 +396,30 @@ def find(
                 cur += min(W_PRINT_LEN_MAX, max(0, len(tok) - 2) * W_PRINT_LEN)
                 if cur > best:
                     best, label = cur, lab
+            # **앞뒤 각인이 둘 다 통째로 맞으면 더 준다.** 회사 표시는 여러 약에 똑같이
+            # 찍힌다 — 'KPP' 는 일반의약품 60개에 있다. 토큰 하나의 최고점만 보면
+            # 'KPP VIC' 를 정확히 읽고도 'KPP' 만 맞은 59개와 동점이 되어, 실측에서
+            # 파워빅타민정이 30위 밖으로 밀렸다.
+            if (W_PRINT_BOTH and front and back and front != back
+                    and front in print_tokens and back in print_tokens):
+                best, label = best + W_PRINT_BOTH, "각인 앞뒤 일치"
+            # **읽은 조각이 전부 이 약에 들어 있으면 더 준다(순서는 상관없다).** 'CA MM' 을 읽었을 때 정답
+            # 'CA분할선MM' 은 둘 다 들어 있지만, 'CA' 하나만 맞은 약·'MM' 하나만 맞은 약과
+            # 점수가 거의 같아서 33위로 밀렸다(폰 사진 흉내).
+            elif W_PRINT_ALL and len(read_parts) >= 2 and all(
+                    p_ in front or p_ in back for p_ in read_parts):
+                best, label = best + W_PRINT_ALL, "각인 전부 일치"
             if best:
                 score += best
                 matched.append(label)
+
+        # **로고를 봤으면 '마크' 가 있는 약에 더 준다.** 일반의약품의 약 13% 는 각인이 글자가
+        # 아니라 회사 로고라 각인으로는 못 찾고, 모양·색이 같은 수십 개와 동점이 된다.
+        # 새 사진 500장에서 놓친 16건 중 13건이 이 부류였고 그중 10건은 LLM 이 로고라고 답했다.
+        # 로고 모양까지 맞추는 건 아니므로 "로고가 있는 약" 이라는 것만 가른다.
+        if has_logo and ("마크" in (r["print_front"] or "") or "마크" in (r["print_back"] or "")):
+            score += W_LOGO
+            matched.append("로고")
 
         if aspect and r["leng_long"] and r["leng_short"]:
             # 비율은 **거르는 조건이 아니라 점수**다(위 WHERE 참고). 거르면 각도 때문에
