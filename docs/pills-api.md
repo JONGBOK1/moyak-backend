@@ -37,8 +37,10 @@
 
 | 필드 | | |
 |---|---|---|
-| `file` | 필수 | 알약 사진 (JPEG/PNG, 8MB 이하) |
-| `back` | 선택 | **같은 알약의 뒷면** 사진. 앞면이 로고뿐인 약은 뒷면이 있어야 찾는다 |
+| `files` | 1~2장 | 사진 선택 화면에서 고른 사진을 **같은 이름으로 여러 개**. 고른 순서 = 앞면, 뒷면(같은 약). 3장 이상이면 앞의 2장만 쓰고 `note` 로 알린다 |
+| `file` / `back` | | `files` 대신 써도 된다(예전 방식). `back` 은 **같은 알약의 뒷면** — 앞면이 로고뿐인 약은 뒷면이 있어야 찾는다 |
+
+JPEG/PNG, 한 장 8MB 이하.
 
 쿼리
 - `otc_only` (기본 `true`) — 일반의약품만. 자판기 화면은 `true`, **챗봇은 `false` 권장**(집에 있는 처방약을 묻는 경우가 많다)
@@ -86,11 +88,12 @@
 
 ## 챗봇에 붙이는 법 (앱 챗봇 화면에 이미 붙여 둠)
 
-`src/api/static/app/chatbot/index.html` 의 입력창 왼쪽 **"+" 버튼**이 이 흐름이다. Flutter 로 옮길 때도 같은 순서로 하면 된다.
+`src/api/static/app/chatbot/index.html` 의 입력창 왼쪽 **"+" 버튼**이 이 흐름이다(카톡처럼 아래에서 올라오는 사진 시트 →
+고르고 → 전송). Flutter 쪽 화면 명세는 `docs/flutter-handoff.md` 맨 아래 "챗봇 + 버튼으로 알약 사진 찾기".
 
 ```
-사용자: [+] → 사진 1~2장 선택
-  → POST /pills/identify?otc_only=false&limit=3   (file, back)
+사용자: [+] → 시트에서 사진 1~2장 고르고 [전송]
+  → POST /pills/identify?otc_only=false&limit=3   (files, files)
   → 말풍선: message + 후보 카드 3개(item_image · item_name · 각인)
 사용자: 카드 하나 누름 ("이 약 맞아요")
   → POST /chat {"question": "클로틴정(클래리트로마이신)은(는) 어떤 약이야? 효능이랑 주의사항 알려줘", "history": [...]}
@@ -99,8 +102,7 @@
 
 ```js
 const fd = new FormData();
-fd.append("file", front);            // 필수
-if (back) fd.append("back", back);   // 선택
+picked.forEach((f) => fd.append("files", f));   // 고른 순서대로: 앞면, 뒷면
 const res = await fetch("/pills/identify?otc_only=false&limit=3", { method: "POST", body: fd });
 const data = await res.json();        // data.message, data.candidates, data.confident, data.note
 ```

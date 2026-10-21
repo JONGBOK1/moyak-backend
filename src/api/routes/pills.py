@@ -35,6 +35,8 @@ router = APIRouter(prefix="/pills", tags=["pills"])
 
 #: 폰 사진 한 장이면 충분하다. 더 크면 받기 전에 거절한다.
 MAX_BYTES = 8 * 1024 * 1024
+#: 한 번에 보는 사진 수 — 같은 약의 앞면·뒷면. 더 오면 앞의 두 장만 쓴다.
+MAX_PHOTOS = 2
 
 NO_CV = "서버에 이미지 처리 라이브러리(opencv-python-headless)가 없습니다. requirements.txt를 확인해주세요."
 
@@ -121,9 +123,11 @@ def _message(r) -> str:
 @limiter.limit("10/minute;100/day")
 async def identify(
     request: Request,
-    file: UploadFile = File(description="알약 사진 (JPEG/PNG)"),
+    file: UploadFile | None = File(None, description="알약 사진 (JPEG/PNG). files 로 보내도 된다"),
     back: UploadFile | None = File(
         None, description="같은 알약의 뒷면 사진 (선택). 앞면이 로고뿐일 때 특히 도움이 된다"),
+    files: list[UploadFile] | None = File(
+        None, description="사진 선택 화면에서 고른 사진들을 같은 이름으로 여러 장 (같은 약 앞·뒤, 최대 2장)"),
     otc_only: bool = Query(True, description="일반의약품만 찾기. 자판기 대상은 이쪽, 챗봇은 false 권장"),
     limit: int = Query(10, ge=1, le=50),
 ) -> IdentifyResponse:
@@ -132,21 +136,27 @@ async def identify(
     if pill_engine() is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, NO_DB)
 
+    # 카톡식 사진 선택 화면은 고른 사진을 목록(files)으로 보내기 쉽고, 예전 방식은 file(+back)이다.
+    # 둘 다 받는다. 빈 칸은 건너뛴다(프론트가 고르지 않은 칸을 비워 보내는 일이 있다).
     images = []
-    for f in (file, back):
+    for f in [file, back, *(files or [])]:
         if f is None:
             continue
         raw = await f.read()
         if not raw:
-            if f is back:
-                continue            # 프론트가 빈 칸을 보내도 앞면만으로 찾는다
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "빈 파일입니다.")
+            continue
         if len(raw) > MAX_BYTES:
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 f"사진이 너무 큽니다 ({len(raw) // 1024 // 1024}MB). 8MB 이하로 줄여 주세요.",
             )
         images.append(raw)
+    if not images:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "사진이 없습니다. 알약 사진을 한 장 이상 보내 주세요.")
+    extra_note = None
+    if len(images) > MAX_PHOTOS:
+        images = images[:MAX_PHOTOS]
+        extra_note = "사진은 두 장까지만 봅니다(같은 약의 앞면·뒷면). 앞의 두 장으로 찾았습니다."
 
     try:
         # **스레드에서 돌린다.** 몇 초씩 걸리는 외부 호출이라, 이 async 함수 안에서
@@ -172,5 +182,5 @@ async def identify(
         candidates=[CandidateOut(**vars(c)) for c in r.candidates],
         confident=r.confident,
         message=_message(r),
-        note=" ".join(r.notes) or None,
+        note=" ".join(r.notes + ([extra_note] if extra_note else [])) or None,
     )

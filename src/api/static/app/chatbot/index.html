@@ -55,6 +55,31 @@
    .pill-cand .meta { font-size: 12px; color: #7a6f66; margin-top: 2px; }
    .pill-cand .pick { margin-left: auto; font-size: 12px; color: #176b5b; font-weight: 700; white-space: nowrap; }
    .pill-note { font-size: 12.5px; color: #8a5a1c; background: #fbf1e1; border-radius: 8px; padding: 6px 10px; }
+   /* 카톡처럼 아래에서 올라오는 사진 선택 시트 */
+   .photo-sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .35); z-index: 50;
+                           display: none; align-items: flex-end; }
+   .photo-sheet-backdrop.open { display: flex; }
+   .photo-sheet { width: 100%; background: #ffffff; border-radius: 22px 22px 0 0; padding: 10px 18px 26px; }
+   .sheet-handle { width: 40px; height: 5px; border-radius: 3px; background: #d9d2c6; margin: 0 auto 12px; }
+   .sheet-head { display: flex; align-items: center; justify-content: space-between; }
+   .sheet-title { font-size: 17px; font-weight: 800; color: #2b2420; }
+   .sheet-send { background: #176b5b; color: #fff; font-weight: 700; font-size: 14px; padding: 8px 16px;
+                 border-radius: 18px; cursor: pointer; }
+   .sheet-send.off { background: #d9d2c6; cursor: default; }
+   .sheet-hint { font-size: 12.5px; color: #7a6f66; margin: 6px 0 12px; }
+   .sheet-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+   .sheet-cam, .sheet-thumb { width: 104px; height: 104px; border-radius: 14px; flex-shrink: 0; position: relative; }
+   .sheet-cam { background: #ece6db; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                gap: 4px; cursor: pointer; font-size: 30px; color: #55483f; }
+   .sheet-cam span { font-size: 12px; font-weight: 700; }
+   .sheet-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 14px; }
+   .sheet-thumb .order { position: absolute; top: 6px; left: 6px; background: #176b5b; color: #fff; font-size: 11px;
+                         font-weight: 700; border-radius: 9px; padding: 2px 7px; }
+   .sheet-thumb .del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 11px;
+                       background: rgba(0, 0, 0, .55); color: #fff; font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; }
+   .sheet-item { display: flex; align-items: center; gap: 12px; padding: 14px 4px; font-size: 15px; color: #2b2420;
+                 border-top: 1px solid #eee8dd; cursor: pointer; }
+   .sheet-item .ico { font-size: 20px; }
   </style>
   <title>Document</title>
 </head>
@@ -97,7 +122,6 @@
       </div>
       <div class="message-composer">
         <div class="attach" id="attachBtn" title="알약 사진으로 찾기">+</div>
-        <input type="file" id="photoInput" accept="image/*" multiple hidden />
         <div class="question-input">
           <img class="message-circle" src="message-circle0.svg" />
           <input class="placeholder" id="questionInput" type="text" placeholder="약이나 증상을 물어보세요" />
@@ -137,6 +161,27 @@
         </div>
       </div>
       <img class="stethoscope2" src="stethoscope1.svg" />
+    </div>
+    <!-- 카톡처럼 "+" 를 누르면 아래에서 올라오는 사진 선택 시트. 앱(Flutter)에서는 카메라 칸 옆에
+         최근 사진을 바로 보여주면 된다(웹은 보안상 사진첩을 직접 못 읽어서 "앨범에서 선택" 으로 대신한다). -->
+    <div class="photo-sheet-backdrop" id="photoSheet">
+      <div class="photo-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div class="sheet-title">알약 사진</div>
+          <div class="sheet-send off" id="sheetSend">전송</div>
+        </div>
+        <div class="sheet-hint">한 알만 가까이 찍어 주세요. 같은 약의 <b>앞면·뒷면 두 장</b>이면 더 정확해요.</div>
+        <div class="sheet-row" id="sheetRow">
+          <label class="sheet-cam">📷<span>사진 찍기</span>
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden />
+          </label>
+        </div>
+        <label class="sheet-item"><span class="ico">🖼️</span>앨범에서 선택
+          <input type="file" id="photoInput" accept="image/*" multiple hidden />
+        </label>
+        <div class="sheet-item" id="sheetCancel"><span class="ico">✕</span>닫기</div>
+      </div>
     </div>
   </div>
 
@@ -319,12 +364,45 @@
   // 사진(한 장, 또는 앞면·뒷면 두 장) → /pills/identify → 후보 카드 → 사용자가 고른 약 이름으로 /chat 질문.
   // **1위를 정답으로 단정하지 않는다** — 사진만으로는 틀릴 수 있어서(실사진 3위 안 약 71%) 사용자가 고르게 하고,
   // 약 설명은 기존 챗봇(/chat, 식약처 자료 기반)이 그대로 한다. API 설명은 docs/pills-api.md.
-  const photoInput = document.getElementById("photoInput");
-  document.getElementById("attachBtn").addEventListener("click", () => photoInput.click());
-  photoInput.addEventListener("change", async () => {
-    const files = [...photoInput.files].slice(0, 2);   // 두 장이면 첫 장 앞면, 둘째 장 뒷면
-    photoInput.value = "";
-    if (!files.length) return;
+  // 카톡식 시트: "+" → 사진 찍기/앨범에서 고르기(최대 2장, 같은 약 앞·뒤) → 전송.
+  const MAX_PHOTOS = 2;
+  const sheet = document.getElementById("photoSheet");
+  const sheetRow = document.getElementById("sheetRow");
+  const sheetSend = document.getElementById("sheetSend");
+  let picked = [];
+
+  function renderSheet() {
+    sheetRow.querySelectorAll(".sheet-thumb").forEach((n) => n.remove());
+    picked.forEach((f, i) => {
+      const t = el("div", { className: "sheet-thumb" });
+      t.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" /><span class="order">${i === 0 ? "앞" : "뒤"}</span><span class="del">×</span>`;
+      t.querySelector(".del").addEventListener("click", () => { picked.splice(i, 1); renderSheet(); });
+      sheetRow.appendChild(t);
+    });
+    sheetSend.classList.toggle("off", picked.length === 0);
+    sheetSend.textContent = picked.length ? `전송 ${picked.length}` : "전송";
+  }
+  function openSheet() { picked = []; renderSheet(); sheet.classList.add("open"); }
+  function closeSheet() { sheet.classList.remove("open"); }
+  function addPhotos(input) {
+    picked = picked.concat([...input.files]).slice(0, MAX_PHOTOS);
+    input.value = "";
+    renderSheet();
+  }
+
+  document.getElementById("attachBtn").addEventListener("click", openSheet);
+  document.getElementById("photoInput").addEventListener("change", (e) => addPhotos(e.target));
+  document.getElementById("cameraInput").addEventListener("change", (e) => addPhotos(e.target));
+  document.getElementById("sheetCancel").addEventListener("click", closeSheet);
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closeSheet(); });
+  sheetSend.addEventListener("click", () => {
+    if (!picked.length) return;
+    const files = picked;
+    closeSheet();
+    sendPhotos(files);
+  });
+
+  async function sendPhotos(files) {
 
     conversationEl.appendChild(el("div", { className: "user-message" }, [
       el("div", { className: "photo-bubble" }, files.map((f) => el("img", { src: URL.createObjectURL(f) }))),
@@ -334,8 +412,7 @@
     conversationEl.scrollTop = conversationEl.scrollHeight;
 
     const fd = new FormData();
-    fd.append("file", files[0]);
-    if (files[1]) fd.append("back", files[1]);
+    files.forEach((f) => fd.append("files", f));     // 고른 순서대로: 앞면, 뒷면
     try {
       // 챗봇에서는 전문의약품까지 찾는다(otc_only=false) — 집에 있는 처방약을 묻는 경우가 많다.
       const res = await fetch("/pills/identify?otc_only=false&limit=3", { method: "POST", body: fd });
@@ -347,7 +424,7 @@
       loading.remove();
       conversationEl.appendChild(el("div", { className: "system-note", textContent: "오류: " + e.message }));
     }
-  });
+  }
 
   function renderPillResult(data) {
     const card = el("div", { className: "answer-card" });

@@ -281,3 +281,32 @@ API 스펙이 바뀌면 이 문서와 [`CLAUDE.md`](../CLAUDE.md)를 같이 갱�
 2. **마이페이지**: "게스트 사용자" 대신 `GET /auth/me`(Bearer)의 `name`으로 `"${name} 님"` 표시. `name`이 null이면(예전 가입자) `"${username} 님"` + 이름 등록 버튼 → `PATCH /auth/me` `{"name"}`
 3. **키오스크 QR 스캔**: `POST /vending/scan`의 `user_id`에 로그인 응답의 `user.id`(UUID)를 보낼 것 → 키오스크 화면에 "이*복 님"이 뜸
    - 키오스크(Flutter 키오스크 앱)는 `GET /vending/machines/{id}/session` 응답의 `user_display_name`(이미 가려진 이름)을 그대로 "○*○ 님"으로 표시, null이면 "연동 회원 님"
+
+## 추가 (2026-10-21): 챗봇 "+" 버튼으로 알약 사진 찾기 (선우)
+웹 기준 화면은 `app/chatbot` 에 이미 들어가 있다(입력창 왼쪽 "+" → 아래에서 올라오는 시트). API 전체 설명은 [`docs/pills-api.md`](pills-api.md).
+**앱에 넣을 키는 없다** — 챗봇과 같은 서버의 API 라서 주소만 부르면 되고, Claude 키는 서버(Render 환경변수)에만 있다.
+
+흐름
+1. 입력창 왼쪽 **"+"** → 카톡처럼 아래에서 시트가 올라옴: 맨 앞 **카메라 칸** + 옆으로 **최근 사진**들 + 오른쪽 위 **전송** 버튼
+   - 카메라 칸: `image_picker` 의 `ImageSource.camera`
+   - 최근 사진: `photo_manager` 로 최근 사진 썸네일을 가로로 나열(사진 권한 요청 필요). 웹은 보안상 사진첩을 못 읽어서 "앨범에서 선택"으로 대신했다
+   - **최대 2장**만 고르게 함(같은 약의 앞면·뒷면). 고른 순서대로 "앞", "뒤" 표시. 안내 문구: "한 알만 가까이 찍어 주세요. 같은 약의 앞면·뒷면 두 장이면 더 정확해요."
+2. 전송 → 대화에 고른 사진 말풍선 + "사진에서 약을 찾는 중이에요... (5~15초)" 표시
+   - `POST /pills/identify?otc_only=false&limit=3`, `multipart/form-data`, 고른 사진을 **`files` 라는 같은 이름으로 여러 개** 붙임(고른 순서 = 앞, 뒤)
+   - 응답이 5~15초 걸린다. 타임아웃은 넉넉히(60초). 무료 서버라 한동안 안 쓰면 첫 요청은 1분 가까이 걸릴 수 있음
+   ```dart
+   final form = FormData.fromMap({
+     'files': [for (final x in picked) await MultipartFile.fromFile(x.path, filename: 'pill.jpg')],
+   });
+   final res = await dio.post('/pills/identify',
+       queryParameters: {'otc_only': false, 'limit': 3}, data: form,
+       options: Options(receiveTimeout: const Duration(seconds: 60)));
+   ```
+3. 결과를 **봇 말풍선 1개**로: `message`(한 줄 안내) → `note`(있으면 주의 박스) → 후보 카드 최대 3개 → 안전 문구 "사진만으로는 틀릴 수 있어요. 포장이나 약사에게 꼭 확인하세요."
+   - 카드: `item_image`(식약처 알약 사진) · `item_name` 굵게 · `entp_name · etc_otc_name · 각인 print_front / print_back` · 오른쪽 "이 약 맞아요 ›"
+   - `confident` 가 true 면 첫 카드를 강조(초록 테두리). false 면 강조하지 않음 — **1위를 정답처럼 보이게 하지 말 것**
+   - 후보가 0개면 `message`("사진에서 약을 찾지 못했어요…")만 보여주면 됨
+4. 카드를 누르면 → 그 약 이름으로 **기존 `/chat`** 질문: `"${item_name}은(는) 어떤 약이야? 효능이랑 주의사항 알려줘"` (history 도 평소처럼)
+   - 이후 "부작용은?" 같은 후속 질문은 평소 챗봇 대화 그대로. 약 설명은 챗봇(식약처 자료 기반)이 한다
+
+오류: `400`(사진 없음·이미지 아님) · `413`(8MB 초과 → 앱에서 미리 줄여 보내면 좋음, 긴 변 1600px 정도면 충분) · `429`(IP당 10회/분·100회/일) · `503`(서버 설정 문제) → 모두 `detail` 을 그대로 보여주면 됨.

@@ -233,9 +233,9 @@ moyak-backend/
 Claude 에게 다시 고르게 함(`rerank.py`). Claude 가 안 되면(키 없음·크레딧 소진·서버 하루 상한 초과) 예전 방식
 — 알약 영역 추출(`vision.py`) → 모양·색 판별 → 각인 읽기(`ocr.py`, Google Cloud Vision) — 으로 자동 대체.
 
-- `POST /pills/identify` (multipart `file` + 선택 `back`, 로그인 불필요, IP당 10회/분·100회/일, 8MB 이하, 5~15초) — 전체 스펙은 `docs/pills-api.md`.
+- `POST /pills/identify` (multipart `files` 1~2장 — 같은 약 앞·뒤, 또는 `file`+`back`, 로그인 불필요, IP당 10회/분·100회/일, 8MB 이하, 5~15초) — 전체 스펙은 `docs/pills-api.md`.
   응답에 `detected.engine`(누가 판정했나)·`detected.reranked`·`confident`(1위가 확실한가)·`message`(챗봇 말풍선 문구).
-- 앱 챗봇 화면(`static/app/chatbot/`) 입력창 왼쪽 "+" → 사진 → 후보 카드 3개 → 누르면 그 약 이름으로 `/chat` 질문.
+- 앱 챗봇 화면(`static/app/chatbot/`) 입력창 왼쪽 "+" → 카톡식 사진 시트(카메라·앨범, 최대 2장) → 전송 → 후보 카드 3개 → 누르면 그 약 이름으로 `/chat` 질문.
   **1위를 정답으로 단정하지 않고 사용자가 고르게 한다** — 약 설명은 기존 RAG 가 한다.
 - `GET /pill-test` — 사진을 올려 바로 확인하는 테스트 페이지.
 - 설정: `ANTHROPIC_API_KEY`(없으면 예전 방식), `PILL_LLM_MODEL`(기본 claude-opus-5-5, 비우면 LLM 끔), `PILL_RERANK`(기본 1),
