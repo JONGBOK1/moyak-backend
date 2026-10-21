@@ -5,9 +5,10 @@
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 
 from src.consult.db import is_shared_db
 from src.consult.models import KioskOrder, KioskOrderItem, OrderStatus, Product, VendingMachine
@@ -59,6 +60,7 @@ def _seed_products_if_empty(db: Session, machine_id: str) -> None:
 
 
 def list_products(db: Session, machine_id: str, category: str | None = None) -> list[Product]:
+    expire_orders(db)
     _ensure_machine(db, machine_id)
     _seed_products_if_empty(db, machine_id)
     query = db.query(Product).filter(Product.machine_id == machine_id)
@@ -68,6 +70,15 @@ def list_products(db: Session, machine_id: str, category: str | None = None) -> 
 
 
 def create_order(db: Session, machine_id: str, items: list[dict]) -> KioskOrder:
+    expire_orders(db)
+    try:
+        return _create_order(db, machine_id, items)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _create_order(db: Session, machine_id: str, items: list[dict]) -> KioskOrder:
     """items: [{"product_id": ..., "quantity": ...}, ...]. 재고를 검증하고 즉시 차감한다."""
     if not items:
         raise InvalidStateError("장바구니가 비어 있습니다.")
@@ -76,7 +87,8 @@ def create_order(db: Session, machine_id: str, items: list[dict]) -> KioskOrder:
     db.add(order)
     total = 0
 
-    for entry in items:
+    # Stable order avoids deadlocks when two carts contain the same products.
+    for entry in sorted(items, key=lambda item: item['product_id']):
         product = db.get(Product, entry["product_id"])
         if product is None or product.machine_id != machine_id:
             raise NotFoundError(f"상품을 찾을 수 없습니다: {entry['product_id']}")
@@ -86,7 +98,11 @@ def create_order(db: Session, machine_id: str, items: list[dict]) -> KioskOrder:
         if product.stock < quantity:
             raise InvalidStateError(f"재고가 부족합니다: {product.item_name} (남은 수량 {product.stock}개)")
 
-        product.stock -= quantity
+        changed = db.execute(update(Product).where(
+            Product.id == product.id, Product.machine_id == machine_id,
+            Product.stock >= quantity).values(stock=Product.stock - quantity)).rowcount
+        if not changed:
+            raise InvalidStateError('재고가 부족합니다. 상품 목록을 다시 확인해주세요.')
         line_total = product.price * quantity
         total += line_total
         db.add(
@@ -107,6 +123,7 @@ def create_order(db: Session, machine_id: str, items: list[dict]) -> KioskOrder:
 
 
 def get_order(db: Session, order_id: str) -> KioskOrder:
+    expire_orders(db)
     order = db.get(KioskOrder, order_id)
     if order is None:
         raise NotFoundError(f"주문을 찾을 수 없습니다: {order_id}")
@@ -118,8 +135,11 @@ def pay_order(db: Session, order_id: str) -> KioskOrder:
     order = get_order(db, order_id)
     if order.status != OrderStatus.CART:
         raise InvalidStateError(f"결제할 수 없는 상태입니다 (현재 상태: {order.status})")
-    order.status = OrderStatus.PAID
-    order.paid_at = _now()
+    changed = db.execute(update(KioskOrder).where(KioskOrder.id == order_id,
+        KioskOrder.status == OrderStatus.CART).values(status=OrderStatus.PAID, paid_at=_now())).rowcount
+    if not changed:
+        db.rollback()
+        raise InvalidStateError('이미 결제되거나 취소된 주문입니다.')
     db.commit()
     db.refresh(order)
     return order
@@ -129,8 +149,55 @@ def dispense_order(db: Session, order_id: str) -> KioskOrder:
     order = get_order(db, order_id)
     if order.status != OrderStatus.PAID:
         raise InvalidStateError(f"수령할 수 없는 상태입니다 (현재 상태: {order.status})")
-    order.status = OrderStatus.DISPENSED
-    order.dispensed_at = _now()
+    changed = db.execute(update(KioskOrder).where(KioskOrder.id == order_id,
+        KioskOrder.status == OrderStatus.PAID).values(status=OrderStatus.DISPENSED, dispensed_at=_now())).rowcount
+    if not changed:
+        db.rollback()
+        raise InvalidStateError('이미 수령했거나 수령할 수 없는 주문입니다.')
     db.commit()
     db.refresh(order)
     return order
+
+
+RESERVATION_MINUTES = 10
+
+
+def _release_order(db, order_id, expired_before=None):
+    stmt = update(KioskOrder).where(KioskOrder.id == order_id, KioskOrder.status == OrderStatus.CART)
+    if expired_before is not None:
+        stmt = stmt.where(KioskOrder.created_at <= expired_before)
+    if not db.execute(stmt.values(status=OrderStatus.CANCELLED)).rowcount:
+        return False
+    lines = db.query(KioskOrderItem).filter_by(order_id=order_id).order_by(KioskOrderItem.product_id).all()
+    for line in lines:
+        db.execute(update(Product).where(Product.id == line.product_id).values(stock=Product.stock + line.quantity))
+    return True
+
+
+def expire_orders(db):
+    cutoff = _now() - timedelta(minutes=RESERVATION_MINUTES)
+    ids = db.query(KioskOrder.id).filter(KioskOrder.status == OrderStatus.CART,
+        KioskOrder.created_at <= cutoff).order_by(KioskOrder.id).all()
+    try:
+        for (order_id,) in ids:
+            _release_order(db, order_id, cutoff)
+        if ids:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
+def cancel_order(db, order_id):
+    order = get_order(db, order_id)
+    if order.status == OrderStatus.CANCELLED:
+        return order
+    try:
+        if not _release_order(db, order_id):
+            raise InvalidStateError('미결제 주문만 취소할 수 있습니다.')
+        db.commit()
+        db.refresh(order)
+        return order
+    except Exception:
+        db.rollback()
+        raise

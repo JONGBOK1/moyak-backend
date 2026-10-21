@@ -867,3 +867,11 @@ input.placeholder::placeholder {
 .evidence-link { cursor: pointer; }
 .sources-line { font-size: 11.5px; color: #9c8f86; }
 .helpful-active { background: #ddeee8 !important; }
+
+/* 증상 추천 답변: 약마다 카드로 구분 (2026-10-19 챗봇 시인성 강화) */
+.formatted-answer .rec-card { background: #fffdf5; border: 1.5px solid #f1e3b8; border-radius: 14px; padding: 12px 14px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.formatted-answer .rec-name { display: flex; align-items: center; gap: 8px; font-family: "GothicA1-Bold", sans-serif; font-weight: 800; font-size: 17px; color: #3e2723; line-height: 1.35; word-break: keep-all; }
+.formatted-answer .rec-rank { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #176b5b; color: #fff; font-size: 13px; display: grid; place-items: center; }
+.formatted-answer .rec-row { display: flex; flex-direction: column; gap: 1px; font-size: 14px; line-height: 1.55; color: #3e2723; }
+.formatted-answer .rec-label { font-family: "GothicA1-Bold", sans-serif; font-weight: 700; font-size: 12px; color: #7d6d6a; }
+.formatted-answer .rec-outro { color: #176b5b; font-weight: 700; }

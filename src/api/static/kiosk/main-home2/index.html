@@ -165,8 +165,7 @@
         location.href = "/kiosk/start/"; // 로그인이 풀렸으면(QR 재발급 등) 처음으로
         return;
       }
-      // 실명 데이터가 없어서 디자인의 "지*민 님" 대신 일반 호칭을 쓴다.
-      q(".div6").textContent = "연동 회원 님";
+      q(".div6").textContent = `${session.user_display_name || "연동 회원"} 님`; // 가입한 사용자는 가린 실명(이*복)
 
       const purchases = await api("GET", `/vending/purchases?user_id=${encodeURIComponent(session.user_id)}`);
       let usable = purchases.filter((p) => p.status === "pending");
