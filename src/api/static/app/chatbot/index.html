@@ -53,7 +53,8 @@
    .pill-cand img { width: 76px; height: 42px; object-fit: contain; border-radius: 6px; background: #e9eef6; flex-shrink: 0; }
    .pill-cand .nm { font-weight: 700; font-size: 14px; color: #2b2420; }
    .pill-cand .meta { font-size: 12px; color: #7a6f66; margin-top: 2px; }
-   .pill-cand .pick { margin-left: auto; font-size: 12px; color: #176b5b; font-weight: 700; white-space: nowrap; }
+   .pill-cand .pick { display: inline-block; margin-top: 6px; font-size: 12.5px; color: #176b5b; font-weight: 700;
+                      background: #e3f0ec; border-radius: 10px; padding: 4px 10px; }
    .pill-note { font-size: 12.5px; color: #8a5a1c; background: #fbf1e1; border-radius: 8px; padding: 6px 10px; }
    /* 카톡처럼 아래에서 올라오는 사진 선택 시트 */
    .photo-sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .35); z-index: 50;
@@ -451,11 +452,11 @@
         <div>
           <div class="nm">${escapeHtml(c.item_name)}</div>
           <div class="meta">${escapeHtml([c.entp_name, c.etc_otc_name, imprint && "각인 " + imprint].filter(Boolean).join(" · "))}</div>
-        </div>
-        <div class="pick">이 약 맞아요 ›</div>`;
+          <div class="pick">이 약에 대해 설명해 주세요 ›</div>
+        </div>`;
       // 고른 약 이름으로 챗봇에 묻는다. 이후 "부작용은?" 같은 후속 질문도 기존 대화처럼 이어진다.
       item.addEventListener("click", () => {
-        questionInput.value = `${c.item_name}은(는) 어떤 약이야? 효능이랑 주의사항 알려줘`;
+        questionInput.value = `${c.item_name}에 대해 설명해 주세요. 효능이랑 주의사항도 알려 주세요.`;
         ask();
       });
       list.appendChild(item);
