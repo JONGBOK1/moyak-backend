@@ -210,6 +210,17 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.error { background: var(--red); }
 
+  /* ---------- 처방 목록 (약 여러 종류) ---------- */
+  .add-item { background: var(--paper); color: var(--green); border: 1.5px dashed var(--green); }
+  .add-item:hover { background: var(--green-soft); }
+  .rx-list:empty { display: none; }
+  .rx-list { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
+  .rx-title { font-size: 12px; font-weight: 800; color: var(--ink-soft); }
+  .rx-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+  .rx-row > span:last-child { flex: none; white-space: nowrap; }
+  .rx-del { padding: 2px 7px; font-size: 11px; background: var(--paper); color: var(--red); border: 1px solid var(--line); }
+  .rx-del:hover { background: var(--red-soft); }
+
   /* ---------- 상담실: 왼쪽 화상(크게) + 오른쪽 환자 정보·채팅·처방·녹음 (2026-10-23) ---------- */
   .room-btn { border: none; cursor: pointer; font-family: inherit; }
   body.in-room { overflow: hidden; }
@@ -700,6 +711,8 @@
                   <label>결제 금액 (수량 전체, 키오스크 결제 총액)</label>
                   <div class="won"><input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="예: 3000" /></div>
                 </div>
+                <button type="button" class="add-item">+ 처방 목록에 추가</button>
+                <div class="rx-list"></div>
                 <div class="btn-row">
                   <button class="approve-btn">✓ 처방 승인</button>
                   <button class="reject reject-btn">거절</button>
@@ -732,32 +745,86 @@
         card.querySelectorAll(".qty-btn").forEach((b) => b.addEventListener("click", () => card.qty.set(card.qty.value + Number(b.dataset.d))));
         setupKioskStock(card, c, drugResults, nameInput);
 
-        card.querySelector(".approve-btn").addEventListener("click", async (e) => {
-          const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || c.requested_drug_item_seq;
+        // ---------- 처방 목록: 약 여러 종류를 담아 한 번에 승인 (2026-10-23) ----------
+        card.rx = [];
+        const rxBox = card.querySelector(".rx-list");
+        const renderRx = () => {
+          if (!card.rx.length) { rxBox.innerHTML = ""; return; }
+          const total = card.rx.reduce((s, it) => s + it.price, 0);
+          rxBox.innerHTML = `<div class="rx-title">처방 목록 ${card.rx.length}종 · 합계 ${total.toLocaleString()}원</div>` +
+            card.rx.map((it, i) => `<div class="rx-row"><span><b>${escapeHtml(it.drug_item_name)}</b> × ${it.quantity}개</span>` +
+              `<span>${it.price.toLocaleString()}원 <button type="button" class="rx-del" data-i="${i}" aria-label="빼기">✕</button></span></div>`).join("");
+          rxBox.querySelectorAll(".rx-del").forEach((b) => b.addEventListener("click", () => {
+            card.rx.splice(Number(b.dataset.i), 1);
+            renderRx();
+          }));
+        };
+        // 지금 고른 약·수량·금액을 읽는다(잘못됐으면 안내하고 null)
+        const readCurrent = (quiet) => {
+          const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || (card.rx.length ? "" : c.requested_drug_item_seq);
           if (!itemSeq) {
-            toast(c.machine_code ? "키오스크 재고 목록에서 처방할 약을 골라주세요." : "약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
-            nameInput.focus();
-            return;
+            if (!quiet) {
+              toast(c.machine_code ? "키오스크 재고 목록에서 처방할 약을 골라주세요." : "약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
+              nameInput.focus();
+            }
+            return null;
           }
           const priceText = card.querySelector(".drug-price").value.trim();
           const price = Number(priceText);
           if (priceText === "" || !Number.isInteger(price) || price < 0) {
-            toast("판매가를 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제돼요).", true);
-            card.querySelector(".drug-price").focus();
+            if (!quiet) {
+              toast("결제 금액을 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제돼요).", true);
+              card.querySelector(".drug-price").focus();
+            }
+            return null;
+          }
+          return { drug_item_seq: String(itemSeq), drug_item_name: nameInput.value, quantity: card.qty.value, price };
+        };
+        const resetCurrent = () => {
+          nameInput.value = "";
+          drugResults.selectedSeq = "";
+          card.querySelector(".picked").textContent = "";
+          card.querySelectorAll(".stock-item.selected").forEach((b) => b.classList.remove("selected"));
+          card.qty.unit = null;
+          card.qty.max = 10;
+          card.qty.set(1);
+          card.querySelector(".drug-price").value = "";
+        };
+        card.querySelector(".add-item").addEventListener("click", () => {
+          const it = readCurrent(false);
+          if (!it) return;
+          if (card.rx.some((x) => x.drug_item_seq === it.drug_item_seq)) {
+            toast("이미 처방 목록에 있는 약이에요. 목록에서 빼고 수량을 바꿔 다시 담아주세요.", true);
             return;
           }
+          if (card.rx.length >= 5) {
+            toast("한 번에 처방할 수 있는 약은 5종류까지예요.", true);
+            return;
+          }
+          card.rx.push(it);
+          renderRx();
+          resetCurrent();
+        });
+
+        card.querySelector(".approve-btn").addEventListener("click", async (e) => {
+          // 처방 목록 + (목록에 안 담은) 지금 고른 약. 목록이 비어 있으면 지금 고른 약 하나만 승인
+          let items = card.rx.slice();
+          const current = readCurrent(items.length > 0);
+          if (current && !items.some((x) => x.drug_item_seq === current.drug_item_seq)) {
+            if (items.length && !confirm(`선택 중인 "${current.drug_item_name}"도 함께 처방할까요?`)) return;
+            items.push(current);
+          }
+          if (!items.length) return; // readCurrent가 안내함
           if (!requirePharmacistId()) return;
           e.target.disabled = true;
           try {
             const data = await api("POST", `/consultations/${c.id}/decision`, {
               pharmacist_id: pharmacistIdEl.value,
               approve: true,
-              drug_item_seq: itemSeq,
-              drug_item_name: nameInput.value,
-              price,
-              quantity: card.qty.value,
+              items,
             });
-            toast(`승인 완료 — ${data.approved_drug_name} × ${card.qty.value}개 (${price.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
+            const total = items.reduce((s, it) => s + it.price, 0);
+            toast(`승인 완료 — ${data.approved_drug_name} (${total.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
             loadPending();
           } catch (err) {
             toast("오류: " + err.message, true);

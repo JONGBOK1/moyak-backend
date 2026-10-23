@@ -23,6 +23,21 @@ class ConsultationCreateRequest(BaseModel):
     )
 
 
+class PrescriptionItem(BaseModel):
+    drug_item_seq: str = Field(..., min_length=1)
+    drug_item_name: str = Field(..., min_length=1)
+    quantity: int = Field(1, ge=1, le=10)
+    price: int | None = Field(None, ge=0)  # 이 약 수량 전체 금액. 키오스크 지정 상담에서 비우면 판매가 × 수량
+
+
+class ApprovedItem(BaseModel):
+    purchase_id: str
+    drug_item_seq: str
+    drug_item_name: str
+    quantity: int
+    price: int | None = None
+
+
 class ConsultationDecisionRequest(BaseModel):
     pharmacist_id: str = Field(..., min_length=1)
     approve: bool
@@ -31,6 +46,8 @@ class ConsultationDecisionRequest(BaseModel):
     drug_item_name: str | None = None
     price: int | None = Field(None, ge=0)  # 결제 금액(원, 수량 전체 총액). 키오스크 지정 상담에서 비우면 판매가 × 수량
     quantity: int = Field(1, ge=1, le=10)  # 처방 수량
+    # 여러 종류 처방(2026-10-23): 있으면 위의 drug_item_*/price/quantity 대신 이 목록을 쓴다
+    items: list["PrescriptionItem"] | None = Field(None, min_length=1, max_length=5)
 
 
 class ConsultationResponse(BaseModel):
@@ -50,7 +67,8 @@ class ConsultationResponse(BaseModel):
     summary: str | None = None  # 화상 상담 종료 시 생성된 대화 요약
     ended_at: datetime | None = None
     machine_code: str | None = None  # 사용자가 고른 키오스크
-    approved_quantity: int | None = None  # 승인된 수량
+    approved_quantity: int | None = None  # 승인된 수량 (약이 한 종류일 때만, 여러 종류면 null — approved_items 참고)
+    approved_items: list[ApprovedItem] = []  # 처방된 약 전체(약 하나당 승인 건 1개)
 
     class Config:
         from_attributes = True
@@ -77,10 +95,17 @@ class MessageResponse(BaseModel):
 
 def _to_response(consultation) -> ConsultationResponse:
     response = ConsultationResponse.model_validate(consultation)
-    if consultation.purchase is not None:
-        response.approved_purchase_id = consultation.purchase.id
-        response.approved_drug_name = consultation.purchase.drug_item_name
-        response.approved_quantity = consultation.purchase.quantity or 1
+    purchases = consultation.purchases
+    if purchases:
+        response.approved_purchase_id = purchases[0].id
+        response.approved_items = [
+            ApprovedItem(purchase_id=p.id, drug_item_seq=p.drug_item_seq, drug_item_name=p.drug_item_name,
+                         quantity=p.quantity or 1, price=p.price) for p in purchases]
+        if len(purchases) == 1:  # 예전 화면 호환: 이름 + 수량 따로
+            response.approved_drug_name = purchases[0].drug_item_name
+            response.approved_quantity = purchases[0].quantity or 1
+        else:  # 여러 종류: 이름에 수량까지 붙여 한 줄로("A × 2개, B")
+            response.approved_drug_name = consultation.drug_summary
     return response
 
 
@@ -150,6 +175,7 @@ def decide_consultation(
             drug_item_name=payload.drug_item_name,
             price=payload.price,
             quantity=payload.quantity,
+            items=[i.model_dump() for i in payload.items] if payload.items else None,
         )
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

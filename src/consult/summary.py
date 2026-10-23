@@ -33,8 +33,8 @@ EMPTY_SUMMARY = (
 
 
 def _decision_text(consultation: ConsultationRequest) -> str:
-    if consultation.status == "approved" and consultation.purchase is not None:
-        return f"약사 승인 — 처방약: {consultation.purchase.drug_item_name}"
+    if consultation.status == "approved" and consultation.purchases:
+        return f"약사 승인 — 처방약: {consultation.drug_summary}"
     if consultation.status == "rejected":
         return f"약사 거절 — 사유: {consultation.decision_reason or '별도 사유 없음'}"
     return "아직 약사의 승인/거절 결정이 없습니다."

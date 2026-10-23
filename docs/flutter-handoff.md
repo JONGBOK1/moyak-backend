@@ -293,3 +293,9 @@ API 스펙이 바뀌면 이 문서와 [`CLAUDE.md`](../CLAUDE.md)를 같이 갱�
 2. **마이페이지**: "게스트 사용자" 대신 `GET /auth/me`(Bearer)의 `name`으로 `"${name} 님"` 표시. `name`이 null이면(예전 가입자) `"${username} 님"` + 이름 등록 버튼 → `PATCH /auth/me` `{"name"}`
 3. **키오스크 QR 스캔**: `POST /vending/scan`의 `user_id`에 로그인 응답의 `user.id`(UUID)를 보낼 것 → 키오스크 화면에 "이*복 님"이 뜸
    - 키오스크(Flutter 키오스크 앱)는 `GET /vending/machines/{id}/session` 응답의 `user_display_name`(이미 가려진 이름)을 그대로 "○*○ 님"으로 표시, null이면 "연동 회원 님"
+
+
+## 추가 (2026-10-23): 약 여러 종류 처방 + 오래된 상담 자동 삭제
+- 상담 응답에 `approved_items: [{purchase_id, drug_item_seq, drug_item_name, quantity, price}]` 추가 — 처방된 약 전체. 여러 종류면 `approved_drug_name`이 "타이레놀정 × 2개, 베아제정" 한 줄이고 `approved_quantity`는 null
+- 승인 건(`GET /vending/purchases`)은 약마다 1건씩 나온다(키오스크는 원래 여러 건 결제·수령 지원)
+- 취소된 상담, 24시간 넘게 처리되지 않은 대기 상담은 서버가 자동 삭제 → 앱이 들고 있던 상담 id로 조회하면 404가 날 수 있음(대기 화면에서 404면 "상담이 만료됐어요" 안내 권장)

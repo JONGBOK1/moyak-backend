@@ -81,10 +81,29 @@ class ConsultationRequest(Base):
     # 팀 Supabase에는 scripts/supabase_consultation_machine_code.sql 로 추가 (2026-10-19)
     machine_code = Column(String, nullable=True)
 
-    purchase = relationship("ApprovedPurchase", back_populates="consultation", uselist=False)
+    # 한 상담에서 약 여러 종류를 처방할 수 있다(약 하나당 승인 건 1개, 2026-10-23)
+    purchases = relationship(
+        "ApprovedPurchase", back_populates="consultation", order_by="ApprovedPurchase.created_at"
+    )
     messages = relationship(
         "ConsultationMessage", back_populates="consultation", order_by="ConsultationMessage.created_at"
     )
+
+
+def _first_purchase(self):
+    """예전 코드·API 호환: 첫 번째 승인 건(없으면 None)."""
+    return self.purchases[0] if self.purchases else None
+
+
+def _drug_summary(self) -> str | None:
+    """처방약 한 줄 요약: "타이레놀정 × 2개, 베아제정" (승인 건이 없으면 None)."""
+    if not self.purchases:
+        return None
+    return ", ".join(p.drug_item_name + (f" × {p.quantity}개" if (p.quantity or 1) > 1 else "") for p in self.purchases)
+
+
+ConsultationRequest.purchase = property(_first_purchase)
+ConsultationRequest.drug_summary = property(_drug_summary)
 
 
 class MessageSender:
@@ -132,7 +151,7 @@ class ApprovedPurchase(Base):
     dispensed_machine_id = Column(String, nullable=True)
     dispensed_at = Column(DateTime, nullable=True)
 
-    consultation = relationship("ConsultationRequest", back_populates="purchase")
+    consultation = relationship("ConsultationRequest", back_populates="purchases")
 
 
 class VendingMachine(Base):

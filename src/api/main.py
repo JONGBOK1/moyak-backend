@@ -54,15 +54,33 @@ async def lifespan(app: FastAPI):
                 pass  # DB failure leaves carts for the next transactional sweep.
             await asyncio.sleep(30)
     expiry_task = asyncio.create_task(expire_carts())
+
+    # 취소된 상담·24시간 넘게 대기 중인 상담 자동 삭제 (10분마다, 승인·거절된 상담은 기록이라 남김)
+    async def purge_consultations():
+        from src.consult.service import purge_stale_consultations
+
+        def sweep():
+            with SessionLocal() as db:
+                purge_stale_consultations(db)
+        while True:
+            try:
+                await run_in_threadpool(sweep)
+            except Exception:
+                pass  # DB 연결 실패 등은 다음 주기에 다시 시도
+            await asyncio.sleep(600)
+    purge_task = asyncio.create_task(purge_consultations())
     try:
         yield
     finally:
         task.cancel()
         expiry_task.cancel()
+        purge_task.cancel()
         with suppress(asyncio.CancelledError):
             await task
         with suppress(asyncio.CancelledError):
             await expiry_task
+        with suppress(asyncio.CancelledError):
+            await purge_task
 
 
 app = FastAPI(title="MOYAK 모약이 API", lifespan=lifespan)

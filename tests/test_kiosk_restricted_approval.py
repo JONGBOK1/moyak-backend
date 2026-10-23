@@ -105,3 +105,33 @@ def test_quantity_over_stock_is_rejected(client):
     over = client.post(f"/consultations/{cid}/decision", json={
         "pharmacist_id": "p1", "approve": True, "drug_item_seq": "196800036", "drug_item_name": "판콜에이내복액", "quantity": 6})
     assert over.status_code == 409 and "5개" in over.json()["detail"]  # VM-002 재고 5개
+
+
+def test_multiple_drugs_in_one_prescription(client):
+    """약 여러 종류 처방 (2026-10-23): 약 하나당 승인 건 1개, 키오스크 재고 안에서만, 같은 약 중복 불가."""
+    cid = client.post("/consultations", json={"user_id": "u2", "machine_code": "VM-001"}).json()["id"]
+    body = {"pharmacist_id": "p1", "approve": True}
+    dup = client.post(f"/consultations/{cid}/decision", json={**body, "items": [
+        {"drug_item_seq": TYLENOL[0], "drug_item_name": TYLENOL[1]}, {"drug_item_seq": TYLENOL[0], "drug_item_name": TYLENOL[1]}]})
+    assert dup.status_code == 409 and "두 번" in dup.json()["detail"]
+    out_of_stock = client.post(f"/consultations/{cid}/decision", json={**body, "items": [
+        {"drug_item_seq": TYLENOL[0], "drug_item_name": TYLENOL[1]}, {"drug_item_seq": "198700405", "drug_item_name": "베아제정"}]})
+    assert out_of_stock.status_code == 409 and "베아제정" in out_of_stock.json()["detail"]  # 재고 0개
+
+    client.post("/consultations", json={"user_id": "u3"})  # 다른 상담
+    free = client.post("/consultations", json={"user_id": "u4"}).json()["id"]  # 키오스크 미지정 → 제한 없음
+    ok = client.post(f"/consultations/{free}/decision", json={**body, "items": [
+        {"drug_item_seq": TYLENOL[0], "drug_item_name": "타이레놀정", "quantity": 2, "price": 7000},
+        {"drug_item_seq": "198700405", "drug_item_name": "베아제정", "price": 2000}]}).json()
+    assert ok["approved_drug_name"] == "타이레놀정 × 2개, 베아제정"
+    assert ok["approved_quantity"] is None  # 여러 종류면 approved_items를 본다
+    assert [(i["drug_item_name"], i["quantity"], i["price"]) for i in ok["approved_items"]] == [("타이레놀정", 2, 7000), ("베아제정", 1, 2000)]
+    purchases = client.get("/vending/purchases", params={"user_id": "u4"}).json()
+    assert sorted(p["drug_item_name"] for p in purchases) == ["베아제정", "타이레놀정"]
+
+
+def test_single_drug_request_still_works(client):
+    cid = client.post("/consultations", json={"user_id": "u5"}).json()["id"]
+    ok = client.post(f"/consultations/{cid}/decision", json={
+        "pharmacist_id": "p1", "approve": True, "drug_item_seq": "196800036", "drug_item_name": "판콜에이내복액", "price": 1500}).json()
+    assert ok["approved_drug_name"] == "판콜에이내복액" and ok["approved_quantity"] == 1 and len(ok["approved_items"]) == 1

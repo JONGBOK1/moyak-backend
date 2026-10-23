@@ -168,7 +168,7 @@ def finish(db, cid, actor):
             "transcript": [{"speaker": a.sender_role, "start_ms": a.start_ms, "text": a.transcript} for a in audio],
             "chat": [{"speaker": m.sender_role, "text": m.content, "time": m.created_at.isoformat()} for m in chat],
             "decision": {"status": consultation.status, "reason": consultation.decision_reason,
-                         "approved_drug": consultation.purchase.drug_item_name if consultation.purchase else None},
+                         "approved_drug": consultation.drug_summary},
             "limitations": ["제출된 음성/채팅만 포함합니다. 업로드하지 않은 대화는 확인할 수 없습니다."]
             + ([f"음성 조각 {failed}개는 전사에 실패해 빠졌습니다."] if failed else []),
         }
