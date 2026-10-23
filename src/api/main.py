@@ -13,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
-from src.api.routes import auth, chat, consultation, conversation, drugs, pills, shop, vending
+from src.api.routes import (auth, chat, consultation, conversation, drugs, patient_info,
+                            pills, shop, vending)
 from src.api.routes import map as map_routes
 from src.consult import worker
 from src.consult.db import SessionLocal, init_db
@@ -101,6 +102,7 @@ app.include_router(consultation.router)
 app.include_router(conversation.router)
 app.include_router(drugs.router)
 app.include_router(pills.router)
+app.include_router(patient_info.router)
 app.include_router(vending.router)
 app.include_router(shop.router)
 app.include_router(map_routes.router)
