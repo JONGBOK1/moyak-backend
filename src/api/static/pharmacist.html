@@ -210,6 +210,39 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.error { background: var(--red); }
 
+  /* ---------- 상담실: 왼쪽 화상(크게) + 오른쪽 환자 정보·채팅·처방·녹음 (2026-10-23) ---------- */
+  .room-btn { border: none; cursor: pointer; font-family: inherit; }
+  body.in-room { overflow: hidden; }
+  .room {
+    position: fixed; inset: 0; z-index: 40; background: #1f1a17;
+    display: grid; grid-template-columns: minmax(0, 1fr) 420px;
+  }
+  .room[hidden] { display: none; }
+  .room-video { position: relative; min-width: 0; }
+  .room-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+  .room-side { background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+  .room-bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    background: var(--paper); border-bottom: 1px solid var(--line);
+  }
+  .room-bar .title { flex: 1; font-weight: 800; font-size: 14px; }
+  .room-queue { font-size: 12px; font-weight: 700; color: #8b6914; background: var(--cream); border-radius: 99px; padding: 3px 10px; }
+  .room-queue:empty { display: none; }
+  .room-bar button { padding: 7px 10px; font-size: 12px; }
+  .room-slot { flex: 1; overflow-y: auto; padding: 10px; }
+  .room-slot .card { margin: 0; box-shadow: none; border-radius: 14px; }
+  .room-slot .card-head { padding: 10px 12px; gap: 8px; }
+  .room-slot .card-head .room-btn { display: none; }
+  .room-slot .avatar { width: 32px; height: 32px; }
+  .room-slot .card-body { grid-template-columns: 1fr; }
+  .room-slot .col { padding: 10px 12px; gap: 10px; }
+  .room-slot .col + .col { border-left: none; border-top: 1px solid var(--line); }
+  .room-slot .chat-log { max-height: 120px; }
+  .room-slot .live-list { max-height: 220px; }
+  @media (max-width: 900px) {
+    .room { grid-template-columns: 1fr; grid-template-rows: 48vh minmax(0, 1fr); }
+  }
+
   /* ---------- 좁은 화면 ---------- */
   @media (max-width: 960px) {
     .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 14px; }
@@ -276,6 +309,19 @@
         <div id="historyList"></div>
       </section>
     </main>
+  </div>
+  <div class="room" id="room" hidden>
+    <div class="room-video">
+      <iframe id="roomFrame" title="화상 상담" allow="camera; microphone; autoplay; display-capture; fullscreen"></iframe>
+    </div>
+    <aside class="room-side">
+      <div class="room-bar">
+        <span class="title" id="roomTitle">상담실</span>
+        <span class="room-queue" id="roomQueue"></span>
+        <button class="reject" id="roomLeave">상담실 나가기</button>
+      </div>
+      <div class="room-slot" id="roomSlot"></div>
+    </aside>
   </div>
   <div class="toast" id="toast"></div>
 
@@ -363,7 +409,7 @@
         </div>
         <span class="chip">${direct ? "⚡ 바로 상담 (챗봇 대화 없음)" : "💬 챗봇 상담 후 요청"}</span>
         ${c.machine_code ? `<span class="chip kiosk">📍 키오스크 ${escapeHtml(c.machine_code)}</span>` : ""}
-        ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank" rel="noopener">🎥 화상 상담 입장</a>` : ""}
+        ${c.room_url ? `<button type="button" class="video-link room-btn" data-room-url="${escapeHtml(c.room_url)}" data-user="${escapeHtml(c.user_id)}">🎥 상담실 열기</button>` : ""}
       </div>`;
   }
 
@@ -602,6 +648,10 @@
       holder.querySelectorAll(".card[data-id]").forEach((el) => {
         if (!currentIds.has(el.dataset.id)) el.remove();
       });
+      // 상담실에 들어가 있는 상담은 대기 목록에서 빠져 있으니, 그 밖의 대기 건수만 상단에 알려준다
+      const inRoom = roomState.card && roomState.card.dataset.id;
+      const others = items.filter((c) => c.id !== inRoom).length;
+      document.getElementById("roomQueue").textContent = others ? `다른 대기 ${others}건` : "";
 
       if (items.length === 0) {
         holder.innerHTML = emptyState("대기 중인 상담이 없어요", "새 상담 요청이 들어오면 여기에 자동으로 나타나요.");
@@ -609,7 +659,8 @@
       }
 
       items.forEach((c) => {
-        if (holder.querySelector(`.card[data-id="${c.id}"]`)) return; // 이미 떠있는 카드는 그대로 둠 (입력 중인 값 보존)
+        // 이미 떠있는 카드(상담실에 옮겨 둔 카드 포함)는 그대로 둠 (입력 중인 값 보존)
+        if (document.querySelector(`.card[data-id="${c.id}"]`)) return;
 
         const card = document.createElement("div");
         card.className = "card";
@@ -791,6 +842,49 @@
       holder.innerHTML = `<div class="empty"><b>내역을 불러오지 못했어요</b>${escapeHtml(e.message)}</div>`;
     }
   }
+
+  // ---------- 상담실 (2026-10-23) ----------
+  // 카드의 "상담실 열기" → 화면 전체 상담실: 왼쪽에 Daily 화상(페이지 안), 오른쪽에 그 상담 카드를 그대로 옮겨 놓는다.
+  // 카드를 옮기기만 하므로 채팅·처방·수량·녹음·요약은 원래 기능 그대로 이어진다(폴링도 끊기지 않음).
+  const roomState = { card: null, placeholder: null };
+
+  function openRoom(card, url, user) {
+    if (roomState.card) {
+      toast("이미 상담실에 들어가 있어요. 먼저 나와주세요.", true);
+      return;
+    }
+    roomState.placeholder = document.createComment("room-card");
+    card.replaceWith(roomState.placeholder);
+    document.getElementById("roomSlot").appendChild(card);
+    roomState.card = card;
+    document.getElementById("roomTitle").textContent = `상담실 · ${user}`;
+    document.getElementById("roomFrame").src = url;
+    document.getElementById("room").hidden = false;
+    document.body.classList.add("in-room");
+    if (!pharmacistIdEl.value.trim()) toast("처방·채팅을 하려면 약사 ID를 먼저 입력해주세요.", true);
+  }
+
+  function leaveRoom() {
+    if (!roomState.card) return;
+    if (!confirm("상담실을 나가면 화상 통화가 끊겨요. 나갈까요?")) return;
+    document.getElementById("roomFrame").src = "about:blank";
+    const { card, placeholder } = roomState;
+    // 원래 자리에 돌려놓는다. 그 사이 목록이 다시 그려졌으면(처리 내역 등) 카드는 버리고 목록을 새로 불러온다.
+    if (placeholder.isConnected) placeholder.replaceWith(card);
+    else card.remove();
+    roomState.card = roomState.placeholder = null;
+    document.getElementById("room").hidden = true;
+    document.body.classList.remove("in-room");
+    loadPending();
+    if (!document.getElementById("historyTab").hidden) loadHistory();
+  }
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".room-btn");
+    if (!btn) return;
+    openRoom(btn.closest(".card"), btn.dataset.roomUrl, btn.dataset.user);
+  });
+  document.getElementById("roomLeave").addEventListener("click", leaveRoom);
 
   loadPending();
   setInterval(() => {
