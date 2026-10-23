@@ -77,11 +77,33 @@ class ConsultationRequest(Base):
     # 화상 상담 종료 시 생성하는 대화 요약 (챗봇 대화 + 상담 중 채팅 기준, 음성 내용은 포함 안 됨)
     summary = Column(String, nullable=True)
     ended_at = Column(DateTime, nullable=True)
+    # 사용자가 앱에서 고른 키오스크(자판기 code, 예: VM-001). 있으면 약사는 그 키오스크 재고에 있는 약만 승인할 수 있다.
+    # 팀 Supabase에는 scripts/supabase_consultation_machine_code.sql 로 추가 (2026-10-19)
+    machine_code = Column(String, nullable=True)
 
-    purchase = relationship("ApprovedPurchase", back_populates="consultation", uselist=False)
+    # 한 상담에서 약 여러 종류를 처방할 수 있다(약 하나당 승인 건 1개, 2026-10-23)
+    purchases = relationship(
+        "ApprovedPurchase", back_populates="consultation", order_by="ApprovedPurchase.created_at"
+    )
     messages = relationship(
         "ConsultationMessage", back_populates="consultation", order_by="ConsultationMessage.created_at"
     )
+
+
+def _first_purchase(self):
+    """예전 코드·API 호환: 첫 번째 승인 건(없으면 None)."""
+    return self.purchases[0] if self.purchases else None
+
+
+def _drug_summary(self) -> str | None:
+    """처방약 한 줄 요약: "타이레놀정 × 2개, 베아제정" (승인 건이 없으면 None)."""
+    if not self.purchases:
+        return None
+    return ", ".join(p.drug_item_name + (f" × {p.quantity}개" if (p.quantity or 1) > 1 else "") for p in self.purchases)
+
+
+ConsultationRequest.purchase = property(_first_purchase)
+ConsultationRequest.drug_summary = property(_drug_summary)
 
 
 class MessageSender:
@@ -121,13 +143,15 @@ class ApprovedPurchase(Base):
     # 약사가 승인 시 안내하는 판매가(원). 가격이 있으면 키오스크에서 결제(paid_at)해야 수령 가능.
     # 가격 도입 전 승인 건은 NULL — 결제 없이 수령 가능(기존 동작 유지).
     price = Column(Integer, nullable=True)
+    # 약사가 처방한 수량(2026-10-19). price는 이 수량 전체의 결제 금액(총액), 수령 시 키오스크 재고를 이만큼 차감
+    quantity = Column(Integer, nullable=False, default=1)
     paid_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_now, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     dispensed_machine_id = Column(String, nullable=True)
     dispensed_at = Column(DateTime, nullable=True)
 
-    consultation = relationship("ConsultationRequest", back_populates="purchase")
+    consultation = relationship("ConsultationRequest", back_populates="purchases")
 
 
 class VendingMachine(Base):

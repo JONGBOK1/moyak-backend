@@ -159,6 +159,23 @@
   .drug-option:hover, .drug-option.hover { background: var(--beige); }
   .drug-option .company { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
   .picked { font-size: 12px; color: var(--green); font-weight: 700; min-height: 16px; }
+  .chip.kiosk { background: var(--cream); color: #8b6914; border: 1px solid #f1e3b8; }
+  .kiosk-note { font-size: 12px; line-height: 1.5; color: #8b6914; background: var(--cream); border: 1px solid #f1e3b8; border-radius: 10px; padding: 8px 10px; }
+  .kiosk-note.plain { color: var(--ink-soft); background: var(--bg); border-color: var(--line); }
+  .stock-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+  .stock-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; width: 100%;
+    background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; font-weight: 700;
+  }
+  .stock-item:hover { background: var(--beige); }
+  .stock-item.selected { border-color: var(--green); background: var(--green-soft); }
+  .stock-item:disabled { opacity: .45; }
+  .qty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .qty-btn { width: 36px; height: 36px; padding: 0; border-radius: 10px; font-size: 18px; background: var(--paper); color: var(--green); border: 1.5px solid var(--green); }
+  .qty-btn:hover { background: var(--green-soft); }
+  .qty-val { min-width: 28px; text-align: center; font-size: 18px; font-weight: 800; }
+  .qty-hint { font-size: 12px; color: var(--ink-soft); }
+  .stock-item .meta { font-size: 12px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
 
   button {
     -webkit-appearance: none; appearance: none;
@@ -192,6 +209,50 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.error { background: var(--red); }
+
+  /* ---------- 처방 목록 (약 여러 종류) ---------- */
+  .add-item { background: var(--paper); color: var(--green); border: 1.5px dashed var(--green); }
+  .add-item:hover { background: var(--green-soft); }
+  .rx-list:empty { display: none; }
+  .rx-list { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
+  .rx-title { font-size: 12px; font-weight: 800; color: var(--ink-soft); }
+  .rx-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+  .rx-row > span:last-child { flex: none; white-space: nowrap; }
+  .rx-del { padding: 2px 7px; font-size: 11px; background: var(--paper); color: var(--red); border: 1px solid var(--line); }
+  .rx-del:hover { background: var(--red-soft); }
+
+  /* ---------- 상담실: 왼쪽 화상(크게) + 오른쪽 환자 정보·채팅·처방·녹음 (2026-10-23) ---------- */
+  .room-btn { border: none; cursor: pointer; font-family: inherit; }
+  body.in-room { overflow: hidden; }
+  .room {
+    position: fixed; inset: 0; z-index: 40; background: #1f1a17;
+    display: grid; grid-template-columns: minmax(0, 1fr) 420px;
+  }
+  .room[hidden] { display: none; }
+  .room-video { position: relative; min-width: 0; }
+  .room-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+  .room-side { background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+  .room-bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    background: var(--paper); border-bottom: 1px solid var(--line);
+  }
+  .room-bar .title { flex: 1; font-weight: 800; font-size: 14px; }
+  .room-queue { font-size: 12px; font-weight: 700; color: #8b6914; background: var(--cream); border-radius: 99px; padding: 3px 10px; }
+  .room-queue:empty { display: none; }
+  .room-bar button { padding: 7px 10px; font-size: 12px; }
+  .room-slot { flex: 1; overflow-y: auto; padding: 10px; }
+  .room-slot .card { margin: 0; box-shadow: none; border-radius: 14px; }
+  .room-slot .card-head { padding: 10px 12px; gap: 8px; }
+  .room-slot .card-head .room-btn { display: none; }
+  .room-slot .avatar { width: 32px; height: 32px; }
+  .room-slot .card-body { grid-template-columns: 1fr; }
+  .room-slot .col { padding: 10px 12px; gap: 10px; }
+  .room-slot .col + .col { border-left: none; border-top: 1px solid var(--line); }
+  .room-slot .chat-log { max-height: 120px; }
+  .room-slot .live-list { max-height: 220px; }
+  @media (max-width: 900px) {
+    .room { grid-template-columns: 1fr; grid-template-rows: 48vh minmax(0, 1fr); }
+  }
 
   /* ---------- 좁은 화면 ---------- */
   @media (max-width: 960px) {
@@ -259,6 +320,19 @@
         <div id="historyList"></div>
       </section>
     </main>
+  </div>
+  <div class="room" id="room" hidden>
+    <div class="room-video">
+      <iframe id="roomFrame" title="화상 상담" allow="camera; microphone; autoplay; display-capture; fullscreen"></iframe>
+    </div>
+    <aside class="room-side">
+      <div class="room-bar">
+        <span class="title" id="roomTitle">상담실</span>
+        <span class="room-queue" id="roomQueue"></span>
+        <button class="reject" id="roomLeave">상담실 나가기</button>
+      </div>
+      <div class="room-slot" id="roomSlot"></div>
+    </aside>
   </div>
   <div class="toast" id="toast"></div>
 
@@ -345,7 +419,8 @@
           <div class="meta">${timeLabel} ${formatDate(time)}</div>
         </div>
         <span class="chip">${direct ? "⚡ 바로 상담 (챗봇 대화 없음)" : "💬 챗봇 상담 후 요청"}</span>
-        ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank" rel="noopener">🎥 화상 상담 입장</a>` : ""}
+        ${c.machine_code ? `<span class="chip kiosk">📍 키오스크 ${escapeHtml(c.machine_code)}</span>` : ""}
+        ${c.room_url ? `<button type="button" class="video-link room-btn" data-room-url="${escapeHtml(c.room_url)}" data-user="${escapeHtml(c.user_id)}">🎥 상담실 열기</button>` : ""}
       </div>`;
   }
 
@@ -437,6 +512,49 @@
     // 카드가 아직 화면에 붙기 전일 수 있어서 첫 조회는 한 틱 뒤로 미룬다
     setTimeout(refresh, 0);
     timer = setInterval(refresh, 3000);
+  }
+
+  // ---------- 환자가 고른 키오스크 재고에서만 처방 ----------
+  // 키오스크가 지정된 상담이면 검색 대신 그 키오스크의 의약품 재고 목록에서 고른다(서버도 재고 없는 약 승인을 거절).
+  // 재고 정보가 없는 DB(로컬 시연)면 기존처럼 검색해서 처방한다.
+  async function setupKioskStock(card, c, drugResults, nameInput) {
+    const box = card.querySelector(".kiosk-box");
+    const search = card.querySelector(".drug-search");
+    const priceInput = card.querySelector(".drug-price");
+    if (!c.machine_code) {
+      box.innerHTML = '<div class="kiosk-note plain">환자가 키오스크를 고르지 않았어요. 환자가 받을 키오스크에 재고가 있는 약인지 확인해주세요.</div>';
+      return;
+    }
+    let data;
+    try {
+      data = await api("GET", `/vending/machines/${encodeURIComponent(c.machine_code)}/medicines`);
+    } catch (e) {
+      box.innerHTML = `<div class="kiosk-note">키오스크 ${escapeHtml(c.machine_code)} 재고를 불러오지 못했어요: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+    const where = `📍 ${escapeHtml(data.machine_name)} (${escapeHtml(data.machine_code)})`;
+    if (!data.restricted) {
+      box.innerHTML = `<div class="kiosk-note plain">${where} — 이 서버에는 의약품 재고 정보가 없어 검색으로 처방해요.</div>`;
+      return;
+    }
+    search.style.display = "none";
+    const inStock = data.items.filter((m) => m.stock > 0);
+    box.innerHTML = `<div class="kiosk-note">${where} 재고에 있는 약만 처방할 수 있어요.${inStock.length ? "" : "<br><b>재고가 있는 약이 없어요.</b> 거절하고 다른 키오스크를 안내해주세요."}</div>
+      <div class="stock-list">${data.items.map((m, i) => `
+        <button type="button" class="stock-item" data-i="${i}" ${m.stock > 0 ? "" : "disabled"}>
+          <span>${escapeHtml(m.item_name)}</span>
+          <span class="meta">${m.stock > 0 ? `${m.stock}개` : "품절"}${m.price != null ? ` · ${m.price.toLocaleString()}원` : ""}</span>
+        </button>`).join("")}</div>`;
+    box.querySelectorAll(".stock-item").forEach((btn) => btn.addEventListener("click", () => {
+      const m = data.items[Number(btn.dataset.i)];
+      box.querySelectorAll(".stock-item").forEach((b) => b.classList.toggle("selected", b === btn));
+      nameInput.value = m.item_name;
+      drugResults.items = [m];
+      drugResults.selectedSeq = m.item_seq;
+      card.qty.unit = m.price; // 키오스크 판매가(1개)
+      card.qty.max = Math.min(10, m.stock); // 재고보다 많이 처방할 수 없음
+      card.qty.set(card.qty.value); // 금액 = 판매가 × 수량 으로 채움(수정 가능)
+    }));
   }
 
   // ---------- 약품 검색 자동완성 ----------
@@ -541,6 +659,10 @@
       holder.querySelectorAll(".card[data-id]").forEach((el) => {
         if (!currentIds.has(el.dataset.id)) el.remove();
       });
+      // 상담실에 들어가 있는 상담은 대기 목록에서 빠져 있으니, 그 밖의 대기 건수만 상단에 알려준다
+      const inRoom = roomState.card && roomState.card.dataset.id;
+      const others = items.filter((c) => c.id !== inRoom).length;
+      document.getElementById("roomQueue").textContent = others ? `다른 대기 ${others}건` : "";
 
       if (items.length === 0) {
         holder.innerHTML = emptyState("대기 중인 상담이 없어요", "새 상담 요청이 들어오면 여기에 자동으로 나타나요.");
@@ -548,7 +670,8 @@
       }
 
       items.forEach((c) => {
-        if (holder.querySelector(`.card[data-id="${c.id}"]`)) return; // 이미 떠있는 카드는 그대로 둠 (입력 중인 값 보존)
+        // 이미 떠있는 카드(상담실에 옮겨 둔 카드 포함)는 그대로 둠 (입력 중인 값 보존)
+        if (document.querySelector(`.card[data-id="${c.id}"]`)) return;
 
         const card = document.createElement("div");
         card.className = "card";
@@ -568,6 +691,7 @@
             <div class="col right">
               <div class="decision">
                 <div class="decision-title">💊 처방 결정</div>
+                <div class="kiosk-box"></div>
                 <div class="field drug-search">
                   <label>처방할 약품</label>
                   <input class="drug-name" placeholder="약품명 검색 후 목록에서 선택" value="${escapeHtml(c.requested_drug_name || "")}" autocomplete="off" />
@@ -575,9 +699,20 @@
                   <div class="picked"></div>
                 </div>
                 <div class="field">
-                  <label>판매가 (키오스크 결제 금액)</label>
+                  <label>수량</label>
+                  <div class="qty">
+                    <button type="button" class="qty-btn" data-d="-1" aria-label="수량 줄이기">−</button>
+                    <span class="qty-val">1</span><span>개</span>
+                    <button type="button" class="qty-btn" data-d="1" aria-label="수량 늘리기">+</button>
+                    <span class="qty-hint">최대 10개</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>결제 금액 (수량 전체, 키오스크 결제 총액)</label>
                   <div class="won"><input class="drug-price" type="number" min="0" step="100" inputmode="numeric" placeholder="예: 3000" /></div>
                 </div>
+                <button type="button" class="add-item">+ 처방 목록에 추가</button>
+                <div class="rx-list"></div>
                 <div class="btn-row">
                   <button class="approve-btn">✓ 처방 승인</button>
                   <button class="reject reject-btn">거절</button>
@@ -596,32 +731,100 @@
         const nameInput = card.querySelector(".drug-name");
         const dropdown = card.querySelector(".drug-dropdown");
         attachDrugSearch(nameInput, dropdown, drugResults, card.querySelector(".picked"));
+        // 수량: 키오스크 재고 약을 고르면 그 재고까지, 아니면 10개까지. 단가를 알면 금액을 자동 계산
+        card.qty = {
+          value: 1, max: 10, unit: null,
+          set(v) {
+            this.value = Math.max(1, Math.min(this.max, v));
+            card.querySelector(".qty-val").textContent = this.value;
+            card.querySelector(".qty-hint").textContent = this.unit != null
+              ? `${this.unit.toLocaleString()}원 × ${this.value}개 · 최대 ${this.max}개` : `최대 ${this.max}개`;
+            if (this.unit != null) card.querySelector(".drug-price").value = this.unit * this.value;
+          },
+        };
+        card.querySelectorAll(".qty-btn").forEach((b) => b.addEventListener("click", () => card.qty.set(card.qty.value + Number(b.dataset.d))));
+        setupKioskStock(card, c, drugResults, nameInput);
 
-        card.querySelector(".approve-btn").addEventListener("click", async (e) => {
-          const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || c.requested_drug_item_seq;
+        // ---------- 처방 목록: 약 여러 종류를 담아 한 번에 승인 (2026-10-23) ----------
+        card.rx = [];
+        const rxBox = card.querySelector(".rx-list");
+        const renderRx = () => {
+          if (!card.rx.length) { rxBox.innerHTML = ""; return; }
+          const total = card.rx.reduce((s, it) => s + it.price, 0);
+          rxBox.innerHTML = `<div class="rx-title">처방 목록 ${card.rx.length}종 · 합계 ${total.toLocaleString()}원</div>` +
+            card.rx.map((it, i) => `<div class="rx-row"><span><b>${escapeHtml(it.drug_item_name)}</b> × ${it.quantity}개</span>` +
+              `<span>${it.price.toLocaleString()}원 <button type="button" class="rx-del" data-i="${i}" aria-label="빼기">✕</button></span></div>`).join("");
+          rxBox.querySelectorAll(".rx-del").forEach((b) => b.addEventListener("click", () => {
+            card.rx.splice(Number(b.dataset.i), 1);
+            renderRx();
+          }));
+        };
+        // 지금 고른 약·수량·금액을 읽는다(잘못됐으면 안내하고 null)
+        const readCurrent = (quiet) => {
+          const itemSeq = resolveDrugSeq(drugResults, nameInput.value) || (card.rx.length ? "" : c.requested_drug_item_seq);
           if (!itemSeq) {
-            toast("약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
-            nameInput.focus();
-            return;
+            if (!quiet) {
+              toast(c.machine_code ? "키오스크 재고 목록에서 처방할 약을 골라주세요." : "약품을 검색한 뒤 목록에서 골라주세요 (정확한 품목코드가 지정돼요).", true);
+              nameInput.focus();
+            }
+            return null;
           }
           const priceText = card.querySelector(".drug-price").value.trim();
           const price = Number(priceText);
           if (priceText === "" || !Number.isInteger(price) || price < 0) {
-            toast("판매가를 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제돼요).", true);
-            card.querySelector(".drug-price").focus();
+            if (!quiet) {
+              toast("결제 금액을 원 단위 숫자로 입력해주세요 (키오스크에서 이 금액으로 결제돼요).", true);
+              card.querySelector(".drug-price").focus();
+            }
+            return null;
+          }
+          return { drug_item_seq: String(itemSeq), drug_item_name: nameInput.value, quantity: card.qty.value, price };
+        };
+        const resetCurrent = () => {
+          nameInput.value = "";
+          drugResults.selectedSeq = "";
+          card.querySelector(".picked").textContent = "";
+          card.querySelectorAll(".stock-item.selected").forEach((b) => b.classList.remove("selected"));
+          card.qty.unit = null;
+          card.qty.max = 10;
+          card.qty.set(1);
+          card.querySelector(".drug-price").value = "";
+        };
+        card.querySelector(".add-item").addEventListener("click", () => {
+          const it = readCurrent(false);
+          if (!it) return;
+          if (card.rx.some((x) => x.drug_item_seq === it.drug_item_seq)) {
+            toast("이미 처방 목록에 있는 약이에요. 목록에서 빼고 수량을 바꿔 다시 담아주세요.", true);
             return;
           }
+          if (card.rx.length >= 5) {
+            toast("한 번에 처방할 수 있는 약은 5종류까지예요.", true);
+            return;
+          }
+          card.rx.push(it);
+          renderRx();
+          resetCurrent();
+        });
+
+        card.querySelector(".approve-btn").addEventListener("click", async (e) => {
+          // 처방 목록 + (목록에 안 담은) 지금 고른 약. 목록이 비어 있으면 지금 고른 약 하나만 승인
+          let items = card.rx.slice();
+          const current = readCurrent(items.length > 0);
+          if (current && !items.some((x) => x.drug_item_seq === current.drug_item_seq)) {
+            if (items.length && !confirm(`선택 중인 "${current.drug_item_name}"도 함께 처방할까요?`)) return;
+            items.push(current);
+          }
+          if (!items.length) return; // readCurrent가 안내함
           if (!requirePharmacistId()) return;
           e.target.disabled = true;
           try {
             const data = await api("POST", `/consultations/${c.id}/decision`, {
               pharmacist_id: pharmacistIdEl.value,
               approve: true,
-              drug_item_seq: itemSeq,
-              drug_item_name: nameInput.value,
-              price,
+              items,
             });
-            toast(`승인 완료 — ${data.approved_drug_name} (${price.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
+            const total = items.reduce((s, it) => s + it.price, 0);
+            toast(`승인 완료 — ${data.approved_drug_name} (${total.toLocaleString()}원). 처리 내역에서 상담을 이어갈 수 있어요.`);
             loadPending();
           } catch (err) {
             toast("오류: " + err.message, true);
@@ -692,7 +895,7 @@
             <div class="col right">
               <div class="result ${approved ? "approved" : "rejected"}">
                 ${approved
-                  ? `<b>✓ 처방 승인</b>${escapeHtml(c.approved_drug_name || "")}`
+                  ? `<b>✓ 처방 승인</b>${escapeHtml(c.approved_drug_name || "")}${c.approved_quantity > 1 ? ` × ${c.approved_quantity}개` : ""}`
                   : `<b>거절</b>${escapeHtml(c.decision_reason || "사유 없음")}`}
               </div>
             </div>
@@ -706,6 +909,49 @@
       holder.innerHTML = `<div class="empty"><b>내역을 불러오지 못했어요</b>${escapeHtml(e.message)}</div>`;
     }
   }
+
+  // ---------- 상담실 (2026-10-23) ----------
+  // 카드의 "상담실 열기" → 화면 전체 상담실: 왼쪽에 Daily 화상(페이지 안), 오른쪽에 그 상담 카드를 그대로 옮겨 놓는다.
+  // 카드를 옮기기만 하므로 채팅·처방·수량·녹음·요약은 원래 기능 그대로 이어진다(폴링도 끊기지 않음).
+  const roomState = { card: null, placeholder: null };
+
+  function openRoom(card, url, user) {
+    if (roomState.card) {
+      toast("이미 상담실에 들어가 있어요. 먼저 나와주세요.", true);
+      return;
+    }
+    roomState.placeholder = document.createComment("room-card");
+    card.replaceWith(roomState.placeholder);
+    document.getElementById("roomSlot").appendChild(card);
+    roomState.card = card;
+    document.getElementById("roomTitle").textContent = `상담실 · ${user}`;
+    document.getElementById("roomFrame").src = url;
+    document.getElementById("room").hidden = false;
+    document.body.classList.add("in-room");
+    if (!pharmacistIdEl.value.trim()) toast("처방·채팅을 하려면 약사 ID를 먼저 입력해주세요.", true);
+  }
+
+  function leaveRoom() {
+    if (!roomState.card) return;
+    if (!confirm("상담실을 나가면 화상 통화가 끊겨요. 나갈까요?")) return;
+    document.getElementById("roomFrame").src = "about:blank";
+    const { card, placeholder } = roomState;
+    // 원래 자리에 돌려놓는다. 그 사이 목록이 다시 그려졌으면(처리 내역 등) 카드는 버리고 목록을 새로 불러온다.
+    if (placeholder.isConnected) placeholder.replaceWith(card);
+    else card.remove();
+    roomState.card = roomState.placeholder = null;
+    document.getElementById("room").hidden = true;
+    document.body.classList.remove("in-room");
+    loadPending();
+    if (!document.getElementById("historyTab").hidden) loadHistory();
+  }
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".room-btn");
+    if (!btn) return;
+    openRoom(btn.closest(".card"), btn.dataset.roomUrl, btn.dataset.user);
+  });
+  document.getElementById("roomLeave").addEventListener("click", leaveRoom);
 
   loadPending();
   setInterval(() => {

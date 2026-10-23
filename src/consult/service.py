@@ -39,6 +39,10 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+MAX_PURCHASE_QUANTITY = 10  # 한 번에 처방할 수 있는 최대 수량(재고가 더 적으면 재고까지)
+MAX_PRESCRIPTION_ITEMS = 5  # 한 상담에서 처방할 수 있는 약 종류 수
+
+
 class NotFoundError(Exception):
     pass
 
@@ -56,8 +60,15 @@ def create_consultation(
     chat_summary: str | None = None,
     requested_drug_item_seq: str | None = None,
     requested_drug_name: str | None = None,
+    machine_code: str | None = None,
 ) -> ConsultationRequest:
+    machine_code = (machine_code or "").strip() or None
+    if machine_code is not None:
+        machine = db.get(VendingMachine, machine_code)
+        if machine is None or not machine.is_active:
+            raise NotFoundError(f"선택한 키오스크를 찾을 수 없습니다: {machine_code}")
     consultation = ConsultationRequest(
+        machine_code=machine_code,
         user_id=user_id,
         chat_summary=chat_summary or DIRECT_REQUEST_SUMMARY,
         room_url=video.create_room(),
@@ -100,7 +111,14 @@ def decide_consultation(
     drug_item_seq: str | None = None,
     drug_item_name: str | None = None,
     price: int | None = None,
+    quantity: int = 1,
+    items: list[dict] | None = None,
 ) -> ConsultationRequest:
+    """약사 승인/거절. 승인은 약 여러 종류를 한 번에 처방할 수 있다(2026-10-23).
+
+    items: [{drug_item_seq, drug_item_name, quantity, price}] — 약 하나당 승인 건(ApprovedPurchase) 1개.
+    items가 없으면 예전 방식(drug_item_seq/drug_item_name/quantity/price 한 종류)으로 처리한다.
+    """
     consultation = db.get(ConsultationRequest, consultation_id)
     if consultation is None:
         raise NotFoundError(f"상담 요청을 찾을 수 없습니다: {consultation_id}")
@@ -112,24 +130,58 @@ def decide_consultation(
     consultation.decided_at = _now()
 
     if approve:
-        item_seq = drug_item_seq or consultation.requested_drug_item_seq
-        item_name = drug_item_name or consultation.requested_drug_name
-        if not item_seq or not item_name:
-            raise InvalidStateError("승인하려면 약품 정보(item_seq, item_name)가 필요합니다.")
-        if price is not None and price < 0:
-            raise InvalidStateError("가격은 0원 이상이어야 합니다.")
+        if not items:
+            items = [{"drug_item_seq": drug_item_seq or consultation.requested_drug_item_seq,
+                      "drug_item_name": drug_item_name or consultation.requested_drug_name,
+                      "quantity": quantity, "price": price}]
+        if len(items) > MAX_PRESCRIPTION_ITEMS:
+            raise InvalidStateError(f"한 번에 처방할 수 있는 약은 {MAX_PRESCRIPTION_ITEMS}종류까지입니다.")
+        lines = []
+        for entry in items:
+            seq, name = entry.get("drug_item_seq"), entry.get("drug_item_name")
+            qty = entry.get("quantity") or 1
+            line_price = entry.get("price")
+            if not seq or not name:
+                raise InvalidStateError("승인하려면 약품 정보(item_seq, item_name)가 필요합니다.")
+            if line_price is not None and line_price < 0:
+                raise InvalidStateError("가격은 0원 이상이어야 합니다.")
+            if not 1 <= qty <= MAX_PURCHASE_QUANTITY:
+                raise InvalidStateError(f"수량은 1~{MAX_PURCHASE_QUANTITY}개로 정해주세요.")
+            lines.append({"seq": str(seq), "name": name, "qty": qty, "price": line_price})
+        if len({line["seq"] for line in lines}) != len(lines):
+            raise InvalidStateError("같은 약이 두 번 들어 있습니다. 수량으로 합쳐주세요.")
+
+        if consultation.machine_code:
+            # 사용자가 고른 키오스크에서 바로 받을 수 있는 약만 승인 (재고 정보가 있는 DB에서만)
+            from src.consult.inventory import machine_medicines
+
+            stock = machine_medicines(db, consultation.machine_code)
+            if stock is not None:
+                for line in lines:
+                    item = next((m for m in stock if m["item_seq"] == line["seq"]), None)
+                    if item is None or item["stock"] < 1:
+                        raise InvalidStateError(
+                            f"환자가 선택한 키오스크({consultation.machine_code})에 재고가 없는 약입니다({line['name']}). "
+                            "키오스크 재고 목록에서 골라주세요.")
+                    if item["stock"] < line["qty"]:
+                        raise InvalidStateError(
+                            f"키오스크({consultation.machine_code})에 {item['item_name']} 재고가 {item['stock']}개뿐입니다. 수량을 줄여주세요.")
+                    if line["price"] is None and item["price"] is not None:
+                        line["price"] = item["price"] * line["qty"]  # 가격을 따로 안 넣으면 키오스크 판매가 × 수량
 
         consultation.status = ConsultationStatus.APPROVED
-        purchase = ApprovedPurchase(
-            user_id=consultation.user_id,
-            consultation_id=consultation.id,
-            drug_item_seq=item_seq,
-            drug_item_name=item_name,
-            approved_by=pharmacist_id,
-            price=price,
-            expires_at=_now() + timedelta(minutes=PURCHASE_VALID_MINUTES),
-        )
-        db.add(purchase)
+        expires_at = _now() + timedelta(minutes=PURCHASE_VALID_MINUTES)
+        for line in lines:
+            db.add(ApprovedPurchase(
+                user_id=consultation.user_id,
+                consultation_id=consultation.id,
+                drug_item_seq=line["seq"],
+                drug_item_name=line["name"],
+                approved_by=pharmacist_id,
+                price=line["price"],
+                quantity=line["qty"],
+                expires_at=expires_at,
+            ))
     else:
         consultation.status = ConsultationStatus.REJECTED
 
@@ -393,3 +445,38 @@ def list_purchases_for_user(db: Session, user_id: str) -> list[ApprovedPurchase]
         .all()
     )
     return [_expire_if_needed(db, p) for p in purchases]
+
+
+STALE_CONSULTATION_HOURS = 24  # 이 시간 넘게 처리되지 않은 대기 상담은 자동 삭제
+
+
+def purge_stale_consultations(db: Session) -> int:
+    """취소된 상담과 24시간 넘게 대기 중인 상담을 지운다(2026-10-23). 지운 상담 수를 돌려준다.
+
+    약사가 승인·거절한 상담은 처방·수령 기록이라 남긴다. 팀 공유 DB에서는 한별의 샘플(is_sample=true)도 남긴다.
+    상담에 딸린 채팅·녹음·요약·세션(과 혹시 남은 승인 건)도 함께 지운다 — DB에 연쇄 삭제가 없어 자식부터 지운다.
+    """
+    from sqlalchemy import inspect, or_, text
+
+    from src.consult.models import ConsultationAudio, ConsultationSummary
+
+    cutoff = _now() - timedelta(hours=STALE_CONSULTATION_HOURS)
+    query = db.query(ConsultationRequest.id).filter(or_(
+        ConsultationRequest.status == ConsultationStatus.CANCELLED,
+        (ConsultationRequest.status == ConsultationStatus.PENDING) & (ConsultationRequest.created_at < cutoff),
+    ))
+    ids = [row[0] for row in query.all()]
+    if ids and "is_sample" in {c["name"] for c in inspect(db.connection()).get_columns("consultation_requests")}:
+        samples = db.execute(text("SELECT id FROM consultation_requests WHERE is_sample"), {}).scalars().all()
+        ids = [i for i in ids if i not in set(samples)]
+    if not ids:
+        return 0
+    try:
+        for model in (ConsultationMessage, ConsultationAudio, ConsultationSummary, ConsultationSession, ApprovedPurchase):
+            db.query(model).filter(model.consultation_id.in_(ids)).delete(synchronize_session=False)
+        db.query(ConsultationRequest).filter(ConsultationRequest.id.in_(ids)).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return len(ids)

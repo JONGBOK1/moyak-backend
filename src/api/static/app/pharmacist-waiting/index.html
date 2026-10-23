@@ -305,7 +305,7 @@
 
     if (data.status === "approved") {
       document.getElementById("statusLabel").textContent = "약사가 처방을 완료했어요";
-      document.getElementById("queueNumber").textContent = "처방약: " + (data.approved_drug_name || "-");
+      document.getElementById("queueNumber").textContent = "처방약: " + (data.approved_drug_name || "-") + (data.approved_quantity > 1 ? ` × ${data.approved_quantity}개` : "");
       document.getElementById("step2Icon").innerHTML = '<img class="check" src="check0.svg" />';
       document.getElementById("step2Badge").style.display = "none";
       document.getElementById("step3Icon").innerHTML = '<img class="check" src="check0.svg" />';
@@ -361,7 +361,12 @@
       } else {
         // 직접 상담은 대화 요약 없이 보낸다 → 서버가 "직접 상담 요청 (사전 챗봇 대화 없음)" 문구로 채워 약사에게 표시
         const chatSummary = direct ? "" : sessionStorage.getItem("moyak_pending_chat_summary") || "";
-        data = await api("POST", "/consultations", { user_id: userId, chat_summary: chatSummary || undefined });
+        // 지도에서 고른 자판기가 있으면 함께 보낸다 → 약사는 그 자판기 재고에 있는 약만 처방
+        let machine = null;
+        try { machine = JSON.parse(sessionStorage.getItem("moyak_selected_machine") || "null"); } catch (e) {}
+        data = await api("POST", "/consultations", {
+          user_id: userId, chat_summary: chatSummary || undefined, machine_code: (machine && (machine.code || machine.id)) || undefined,
+        });
       }
       sessionStorage.removeItem("moyak_pending_chat_summary");
 
