@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 
 from src.api.limiter import limiter
 from src.consult import service
+from src.consult import conversation as conversation_service
+from src.consult.auth import Actor, current_actor
 from src.consult.db import get_db
+from src.consult.models import ConsultationRequest, ConsultationSession
 
 router = APIRouter(prefix="/consultations", tags=["consultation"])
 
@@ -196,14 +199,29 @@ class PresenceResponse(BaseModel):
 
 @router.get("/{consultation_id}/presence", response_model=PresenceResponse)
 def room_presence(consultation_id: str, db: Session = Depends(get_db)) -> PresenceResponse:
-    """사용자 대기/화상 입장 화면이 폴링 — 약사가 화상방에 들어오면 배너+알림음으로 알려주기 위함.
-    사용자가 아직 방에 들어가기 전(대기/미리보기 화면)에만 쓰므로, 방에 누가 있으면 그 사람이 약사다
-    (방 최대 인원 2명)."""
+    """Daily 토큰에 연결된 담당 약사의 실제 입장을 확인한다. 인원수로 추정하지 않는다."""
     try:
         consultation = service.get_consultation(db, consultation_id)
     except service.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    count = service.video.room_participant_count(consultation.room_url)
-    if count is None:
+    presence = service.video.pharmacist_presence(consultation.room_url, consultation.pharmacist_id)
+    if presence is None:
         return PresenceResponse(available=False, participants=0, pharmacist_in_room=False)
-    return PresenceResponse(available=True, participants=count, pharmacist_in_room=count > 0)
+    count, pharmacist = presence
+    return PresenceResponse(available=True, participants=count, pharmacist_in_room=pharmacist)
+
+
+@router.post('/{consultation_id}/pharmacist-token')
+def pharmacist_join(consultation_id: str, actor: Actor = Depends(current_actor), db: Session = Depends(get_db)):
+    if actor.role != 'pharmacist': raise HTTPException(403, '약사만 입장할 수 있습니다.')
+    row = db.get(ConsultationRequest, consultation_id)
+    if not row: raise HTTPException(404, '상담을 찾을 수 없습니다.')
+    if row.status == 'cancelled' or row.ended_at or (row.pharmacist_id and row.pharmacist_id != actor.id):
+        raise HTTPException(409, '입장할 수 없는 상담입니다.')
+    session = db.get(ConsultationSession, consultation_id)
+    if session and session.ended_at:
+        raise HTTPException(409, '종료된 상담입니다.')
+    token = service.video.pharmacist_token(row.room_url, actor.id)
+    if not token: raise HTTPException(503, '화상 입장을 준비하지 못했습니다. 다시 시도해주세요.')
+    conversation_service.assign(db, consultation_id, actor)
+    return {'room_url': row.room_url, 'meeting_token': token}

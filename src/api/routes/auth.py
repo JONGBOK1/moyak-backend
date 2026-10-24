@@ -20,9 +20,14 @@ class Credentials(BaseModel):
     password: str = Field(..., max_length=128)
 
 
+class SignupCredentials(Credentials):
+    name: str | None = Field(None, max_length=40)
+
+
 class UserProfile(BaseModel):
     id: str
     username: str | None
+    name: str | None = None
     role: str
 
 
@@ -48,9 +53,9 @@ def username_available(request: Request, username: str = Query(..., max_length=6
 
 @router.post("/signup", response_model=SessionResponse, status_code=201)
 @limiter.limit("5/minute;30/day")
-def signup(request: Request, payload: Credentials, db: Session = Depends(get_db)):
+def signup(request: Request, payload: SignupCredentials, db: Session = Depends(get_db)):
     """회원가입 완료 → 바로 로그인된 상태(토큰)를 돌려준다."""
-    return service.signup(db, payload.username, payload.password)
+    return service.signup(db, payload.username, payload.password, name=payload.name)
 
 
 @router.post("/login", response_model=SessionResponse)

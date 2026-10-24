@@ -345,13 +345,43 @@
           <div class="meta">${timeLabel} ${formatDate(time)}</div>
         </div>
         <span class="chip">${direct ? "⚡ 바로 상담 (챗봇 대화 없음)" : "💬 챗봇 상담 후 요청"}</span>
-        ${c.room_url ? `<a class="video-link" href="${c.room_url}" target="_blank" rel="noopener">🎥 화상 상담 입장</a>` : ""}
+        ${c.room_url && !c.ended_at && c.status !== 'cancelled' ? `<button class="video-link" data-join="${escapeHtml(c.id)}">🎥 화상 상담 입장</button>` : ""}
       </div>`;
   }
 
   // ---------- 화상 상담 중 채팅 + 음성 기록·AI 요약 ----------
   // 카드가 화면에서 사라지면(승인/거절로 대기 목록에서 빠지는 등) 폴링도 스스로 멈춘다.
   function attachLiveChat(card, c, chatHost, recHost) {
+    const care = document.createElement('section');
+    care.className = 'live-chat';
+    care.style.whiteSpace = 'pre-wrap';
+    chatHost.prepend(care);
+    let careBusy = false;
+    async function refreshCare() {
+      if (careBusy) return;
+      const id = pharmacistIdEl.value.trim();
+      if (!id) { care.textContent = '상담 참고사항: 약사 ID를 입력해주세요.'; return; }
+      careBusy = true;
+      try {
+        const data = await pharmacistApi('GET', `/consultations/${encodeURIComponent(c.id)}/care-profile`);
+        if (id !== pharmacistIdEl.value.trim()) return;
+        const labels = {allergy:'알러지', disease:'질환', pregnancy:'임신', breastfeeding:'수유', other:'기타'};
+        const lines = ['환자가 등록한 상담 참고사항 (현재 정보)'];
+        for (const row of data.conditions) lines.push(`${labels[row.condition_type] || '기타'}: ${row.label}${row.note ? ' — ' + row.note : ''}`);
+        for (const row of data.medications) lines.push(`복용약: ${row.drug_name}${row.dosage_note ? ' — ' + row.dosage_note : ''}`);
+        if (data.care_note) lines.push(`기타 메모: ${data.care_note}`);
+        if (lines.length === 1) lines.push('등록된 정보가 없습니다. 해당 사항이 없다는 의미는 아닙니다.');
+        care.textContent = lines.join('\n');
+      } catch (err) {
+        care.textContent = '상담 참고사항을 확인하지 못했습니다: ' + err.message;
+      } finally { careBusy = false; }
+    }
+    // 카드의 채팅·입력 DOM을 유지하면서 참고사항만 갱신한다.
+    setTimeout(refreshCare, 0);
+    const careTimer = setInterval(() => {
+      if (!card.isConnected) { clearInterval(careTimer); return; }
+      refreshCare();
+    }, 5000);
     const box = document.createElement("div");
     box.className = "live-chat";
     box.innerHTML = `
@@ -707,6 +737,30 @@
     }
   }
 
+  async function pharmacistApi(method, path) {
+    const response = await fetch(path, {method, headers: {
+      'X-Moyak-User-Id': encodeURIComponent(pharmacistIdEl.value.trim()),
+      'X-Moyak-Role': 'pharmacist',
+    }});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || '요청 실패');
+    return data;
+  }
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-join]');
+    if (!button || button.disabled || !requirePharmacistId()) return;
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) { toast('화상 상담을 위해 팝업을 허용해주세요.', true); return; }
+    popup.opener = null;
+    button.disabled = true;
+    try {
+      const data = await pharmacistApi('POST', `/consultations/${encodeURIComponent(button.dataset.join)}/pharmacist-token`);
+      const url = new URL(data.room_url);
+      url.searchParams.set('t', data.meeting_token);
+      popup.location.replace(url.toString());
+    } catch (err) { popup.close(); toast(err.message, true); }
+    finally { button.disabled = false; }
+  });
   loadPending();
   setInterval(() => {
     if (!document.getElementById("pendingTab").hidden) loadPending();
