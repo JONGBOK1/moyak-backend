@@ -9,6 +9,7 @@
 컨텍스트에 덧붙인다(src/rag/drug_facts.py). 꺼져 있거나 조회 실패 시 기존 동작과 완전히 같다.
 """
 
+import logging
 import re
 import sys
 from pathlib import Path
@@ -45,7 +46,9 @@ REWRITE_MODEL = "gpt-4o-mini"
 TOP_K = 5
 TEMPERATURE = 0.2
 
-EFFICACY_CANDIDATES_K = 8
+logger = logging.getLogger(__name__)
+
+EFFICACY_CANDIDATES_K = 12  # 살 수 없는 약을 걸러도 3개가 남도록 넉넉히 (_buyable 참고)
 MAX_RECOMMEND_CANDIDATES = 3
 PER_DRUG_FIELD_K = 10
 MAX_INTERACTION_DRUGS = 3
@@ -223,16 +226,52 @@ def build_symptom_query(question: str, rewrite_llm) -> str:
     return keywords or question
 
 
+#: 증상 추천에서 빼야 하는 약 — **사용자가 살 수 없는 것**.
+#: 추천은 "약국·자판기에서 지금 사서 쓸 수 있는 것"이어야 쓸모가 있다. 처방전이
+#: 있어야 하거나 국내에 안 파는 약을 알려 주면 사용자는 헛걸음을 한다.
+#:   · 전문의약품 — e약은요 4,748건 중 9건. 습진 스테로이드 연고·녹내장 점안액이라
+#:     "가렵다"·"눈이 충혈된다" 같은 흔한 증상에 걸리기 쉽다.
+#:   · 수출용   — 49건. 허가는 '정상'이지만 국내 판매용이 아니다. 실제로 "습진
+#:     때문에 가렵다"에 '계안겔(수출용)'이 추천된 적 있다(그래서 이 필터를 넣었다).
+#: 이름만으로 거르는 수출용 검사는 DB 없이도 되고, 전문의약품은 허가정보를 봐야
+#: 알 수 있어 DRUG_DB_ENRICH 가 꺼져 있으면 건너뛴다(그때도 9건이라 영향은 작다).
+_EXPORT_ONLY = "수출용"
+
+
+def _buyable(seqs: list[str], names: dict[str, str]) -> list[str]:
+    """살 수 있는 약만 남긴다. 판단할 근거가 없으면 남긴다(놓치는 쪽이 낫다)."""
+    kept = [s for s in seqs if _EXPORT_ONLY not in (names.get(s) or "")]
+
+    try:
+        from src.rag import drug_facts
+        if not drug_facts.enabled():
+            return kept
+        facts = drug_facts.fetch_facts(kept)
+    except Exception as exc:  # 허가정보를 못 읽어도 추천 자체는 계속한다
+        logger.warning("구매 가능 여부 확인 실패: %s", type(exc).__name__)
+        return kept
+
+    out = []
+    for seq in kept:
+        f = facts.get(seq)
+        if f is not None and f.etc_otc == "전문의약품":
+            logger.info("추천에서 제외(전문의약품): %s", f.item_name)
+            continue
+        out.append(seq)
+    return out
+
+
 def _get_candidate_item_seqs(search_query: str, vector_store) -> list[str]:
-    docs = vector_store.similarity_search(search_query, k=EFFICACY_CANDIDATES_K, filter={"field": "efficacy"})
-    seqs = []
+    # 거르고 나서도 후보가 남아야 하므로 넉넉히 받는다 (예전엔 8개를 받아 앞 3개만 썼다).
+    docs = vector_store.similarity_search(
+        search_query, k=EFFICACY_CANDIDATES_K, filter={"field": "efficacy"})
+    seqs, names = [], {}
     for doc in docs:
         seq = doc.metadata.get("item_seq")
         if seq and seq not in seqs:
             seqs.append(seq)
-        if len(seqs) >= MAX_RECOMMEND_CANDIDATES:
-            break
-    return seqs
+            names[seq] = doc.metadata.get("item_name") or ""
+    return _buyable(seqs, names)[:MAX_RECOMMEND_CANDIDATES]
 
 
 _REC_HEADING = re.compile(r"^\s*💊\s*(?:(\d+)\s*[.)]\s*)?(.+?)\s*$")  # 번호는 LLM이 빼먹기도 해서 선택

@@ -133,6 +133,23 @@
   .live-msg.user { background: var(--beige); align-self: flex-start; }
   .live-msg.pharmacist { background: var(--green); color: #fff; align-self: flex-end; }
   .live-input { display: flex; gap: 6px; margin-top: 8px; }
+  /* 환자 참고사항 — 선우 추가. 알러지·지병·임신이 안 보여서 약사가 챗봇 요약 글을
+     읽고 알아서 판단해야 했다. 위험한 것은 눈에 띄게, 나머지는 조용히. */
+  .patient-box { background: #f6f9ff; border: 1px solid #dbe6fb; border-radius: 12px;
+                 padding: 10px 12px; margin-bottom: 10px; font-size: 13px; line-height: 1.65; }
+  .patient-box .pt-head { font-weight: 700; margin-bottom: 6px; }
+  .patient-box .pt-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .pt-tag { border-radius: 999px; padding: 2px 9px; font-size: 12px;
+            background: #e8eefc; color: #2b4a84; }
+  .pt-tag.risk { background: #fde8e8; color: #a52020; font-weight: 700; }
+  .patient-box .pt-note { background: #fff; border: 1px solid #e3ebf8; border-radius: 8px;
+                          padding: 7px 9px; margin-top: 6px; white-space: pre-wrap; }
+  .patient-box .pt-muted { color: #7a8699; }
+  .safety-box { border-radius: 10px; padding: 8px 10px; margin-top: 8px; font-size: 13px; line-height: 1.6; }
+  .safety-box.danger  { background: #fde8e8; border: 1px solid #f3bcbc; color: #8c1c1c; }
+  .safety-box.warning { background: #fff5e2; border: 1px solid #f3dca8; color: #7a5410; }
+  .safety-box.info    { background: #eaf6ec; border: 1px solid #c3e4c9; color: #205c2c; }
+  .safety-box.unknown { background: #eef0f3; border: 1px solid #d7dbe1; color: #4d5663; }
   .summary-box { background: var(--cream); border: 1px solid #f1e3b8; border-radius: 12px; padding: 10px 12px; margin-top: 8px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
 
   /* ---------- 처방 결정 ---------- */
@@ -389,6 +406,86 @@
     return data;
   }
 
+  // ── 환자 참고사항 (선우) ────────────────────────────────────────
+  // 신원 헤더가 필요한 API 다 — 약사만 볼 수 있다.
+  async function patientApi(path) {
+    const id = pharmacistIdEl.value.trim();
+    const res = await fetch(path, {
+      headers: { "X-Moyak-User-Id": encodeURIComponent(id), "X-Moyak-Role": "pharmacist" },
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+    return res.json();
+  }
+
+  //: 이 넷은 식약처 DUR 자동 판정에 걸리는 것들이라 빨갛게 띄운다.
+  const RISK_TYPES = { allergy: "알러지", pregnancy: "임신", breastfeeding: "수유" };
+  const TYPE_LABEL = { ...RISK_TYPES, disease: "지병", other: "참고" };
+
+  function patientHtml(p) {
+    const tags = (p.conditions || []).map((c) => {
+      const risk = c.condition_type in RISK_TYPES ? " risk" : "";
+      const kind = TYPE_LABEL[c.condition_type] || c.condition_type;
+      return `<span class="pt-tag${risk}">${escapeHtml(kind)} · ${escapeHtml(c.label)}</span>`;
+    }).join("");
+    const meds = (p.medications || []).map((m) => escapeHtml(m.drug_name)).join(", ");
+    const who = [p.name || p.nickname, p.age ? `${p.age}세` : "", p.sex === "F" ? "여" : p.sex === "M" ? "남" : ""]
+      .filter(Boolean).join(" · ");
+    return `
+      <div class="patient-box">
+        <div class="pt-head">👤 ${escapeHtml(who || "환자 정보")}</div>
+        ${tags ? `<div class="pt-tags">${tags}</div>` : '<div class="pt-muted">등록된 알러지·지병이 없어요. (해당 사항이 없다는 뜻은 아니에요 — 상담 때 꼭 물어봐 주세요)</div>'}
+        ${meds ? `<div>복용 중: ${meds}</div>` : ""}
+        ${p.unusable_medication_count
+          ? `<div class="pt-muted">※ 복용약 ${p.unusable_medication_count}건은 성분 정보가 없어 병용금기 대조에서 빠집니다.</div>`
+          : ""}
+        ${p.care_note ? `<div class="pt-note">${escapeHtml(p.care_note)}</div>` : ""}
+      </div>`;
+  }
+
+  async function fillPatient(card, userId) {
+    const slot = card.querySelector(".patient-slot");
+    if (!slot || !userId) return;
+    // 약사 ID 가 아직 비어 있으면 인증이 안 된다. 지금은 건너뛰고,
+    // ID 를 입력하는 순간 refillPatients() 가 다시 부른다.
+    if (!pharmacistIdEl.value.trim()) return;
+    try {
+      slot.innerHTML = patientHtml(await patientApi(`/pharmacist/patients/${encodeURIComponent(userId)}`));
+    } catch (e) {
+      // 환자 정보를 못 불러와도 상담 자체는 되어야 한다 — 조용히 비워 둔다.
+      slot.innerHTML = "";
+    }
+  }
+
+  //: 약을 고르면 그 환자 기준으로 판정한다. unknown 을 초록으로 칠하지 말 것 —
+  //: 성분 정보가 있는 약이 12% 뿐이라 "확인 못 함" 이 자주 나온다.
+  async function fillSafety(card, userId, itemSeq) {
+    const slot = card.querySelector(".safety-slot");
+    if (!slot) return;
+    if (!userId || !itemSeq) { slot.innerHTML = ""; return; }
+    slot.innerHTML = '<div class="safety-box unknown">환자 기준으로 확인 중…</div>';
+    try {
+      const r = await patientApi(
+        `/pharmacist/patients/${encodeURIComponent(userId)}/safety/${encodeURIComponent(itemSeq)}`);
+      const lines = (r.findings || [])
+        .map((f) => `• [${escapeHtml(f.category)}] ${escapeHtml(f.message)}`).join("<br>");
+      const head = { danger: "🔴", warning: "🟠", info: "🟢", unknown: "⚪" }[r.level] || "⚪";
+      slot.innerHTML = `<div class="safety-box ${r.level}">
+          <b>${head} ${escapeHtml(r.summary || "")}</b>${lines ? "<br>" + lines : ""}
+        </div>`;
+    } catch (e) {
+      slot.innerHTML = "";
+    }
+  }
+
+  //: 약사 ID 를 나중에 입력해도 이미 그려진 카드가 채워지게 한다.
+  function refillPatients() {
+    document.querySelectorAll(".card").forEach((card) => {
+      if (card.dataset.userId) fillPatient(card, card.dataset.userId);
+    });
+  }
+  pharmacistIdEl.addEventListener("change", refillPatients);
+  pharmacistIdEl.addEventListener("blur", refillPatients);
+
   function renderChatLog(summary) {
     return (summary || "")
       .split("\n")
@@ -427,36 +524,7 @@
   // ---------- 화상 상담 중 채팅 + 음성 기록·AI 요약 ----------
   // 카드가 화면에서 사라지면(승인/거절로 대기 목록에서 빠지는 등) 폴링도 스스로 멈춘다.
   function attachLiveChat(card, c, chatHost, recHost) {
-    const care = document.createElement('section');
-    care.className = 'live-chat';
-    care.style.whiteSpace = 'pre-wrap';
-    chatHost.prepend(care);
-    let careBusy = false;
-    async function refreshCare() {
-      if (careBusy) return;
-      const id = pharmacistIdEl.value.trim();
-      if (!id) { care.textContent = '상담 참고사항: 약사 ID를 입력해주세요.'; return; }
-      careBusy = true;
-      try {
-        const data = await pharmacistApi('GET', `/consultations/${encodeURIComponent(c.id)}/care-profile`);
-        if (id !== pharmacistIdEl.value.trim()) return;
-        const labels = {allergy:'알러지', disease:'질환', pregnancy:'임신', breastfeeding:'수유', other:'기타'};
-        const lines = ['환자가 등록한 상담 참고사항 (현재 정보)'];
-        for (const row of data.conditions) lines.push(`${labels[row.condition_type] || '기타'}: ${row.label}${row.note ? ' — ' + row.note : ''}`);
-        for (const row of data.medications) lines.push(`복용약: ${row.drug_name}${row.dosage_note ? ' — ' + row.dosage_note : ''}`);
-        if (data.care_note) lines.push(`기타 메모: ${data.care_note}`);
-        if (lines.length === 1) lines.push('등록된 정보가 없습니다. 해당 사항이 없다는 의미는 아닙니다.');
-        care.textContent = lines.join('\n');
-      } catch (err) {
-        care.textContent = '상담 참고사항을 확인하지 못했습니다: ' + err.message;
-      } finally { careBusy = false; }
-    }
-    // 카드의 채팅·입력 DOM을 유지하면서 참고사항만 갱신한다.
-    setTimeout(refreshCare, 0);
-    const careTimer = setInterval(() => {
-      if (!card.isConnected) { clearInterval(careTimer); return; }
-      refreshCare();
-    }, 5000);
+    // 환자 참고사항은 카드 위쪽 선우 패널(.patient-slot, /pharmacist/patients)에서 안전 판정과 함께 보여준다 — 같은 데이터라 여기선 다시 띄우지 않는다
     const box = document.createElement("div");
     box.className = "live-chat";
     box.innerHTML = `
@@ -584,6 +652,7 @@
       card.qty.unit = m.price; // 키오스크 판매가(1개)
       card.qty.max = Math.min(10, m.stock); // 재고보다 많이 처방할 수 없음
       card.qty.set(card.qty.value); // 금액 = 판매가 × 수량 으로 채움(수정 가능)
+      fillSafety(card, card.dataset.userId, m.item_seq); // 이 환자에게 괜찮은 약인지
     }));
   }
 
@@ -644,6 +713,8 @@
       nameInput.value = item.item_name;
       resultsHolder.selectedSeq = item.item_seq;
       pickedEl.textContent = `✓ ${item.company} · 품목코드 ${item.item_seq}`;
+      const card = nameInput.closest(".card");
+      if (card) fillSafety(card, card.dataset.userId, item.item_seq);
       closeDropdown();
     });
 
@@ -706,6 +777,7 @@
         const card = document.createElement("div");
         card.className = "card";
         card.dataset.id = c.id;
+        card.dataset.userId = c.user_id || "";
 
         const drugResults = { items: [], selectedSeq: "" };
         const direct = (c.chat_summary || "").startsWith(DIRECT_PREFIX);
@@ -713,6 +785,7 @@
           ${cardHead(c, "pending", "대기중", "신청", c.created_at)}
           <div class="card-body">
             <div class="col left">
+              <div class="patient-slot"></div>
               <div>
                 <div class="section-title">상담 전 챗봇 대화</div>
                 <div class="chat-log">${direct ? '<div class="chat-plain">챗봇 대화 없이 바로 상담을 요청했어요. 화상으로 증상을 여쭤봐주세요.</div>' : renderChatLog(c.chat_summary)}</div>
@@ -721,6 +794,7 @@
             <div class="col right">
               <div class="decision">
                 <div class="decision-title">💊 처방 결정</div>
+                <div class="safety-slot"></div>
                 <div class="kiosk-box"></div>
                 <div class="field drug-search">
                   <label>처방할 약품</label>
@@ -887,6 +961,7 @@
         });
 
         holder.appendChild(card);
+        fillPatient(card, c.user_id); // 알러지·지병·임신을 카드에 채워 넣는다
       });
     } catch (e) {
       holder.innerHTML = `<div class="empty load-error"><b>목록을 불러오지 못했어요</b>${escapeHtml(e.message)}</div>`;
@@ -917,6 +992,7 @@
           ${cardHead(c, approved ? "approved" : "rejected", approved ? "승인" : c.status === "cancelled" ? "취소" : "거절", "처리", c.decided_at)}
           <div class="card-body">
             <div class="col left">
+              <div class="patient-slot"></div>
               <div>
                 <div class="section-title">상담 전 챗봇 대화</div>
                 <div class="chat-log">${direct ? '<div class="chat-plain">챗봇 대화 없이 바로 온 상담이에요.</div>' : renderChatLog(c.chat_summary)}</div>
@@ -932,6 +1008,7 @@
           </div>
         `;
         holder.appendChild(card);
+        fillPatient(card, c.user_id); // 알러지·지병·임신을 카드에 채워 넣는다
         // 처리(승인/거절) 후에도 화상 상담이 이어질 수 있으니, 아직 종료 전이면 채팅/녹음/요약을 계속 제공
         if (c.status !== "cancelled") attachLiveChat(card, c, card.querySelector(".col.left"), card.querySelector(".col.right"));
       });

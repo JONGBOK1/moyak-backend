@@ -1,0 +1,12 @@
+-- 각인 오독 보정을 위한 fuzzystrmatch 확장
+--
+--   적용:  python scripts/apply_sql.py sql/015_fuzzystrmatch.sql
+--
+-- 알약 각인 OCR 은 비슷한 글자를 자주 바꿔 읽는다. 실측 오답:
+--   SSN → SSV · WIG → WLG · MBL → MSL   (전부 한 글자 차이)
+-- 정확히 같은 것만 찾으면 이런 경우가 전부 0건이 된다.
+-- levenshtein(편집거리) 로 한 글자 오독까지 후보에 넣는다.
+--
+-- pg_trgm 도 있지만 짧은 글자에 약하다 — similarity('WIG','WLG') = 0.14 로
+-- 임계값을 잡기가 어렵다. 편집거리는 "한 글자 다름" 이 그냥 1 이라 다루기 쉽다.
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;

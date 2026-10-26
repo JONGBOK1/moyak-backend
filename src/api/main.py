@@ -13,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from src.api.limiter import limiter, rate_limit_exceeded_handler
-from src.api.routes import auth, chat, consultation, conversation, drugs, shop, vending
+from src.api.routes import (auth, chat, consultation, conversation, drugs, patient_info,
+                            pills, shop, vending)
 from src.api.routes import care_profile
 from src.api.routes import map as map_routes
 from src.consult import worker
@@ -102,6 +103,8 @@ app.include_router(chat.router)
 app.include_router(consultation.router)
 app.include_router(conversation.router)
 app.include_router(drugs.router)
+app.include_router(pills.router)
+app.include_router(patient_info.router)
 app.include_router(vending.router)
 app.include_router(shop.router)
 app.include_router(map_routes.router)
@@ -142,6 +145,12 @@ def consult_direct_page():
 def pharmacist_page():
     """약사 전용 대시보드: 대기 목록 처리 + 약품 검색 자동완성 + 처리 내역 조회."""
     return (STATIC_DIR / "pharmacist.html").read_text(encoding="utf-8")
+
+
+@app.get("/pill-test", response_class=HTMLResponse)
+def pill_test_page():
+    """알약 사진을 올려 후보를 확인하는 테스트 페이지 (/pills/identify 를 그대로 호출)."""
+    return (STATIC_DIR / "pills.html").read_text(encoding="utf-8")
 
 
 @app.get("/scan", response_class=HTMLResponse)
