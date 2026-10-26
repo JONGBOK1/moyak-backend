@@ -73,6 +73,9 @@ def username_available(db: Session, username: str) -> bool:
 def signup(db: Session, username: str, password: str, name: str | None = None) -> dict:
     username = normalize_username(username)
     check_password(password)
+    # 이름 항목을 아예 안 보내면(예전 앱) 선택 항목. 보냈는데 비어 있으면 거절 — 새 Flutter 가입은 이름 필수(한별, 10/25)
+    if name is not None and not name.strip():
+        raise HTTPException(422, "이름을 입력해주세요.")
     name = normalize_name(name)
     email = email_for(username)
     if users.find_by_email(db, email) is not None:
