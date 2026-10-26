@@ -54,6 +54,26 @@ DEMO_MAP_CENTER = os.getenv("DEMO_MAP_CENTER", "37.5011,126.8670")
 # 웹페이지에 노출되는 공개 키이고 등록한 도메인에서만 동작한다 — 그래도 코드에 직접 쓰지 않고 .env로만 관리.
 KAKAO_JS_KEY = os.getenv("KAKAO_JS_KEY")
 
+# 알약 사진 각인(刻印) 읽기용 Google Cloud Vision API 키 (src/pills/ocr.py).
+# 없으면 각인을 읽지 않고 모양·색만으로 후보를 내므로 /pills/identify 자체는 계속 동작한다.
+GOOGLE_VISION_API_KEY = os.getenv("GOOGLE_VISION_API_KEY", "")
+
+# 알약 사진 검색이 쓸 Supabase(읽기 전용). 비어 있으면 DRUG_DATABASE_URL → MAP_DATABASE_URL 순으로 찾는다.
+PILL_DATABASE_URL = os.getenv("PILL_DATABASE_URL", "")
+
+# 알약 사진 판정 엔진 (src/pills/vision_llm.py). claude- 로 시작하면 Claude, 아니면 OpenAI 모델 이름.
+# 비워 두면 LLM 을 쓰지 않고 예전 방식(OpenCV 모양·색 + Google Vision 각인)만 쓴다.
+PILL_LLM_MODEL = os.getenv("PILL_LLM_MODEL", "claude-opus-5-5")
+# Claude 키 — **서버 환경변수로만** 둔다(앱·웹페이지·git 에 넣지 않음). 없으면 예전 방식으로 동작한다.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# (선택) 알약 인식에만 쓸 OpenAI 키. 비우면 OPENAI_API_KEY 를 같이 쓴다. PILL_LLM_MODEL 이 gpt-* 일 때만 쓰인다.
+PILL_OPENAI_API_KEY = os.getenv("PILL_OPENAI_API_KEY", "")
+# 1위가 확실하지 않으면 후보들의 식약처 사진과 비교해 다시 고른다(Claude 호출 1번 더). 0 이면 끈다.
+PILL_RERANK = os.getenv("PILL_RERANK", "1").strip().lower() not in ("0", "false", "no", "")
+# 서버 전체에서 하루에 LLM 으로 판정할 최대 사진 수 — 비용 상한(사진 1장 약 2센트 → 300장 ≈ 6달러/일).
+# 넘으면 그날 남은 요청은 예전 방식으로만 처리한다. 서버가 재시작되면 0 부터 다시 센다.
+PILL_LLM_DAILY_LIMIT = int(os.getenv("PILL_LLM_DAILY_LIMIT", "300"))
+
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'moyak.db'}")
 
 if not EYAK_SERVICE_KEY:

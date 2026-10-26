@@ -37,6 +37,68 @@
    }
    </style>
   <title>Document</title>
+<style>
+  /* 상품이 늘어나도 보이도록 — 절대 위치 대신 격자로 흐르게 하고, 넘치면 스크롤한다.
+     카드 생김새(배경·모서리·테두리·그림자·크기)는 Figma 값 그대로 쓴다. */
+  .product-grid { overflow-y: auto; overflow-x: hidden; }
+  .prod-list {
+    display: grid;
+    grid-template-columns: repeat(3, 301.33px);
+    gap: 24px;
+  }
+  .prod-card {
+    background: #fff8e1;
+    border-radius: 16px;
+    border: 1px solid #fff3c4;
+    width: 301.33px;
+    height: 406px;
+    position: relative;        /* 절대 위치를 쓰지 않는다 — 이게 6개 제한의 원인이었다 */
+    box-shadow: 0px 10px 25px 0px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+  }
+  .prod-card .pc-badge {
+    position: absolute; left: 24px; top: 24px;
+    background: #fde68a; border-radius: 999px;
+    padding: 6px 14px; color: #8b6914;
+    font-family: "Inter-SemiBold", sans-serif; font-size: 15px; font-weight: 600;
+  }
+  .prod-card .pc-name {
+    position: absolute; left: 24px; top: 71px; width: 253.33px;
+    color: #0f172a; font-family: "Inter-ExtraBold", sans-serif;
+    font-size: 24px; font-weight: 800; line-height: 1.25;
+  }
+  .prod-card .pc-company {
+    position: absolute; left: 24px; top: 150px; width: 253.33px;
+    color: #64748b; font-family: "Inter-Regular", sans-serif; font-size: 16px;
+  }
+  .prod-card .pc-stock {
+    position: absolute; left: 24px; top: 178px;
+    color: #64748b; font-family: "Inter-Regular", sans-serif; font-size: 15px;
+  }
+  .prod-card .pc-bottom {
+    position: absolute; left: 24px; right: 24px; bottom: 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .prod-card .pc-price {
+    color: #8b6914; font-family: "Inter-Bold", sans-serif;
+    font-size: 26px; font-weight: 700;
+  }
+  .prod-card .pc-btn {
+    background: #f59e0b; border-radius: 12px; padding: 12px 22px;
+    color: #fff; font-family: "Inter-Bold", sans-serif; font-size: 18px; font-weight: 700;
+    cursor: pointer; user-select: none;
+  }
+  .prod-card.is-picked .pc-btn { opacity: 0.55; }
+  .prod-card.is-soldout { opacity: 0.5; }
+  .prod-card.is-soldout .pc-btn { background: #94a3b8; cursor: default; }
+  .prod-empty {
+    display: none; padding: 80px 0; text-align: center;
+    color: #94a3b8; font-family: "Inter-SemiBold", sans-serif; font-size: 22px;
+  }
+  /* 탭을 누르면 눌린 것이 보이게 */
+  .tabs-scroll > div { cursor: pointer; }
+  .tabs-scroll > div.is-on { outline: 3px solid #f59e0b; border-radius: 999px; }
+</style>
 </head>
 <body>
   <div class="kiosk-otc-list">
@@ -87,113 +149,12 @@
           <div class="div7">안대/밴드/기타</div>
         </div>
       </div>
+      <!-- Figma 가 뽑아 준 카드 6개는 절대 위치로 3x2 에 고정돼 있어서 상품이 6종을
+           넘으면 들어갈 자리가 없었다. 상품 수에 맞춰 늘어나는 격자로 바꾸고 카드는
+           자바스크립트가 그린다. 생김새(색·모서리·그림자·크기)는 그대로 뒀다. -->
       <div class="product-grid">
-        <div class="grid-row-1">
-          <div class="prod-card-0">
-            <div class="card-body">
-              <div class="badge-row">
-                <div class="badge-node">
-                  <div class="div9">상처 보호</div>
-                </div>
-              </div>
-              <div class="_20">대일밴드 뉴 표준형 20매</div>
-              <div class="price-action">
-                <div class="_3-500">3,500원</div>
-                <div class="add-cart-btn">
-                  <div class="div10">담기</div>
-                </div>
-              </div>
-            </div>
-            <img class="image-8" src="image-80.png" />
-          </div>
-          <div class="prod-card-1">
-            <div class="card-body">
-              <div class="badge-row2">
-                <div class="badge-node2">
-                  <div class="div9">상처 보호</div>
-                </div>
-              </div>
-              <div class="h">메디폼 H뷰티</div>
-              <div class="price-action">
-                <div class="_4-000">4,000원</div>
-                <div class="add-cart-btn">
-                  <div class="div10">담기</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="prod-card-2">
-            <div class="card-body">
-              <div class="badge-row3">
-                <div class="badge-node3">
-                  <div class="div9">마스크</div>
-                </div>
-              </div>
-              <div class="kf-94">KF94 보건용 마스크</div>
-              <div class="price-action">
-                <div class="_3-800">3,800원</div>
-                <div class="add-cart-btn">
-                  <div class="div10">담기</div>
-                </div>
-              </div>
-            </div>
-            <img class="image-7" src="image-70.png" />
-          </div>
-          <img class="image-9" src="image-90.png" />
-        </div>
-        <div class="grid-row-2">
-          <div class="prod-card-3">
-            <img class="img-plate" src="img-plate0.png" />
-            <div class="card-body">
-              <div class="badge-row2">
-                <div class="badge-node2">
-                  <div class="div9">구강 위생</div>
-                </div>
-              </div>
-              <div class="div11">리스테린 구강청결제</div>
-              <div class="price-action">
-                <div class="_6-000">6,000원</div>
-                <div class="add-cart-btn">
-                  <div class="div10">담기</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="prod-card-4">
-            <div class="card-body">
-              <div class="badge-row4">
-                <div class="badge-node4">
-                  <div class="div9">소독용품</div>
-                </div>
-              </div>
-              <div class="div11">알콜스왑</div>
-              <div class="price-action">
-                <div class="_3-000">3,000원</div>
-                <div class="add-cart-btn">
-                  <div class="div10">담기</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="prod-card-5">
-            <div class="card-body">
-              <div class="badge-row4">
-                <div class="badge-node4">
-                  <div class="div9">여성용품</div>
-                </div>
-              </div>
-              <div class="div11">좋은느낌 생리대</div>
-              <div class="price-action">
-                <div class="_4-000">4.000원</div>
-                <div class="add-cart-btn">
-                  <div class="div10">담기</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <img class="image-5" src="image-50.png" />
-          <img class="image-6" src="image-60.png" />
-        </div>
+        <div class="prod-list" id="prod-list"></div>
+        <div class="prod-empty" id="prod-empty">해당하는 상품이 없습니다</div>
       </div>
       <div class="cart-summary">
         <div class="summary-left">
@@ -231,15 +192,13 @@
   const machineId = params.get("machine") || "VM-001";
   const CART_KEY = `moyak_kiosk_cart_${machineId}`;
 
-  // Figma 디자인의 카드 6개는 순서가 고정돼 있어서, 실제 상품명으로 매칭해 productId를 붙인다.
-  const CARD_PRODUCTS = [
-    { card: ".prod-card-0", name: "대일밴드 뉴 표준형 20매", category: "안대/밴드/기타" },
-    { card: ".prod-card-1", name: "메디폼 H뷰티", category: "상처/연고" },
-    { card: ".prod-card-2", name: "KF94 보건용 마스크", category: "안대/밴드/기타" },
-    { card: ".prod-card-3", name: "리스테린 구강청결제", category: "상처/연고" },
-    { card: ".prod-card-4", name: "알콜스왑", category: "상처/연고" },
-    { card: ".prod-card-5", name: "좋은느낌 생리대", category: "안대/밴드/기타" },
-  ];
+  // 예전에는 Figma 카드 6개를 상품명으로 찾아 붙였다. 상품이 6종을 넘으면 나머지가
+  // 화면에 아예 안 나오고, 이름을 조금만 바꿔도 장바구니에 담기지 않았다.
+  // 이제는 API 가 주는 목록으로 카드를 그린다.
+  let PRODUCTS = [];          // 자판기에 있는 상품 전부
+  let activeCategory = "전체";
+  let searchQuery = "";
+
   const TAB_CATEGORIES = ["전체", "진통/해열제", "소화/위장약", "감기약/기침약", "상처/연고", "안대/밴드/기타"];
 
   async function api(method, path, body) {
@@ -280,70 +239,91 @@
     if (totalEl) totalEl.textContent = total.toLocaleString() + "원";
   }
 
-  async function init() {
-    let products = [];
-    try {
-      products = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/products`);
-    } catch (e) {
-      alert("상품 목록을 불러오지 못했습니다: " + e.message);
-      return;
-    }
+  // ---------- 상품 카드 그리기 ----------
+  function cardHtml(p) {
+    const soldout = p.stock <= 0;
+    const picked = loadCart().some((c) => c.productId === p.id);
+    const cls = ["prod-card", soldout ? "is-soldout" : "", picked ? "is-picked" : ""].join(" ");
+    return `<div class="${cls}" data-id="${esc(p.id)}">
+        <div class="pc-badge">${esc(p.badge || p.category || "")}</div>
+        <div class="pc-name">${esc(p.item_name)}</div>
+        <div class="pc-company">${esc(p.company || "")}</div>
+        <div class="pc-stock">${soldout ? "품절" : `남은 수량 ${p.stock}개`}</div>
+        <div class="pc-bottom">
+          <div class="pc-price">${Number(p.price).toLocaleString()}원</div>
+          <div class="pc-btn">${soldout ? "품절" : picked ? "담김 ✓" : "담기"}</div>
+        </div>
+      </div>`;
+  }
 
-    CARD_PRODUCTS.forEach((entry) => {
-      const cardEl = document.querySelector(entry.card);
-      const product = products.find((p) => p.item_name === entry.name);
-      if (!cardEl || !product) return;
-      cardEl.dataset.productId = product.id;
-      cardEl.dataset.category = entry.category;
-      cardEl.dataset.name = entry.name;
-      cardEl.dataset.price = product.price;
+  function esc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
 
-      const btn = cardEl.querySelector(".add-cart-btn");
-      if (!btn) return;
-      btn.addEventListener("click", () => {
+  function visibleProducts() {
+    return PRODUCTS.filter((p) => {
+      const byTab = activeCategory === "전체" || p.category === activeCategory;
+      const byText = !searchQuery || p.item_name.includes(searchQuery)
+                     || (p.badge || "").includes(searchQuery);
+      return byTab && byText;
+    });
+  }
+
+  function renderProducts() {
+    const list = visibleProducts();
+    const listEl = document.getElementById("prod-list");
+    const emptyEl = document.getElementById("prod-empty");
+    listEl.innerHTML = list.map(cardHtml).join("");
+    emptyEl.style.display = list.length ? "none" : "block";
+
+    listEl.querySelectorAll(".prod-card").forEach((el) => {
+      const product = PRODUCTS.find((p) => p.id === el.dataset.id);
+      if (!product || product.stock <= 0) return;      // 품절은 담을 수 없다
+      el.querySelector(".pc-btn").addEventListener("click", () => {
         let cart = loadCart();
         const idx = cart.findIndex((c) => c.productId === product.id);
         if (idx >= 0) {
           cart.splice(idx, 1);
-          btn.querySelector("div").textContent = "담기";
-          btn.style.opacity = "1";
         } else {
-          cart.push({ productId: product.id, itemName: product.item_name, price: product.price, quantity: 1 });
-          btn.querySelector("div").textContent = "담김 ✓";
-          btn.style.opacity = "0.6";
+          cart.push({ productId: product.id, itemName: product.item_name,
+                      price: product.price, quantity: 1 });
         }
         saveCart(cart);
+        renderProducts();          // 담김 표시를 다시 그린다
         renderCartSummary();
       });
     });
+  }
 
+  async function init() {
+    try {
+      PRODUCTS = await api("GET", `/vending/machines/${encodeURIComponent(machineId)}/products`);
+    } catch (e) {
+      alert("상품 목록을 불러오지 못했습니다: " + e.message);
+      return;
+    }
+    renderProducts();
     renderCartSummary();
   }
 
-  // ---------- 카테고리 탭 필터 ----------
+  // ---------- 카테고리 탭 ----------
   document.querySelectorAll(".tabs-scroll > div").forEach((tabEl, i) => {
     tabEl.addEventListener("click", () => {
-      const category = TAB_CATEGORIES[i];
-      CARD_PRODUCTS.forEach((entry) => {
-        const cardEl = document.querySelector(entry.card);
-        if (!cardEl) return;
-        const visible = category === "전체" || entry.category === category;
-        cardEl.style.display = visible ? "" : "none";
-      });
+      activeCategory = TAB_CATEGORIES[i] || "전체";
+      document.querySelectorAll(".tabs-scroll > div")
+        .forEach((el, j) => el.classList.toggle("is-on", i === j));
+      renderProducts();
     });
   });
 
   // ---------- 검색 ----------
   document.querySelector(".search-row").addEventListener("click", () => {
-    const q = prompt("검색할 약품명을 입력해주세요 (예: 밴드, 마스크)");
+    const q = prompt("검색할 상품명을 입력해주세요 (예: 밴드, 마스크)", searchQuery);
     if (q === null) return;
-    const query = q.trim();
-    CARD_PRODUCTS.forEach((entry) => {
-      const cardEl = document.querySelector(entry.card);
-      if (!cardEl) return;
-      const visible = !query || entry.name.includes(query);
-      cardEl.style.display = visible ? "" : "none";
-    });
+    searchQuery = q.trim();
+    renderProducts();
   });
 
   // ---------- 결제하기 ----------

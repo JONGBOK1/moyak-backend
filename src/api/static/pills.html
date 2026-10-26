@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>알약 인식 테스트</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#EFF1EF; --surface:#FFF; --sunken:#F4F6F4;
+    --ink:#16211C; --muted:#5C6B64; --faint:#8A968F;
+    --line:#E2E6E3; --accent:#0F7B5C; --accent-dim:#E6F0EB;
+    --brick:#B4462A; --brick-dim:#F7EBE7; --amber:#8A6212; --amber-dim:#FAF0DC;
+    --sans:"IBM Plex Sans KR",-apple-system,"Malgun Gothic",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0A0F0D; --surface:#151E1B; --sunken:#101815;
+    --ink:#E4EAE6; --muted:#9DAAA3; --faint:#6D7C75;
+    --line:#253330; --accent:#3DBF95; --accent-dim:#14302697;
+    --brick:#E08163; --brick-dim:#2E1D18; --amber:#E0AC50; --amber-dim:#2B2313;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.65;padding:0 16px 60px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:60rem;margin:0 auto}
+  header{padding:2.4rem 0 1.2rem;border-bottom:2px solid var(--ink);margin-bottom:1.5rem}
+  h1{margin:0 0 .3rem;font-size:1.7rem;font-weight:700;letter-spacing:-.025em}
+  .lede{margin:0;color:var(--muted);font-size:.92rem}
+
+  .drop{border:2px dashed var(--line);border-radius:12px;background:var(--surface);
+        padding:2rem 1rem;text-align:center;cursor:pointer;transition:border-color .15s}
+  .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-dim)}
+  .drop .big{font-size:1.05rem;font-weight:500;margin-bottom:.2rem}
+  .drop .sm{font-size:.85rem;color:var(--faint)}
+  input[type=file]{display:none}
+
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}
+  .btn{padding:7px 14px;border:1px solid var(--line);border-radius:7px;background:var(--surface);
+       color:var(--muted);font-family:inherit;font-size:.85rem;cursor:pointer}
+  .btn:hover{border-color:var(--faint);color:var(--ink)}
+  .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hint{font-size:.8rem;color:var(--faint)}
+
+  .grid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:16px;margin-top:18px}
+  @media (max-width:760px){.grid{grid-template-columns:1fr}}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h2{margin:0 0 10px;font-size:.95rem;font-weight:600}
+  .shot{width:100%;border-radius:8px;display:block;background:var(--sunken)}
+  .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;
+      border-bottom:1px solid var(--line);font-size:.88rem}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--faint)}
+  .kv .v{font-weight:500;text-align:right}
+  .kv .v.mono{font-family:var(--mono)}
+  .kv .v.none{color:var(--brick);font-weight:400}
+
+  .hit{display:flex;gap:10px;align-items:flex-start;background:var(--surface);
+       border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:7px}
+  .hit.top{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .hit img{width:74px;height:46px;object-fit:contain;border-radius:5px;background:var(--sunken);flex-shrink:0}
+  .hit .body{min-width:0;flex:1}
+  .hit .nm{font-size:.88rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hit .meta{font-family:var(--mono);font-size:.72rem;color:var(--faint);margin-top:1px}
+  .hit .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+  .tag{font-size:.68rem;padding:1px 6px;border-radius:4px;background:var(--sunken);color:var(--muted)}
+  .tag.ok{background:var(--accent-dim);color:var(--accent);font-weight:500}
+  .rank{flex-shrink:0;text-align:right;line-height:1.3}
+  .rank b{display:block;font-size:.95rem;font-weight:600}
+  .rank .pts{font-family:var(--mono);font-size:.68rem;color:var(--faint);white-space:nowrap}
+
+  .note{border-radius:8px;padding:9px 11px;font-size:.84rem;margin-top:10px}
+  .note.warn{background:var(--amber-dim);color:var(--amber)}
+  .note.err{background:var(--brick-dim);color:var(--brick)}
+  .empty{text-align:center;color:var(--faint);padding:2.5rem 1rem;font-size:.9rem;line-height:1.8}
+
+  details{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+  summary{padding:10px 13px;cursor:pointer;font-size:.86rem;font-weight:500}
+  pre{margin:0;padding:0 13px 13px;font-family:var(--mono);font-size:.74rem;line-height:1.5;
+      overflow-x:auto;color:var(--muted)}
+
+  .bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:12px}
+  .bar i{display:block;height:100%;width:30%;background:var(--accent);
+         animation:slide 1.1s ease-in-out infinite}
+  @keyframes slide{0%{margin-left:-30%}100%{margin-left:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>알약 인식 테스트</h1>
+  <p class="lede">사진을 올리면 모양·색·각인을 읽고 후보 약을 찾습니다. 챗봇에 붙일 API를 그대로 호출합니다.</p>
+  <p class="lede" style="font-size:.82rem;margin-top:.5rem">
+    실측 — 식약처 사진 119장 <b>1위 93%</b> · 실사진 <b>3위 안 71%</b>
+    (앞뒤 두 장을 올리면 약 기준 90%) · 폰 사진 흉내 3위 안 70%.
+    1위가 확실하지 않으면 후보들의 식약처 사진과 비교해 순위를 다시 매깁니다(5~15초). Claude 가 안 되면 OpenCV+Google 로 넘어가며 그때는 1위 75%.
+    <br><b>점수는 확률이 아닙니다.</b> 모양·색·각인·비율 중 얼마나 맞았는지를
+    0~100으로 나타낸 값입니다 — 94점이 "94% 확실"이라는 뜻이 아닙니다.
+    <b>1위를 정답으로 단정하지 마세요</b> — 여러 개 보여주고 고르게 하는 것이 맞습니다.
+  </p>
+</header>
+
+<label class="drop" id="drop">
+  <div class="big">사진을 끌어다 놓거나 클릭해서 고르세요</div>
+  <div class="sm">한 장, 또는 <b>앞면·뒷면 두 장</b>을 한꺼번에 (두 장이면 훨씬 정확) · JPEG · PNG · 8MB 이하</div>
+  <input type="file" id="file" accept="image/*" multiple>
+</label>
+
+<div class="row">
+  <button class="btn on" id="otcBtn">일반의약품만</button>
+  <span class="hint">자판기에서 파는 약만 찾습니다. 끄면 전문의약품까지 전부</span>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <h2>올린 사진</h2>
+      <div class="shots" id="shots"></div>
+      <div class="empty" id="shotEmpty">아직 없음</div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>인식 결과</h2>
+      <div id="detected"><div class="empty">사진을 올려 주세요</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>후보 약 <span id="cnt" class="hint"></span></h2>
+      <div id="result"><div class="empty">사진을 올리면 여기에 후보가 나옵니다</div></div>
+    </div>
+    <details id="raw" style="display:none">
+      <summary>챗봇이 받게 될 응답 (JSON)</summary>
+      <pre id="json"></pre>
+    </details>
+  </div>
+</div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+let otcOnly = true;
+
+$("otcBtn").addEventListener("click", () => {
+  otcOnly = !otcOnly;
+  $("otcBtn").classList.toggle("on", otcOnly);
+  $("otcBtn").textContent = otcOnly ? "일반의약품만" : "전체 의약품";
+});
+
+const drop = $("drop");
+["dragenter","dragover"].forEach((e) =>
+  drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach((e) =>
+  drop.addEventListener(e, (ev) => { ev.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (ev) => {
+  const fs = [...(ev.dataTransfer.files || [])];
+  if (fs.length) send(fs);
+});
+$("file").addEventListener("change", (ev) => {
+  const fs = [...(ev.target.files || [])];
+  if (fs.length) send(fs);
+});
+
+async function send(files) {
+  // 두 장까지만 쓴다 — 첫 장은 앞면, 둘째 장은 뒷면으로 보낸다.
+  files = files.slice(0, 2);
+  // 올린 사진을 먼저 보여준다 — 분석을 기다리는 동안 빈 화면을 안 보게
+  $("shots").innerHTML = files.map((f) =>
+    `<img class="shot" src="${URL.createObjectURL(f)}" alt="">`).join("");
+  $("shotEmpty").style.display = "none";
+
+  $("detected").innerHTML = '<div class="bar"><i></i></div>';
+  $("result").innerHTML = '<div class="empty">찾는 중…<br><span class="hint">각인을 읽고, 헷갈리면 후보 사진과 비교합니다 (5~15초)</span></div>';
+  $("cnt").textContent = ""; $("raw").style.display = "none";
+
+  const fd = new FormData();
+  fd.append("file", files[0]);
+  if (files[1]) fd.append("back", files[1]);
+
+  let res, data;
+  try {
+    res = await fetch(`/pills/identify?otc_only=${otcOnly}&limit=10`, { method: "POST", body: fd });
+    data = await res.json();
+  } catch (e) {
+    $("detected").innerHTML = `<div class="note err">서버에 연결하지 못했습니다. ${esc(e.message)}</div>`;
+    $("result").innerHTML = "";
+    return;
+  }
+  if (!res.ok) {
+    $("detected").innerHTML = `<div class="note err">${esc(data.detail || res.statusText)}</div>`;
+    $("result").innerHTML = "";
+    return;
+  }
+
+  const d = data.detected;
+  $("detected").innerHTML = `
+    <div class="kv"><span class="k">모양</span><span class="v">${esc(d.shape)}</span></div>
+    <div class="kv"><span class="k">색</span><span class="v">${esc(d.color)}</span></div>
+    <div class="kv"><span class="k">각인</span>
+      <span class="v mono ${d.imprint ? "" : "none"}">${esc(d.imprint || "못 읽음")}</span></div>
+    ${d.aspect ? `<div class="kv"><span class="k">가로세로비</span>
+      <span class="v mono">${d.aspect}</span></div>` : ""}
+    <div class="kv"><span class="k">확신도</span>
+      <span class="v mono">${Math.round(d.confidence * 100)}%</span></div>
+    ${d.engine ? `<div class="kv"><span class="k">엔진</span>
+      <span class="v mono">${esc(d.engine)}</span></div>` : ""}
+    <div class="kv"><span class="k">후보 사진 비교</span>
+      <span class="v">${d.reranked ? "했음 — 순위를 다시 매김" : "안 함 (1위가 확실하거나 꺼짐)"}</span></div>
+    ${data.note ?`<div class="note warn">${esc(data.note)}</div>` : ""}`;
+
+  const list = data.candidates || [];
+  $("cnt").textContent = list.length ? `${list.length}개` : "";
+  $("result").innerHTML = list.length
+    ? list.map((c, i) => `
+        <div class="hit ${i === 0 ? "top" : ""}">
+          ${c.item_image ? `<img src="${esc(c.item_image)}" alt="" loading="lazy">` : ""}
+          <div class="body">
+            <div class="nm">${esc(c.item_name)}</div>
+            <div class="meta">${esc(c.entp_name || "")} · ${esc(c.item_seq)}</div>
+            <div class="tags">
+              ${c.drug_shape ? `<span class="tag">${esc(c.drug_shape)}</span>` : ""}
+              ${c.color_class1 ? `<span class="tag">${esc(c.color_class1)}</span>` : ""}
+              ${c.print_front ? `<span class="tag">각인 ${esc(c.print_front)}</span>` : ""}
+              ${(c.matched || []).map((m) => `<span class="tag ok">${esc(m)}</span>`).join("")}
+            </div>
+          </div>
+          <span class="rank">
+            <b>${i + 1}위</b>
+            <span class="pts">점수 ${Math.round(c.score * 100)}</span>
+          </span>
+        </div>`).join("")
+    : '<div class="empty">찾은 약이 없습니다.<br><span class="hint">배경이 단순한 곳에서 다시 찍어 보세요</span></div>';
+
+  $("json").textContent = JSON.stringify(data, null, 2);
+  $("raw").style.display = "block";
+}
+</script>
+</body>
+</html>

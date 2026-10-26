@@ -160,6 +160,7 @@ moyak-backend/
 - [x] 약사 상담 + 자판기 QR 연동 프로토타입 (챗봇 상담→화상상담→약사 승인→QR 로그인→수령까지의 흐름을 최소 기능으로 구현, `src/consult/`. 유닛 테스트 21건 + 실제 서버 end-to-end 검증 완료 — 규제샌드박스 신청용 데모 목적)
 - [x] 지도 백엔드 (`/api/v1/map/machines`, `/api/v1/map/machines/{id}`) — 한별의 Supabase(PostGIS) 읽기 전용 조회를 통합하고, Supabase 미설정 시 메인 DB의 시연용 가상 자판기(M001~M005, `DEMO_MAP_CENTER` 주변)로 동작. 내 위치 기준 거리 정렬 + 자판기별 재고. 상세는 `docs/map-api.md` + 앱 지도 화면 `/app/map-screen/`(카카오 지도, `KAKAO_JS_KEY` 필요) — 가상 자판기는 동양미래대학교 주변 실제 장소, Supabase용 시드 SQL `scripts/supabase_demo_machines.sql` (2026-10-07 한별 동의 후 실행 완료: VM-001 좌표 보정, VM-006~009 추가, 재고 15건 — Render도 `MAP_DATABASE_URL`로 Supabase 조회 중)
 - [x] 상담 결과 실시간 반영 (챗봇/상담 페이지가 `GET /consultations/{id}`를 3초 간격 폴링 → 승인 시 처방 약/QR 안내, 거절 시 사유 자동 표시), 이미 대기 중인 상담이 있으면 재사용해 중복 생성 방지 (`GET /consultations?status=pending&user_id=`)
+- [x] 알약 사진 인식 (`POST /pills/identify`) — 사진 한 장(또는 앞면+뒷면)으로 약 후보를 찾는다. Claude(claude-opus-5-5)가 모양·색·각인·로고를 판정하고 Supabase `drug_pills`를 읽기 전용 조회, 1위가 불확실하면 후보 사진과 비교해 재순위. 키가 없거나 실패하면 예전 방식(OpenCV + Google Vision)으로 자동 대체. 식약처 119장 1위 93.3%, 실사진 3위 안 71.4%. 앱 챗봇 화면 "+" 버튼으로 사진 → 후보 카드 → 고른 약으로 `/chat` (2026-10-21). 테스트 페이지 `/pill-test`. 상세는 `docs/pills-api.md`
 
 ## 8. 코딩 시 참고사항
 
@@ -193,6 +194,7 @@ moyak-backend/
   - `GET /consultations/{id}/presence` → `{available, participants, pharmacist_in_room}` — Daily 참가자 중 담당 약사 토큰으로 들어온 사람이 있을 때만 `true`(방 생성·배정·토큰 발급만으로는 false). 앱은 3초마다 확인해 약사 입장 알림을 띄운다.
   - `GET|PATCH /auth/me/care-profile`(Bearer) — 환자가 알러지·질환·임신·수유·복용약·메모를 등록. `GET /consultations/{id}/care-profile` — 담당 약사만 조회(약사 콘솔 카드 상단 표시). 팀 Supabase 기존 테이블(`user_conditions`, `user_medications`, `users.care_note`) 사용, 로컬 SQLite엔 없어 503.
   - 회원가입: `name`을 보냈는데 비어 있으면 422(새 Flutter 가입은 이름 필수), 안 보내면 예전처럼 선택.
+- **환자 참고사항·안전 판정 (선우, 2026-10-26 통합)**: `GET /pharmacist/patients/{user_id}`(이름은 가림, 알러지·지병·임신·복용약·메모) + `GET /pharmacist/patients/{user_id}/safety/{item_seq}`(DUR 판정 `danger/warning/info/unknown`). 약사 콘솔 카드 위쪽에 표시(같은 데이터라 한별 `care-profile` 칸은 콘솔에서 뺌). **약사 + 그 환자의 상담을 맡았거나 담당 없는 대기 상담이 있을 때만** 조회(아니면 403). 확인 못 한 복용약이 하나라도 있으면 `unknown`(초록 `info`로 안 보이게).
 - `GET /consultations?status=pending&user_id=` — 대기 목록 (약사 대시보드용으로는 `status`만, 특정 사용자의 중복 상담 확인용으로는 `user_id`도 같이 필터링)
 - `GET /consultations/{id}` — 단건 조회. 챗봇/상담 페이지가 자신이 만든 상담의 상태를 폴링할 때 쓴다. 없는 id면 404.
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.
@@ -230,3 +232,80 @@ moyak-backend/
 - **화상상담**: Daily.co 프리빌트 iframe으로 연결됨(`DAILY_API_KEY`/`DAILY_SUBDOMAIN` 필요). 다만 자체 디자인의 커스텀 통화 UI는 아니고 Daily 기본 UI 그대로 노출됨 — Figma 디자인과 통일하려면 Daily의 JS/Flutter SDK로 직접 UI를 짜야 함.
 - **자판기 하드웨어 없음**: MQTT로 실제 자판기에 개방 신호를 보내는 부분은 아직 없고, `/vending/dispense`가 성공 응답만 준다.
 - **DB는 SQLite** (`data/moyak.db`, `.env`의 `DATABASE_URL`로 교체 가능). **Render 무료 인스턴스는 디스크가 휘발성이라 재배포/재시작 시 초기화된다** — 실제 서비스로 갈 땐 Postgres 같은 영속 DB로 바꿔야 한다.
+
+## 10. 알약 사진 인식 (`src/pills/`)
+
+**목적**: 사용자가 약 이름을 모를 때 사진으로 약을 특정한다. 특정 뒤의 설명·병용금기·추천은 기존 RAG 체인이 그대로 한다.
+
+**흐름** (전 과정 `src/pills/identify.py`, 2026-10-21 개정):
+사진(앞뒤 2장 가능) → Claude 가 원래 사진 + 가운데 확대 사진으로 모양·색·각인·로고 판정(`vision_llm.py`·`vision_claude.py`)
+→ Supabase `drug_pills` 조회(`search.py`, 읽기 전용) → 1위가 불확실하면 상위 10개 후보의 식약처 사진을 한 장으로 모아
+Claude 에게 다시 고르게 함(`rerank.py`). Claude 가 안 되면(키 없음·크레딧 소진·서버 하루 상한 초과) 예전 방식
+— 알약 영역 추출(`vision.py`) → 모양·색 판별 → 각인 읽기(`ocr.py`, Google Cloud Vision) — 으로 자동 대체.
+
+- `POST /pills/identify` (multipart `files` 1~2장 — 같은 약 앞·뒤, 또는 `file`+`back`, 로그인 불필요, IP당 10회/분·100회/일, 8MB 이하, 5~15초) — 전체 스펙은 `docs/pills-api.md`.
+  응답에 `detected.engine`(누가 판정했나)·`detected.reranked`·`confident`(1위가 확실한가)·`message`(챗봇 말풍선 문구).
+- 앱 챗봇 화면(`static/app/chatbot/`) 입력창 왼쪽 "+" → 카톡식 사진 시트(카메라·앨범, 최대 2장) → 전송 → 후보 카드 3개 → 누르면 그 약 이름으로 `/chat` 질문.
+  **1위를 정답으로 단정하지 않고 사용자가 고르게 한다** — 약 설명은 기존 RAG 가 한다.
+- `GET /pill-test` — 사진을 올려 바로 확인하는 테스트 페이지.
+- 설정: `ANTHROPIC_API_KEY`(없으면 예전 방식), `PILL_LLM_MODEL`(기본 claude-opus-5-5, 비우면 LLM 끔), `PILL_RERANK`(기본 1),
+  `PILL_LLM_DAILY_LIMIT`(서버 전체 하루 최대 사진 수, 기본 300 — 넘으면 예전 방식), `GOOGLE_VISION_API_KEY`(예전 방식의 각인),
+  `PILL_DATABASE_URL`(없으면 `DRUG_DATABASE_URL` → `MAP_DATABASE_URL`).
+- 비용: 사진 1장 평균 약 2센트(판정 1.4 + 필요 시 재순위 1.2).
+- DB는 팀 Supabase를 **읽기 전용**으로만 쓴다(지도·DUR 보강과 같은 원칙). 주소가 없거나 OpenCV가 없으면
+  이 라우터만 503을 돌려주고 나머지 API는 평소대로 동작한다.
+
+**실측 정확도** (Claude): 식약처 119장(일반의약품) 1위 93.3%·3위 안 93.3% / 실사진 14장(전체 의약품) 3위 안 71.4%,
+앞뒤 두 장이면 약 기준 10개 중 9개 / 폰 사진 흉내 59장 3위 안 69.5%. 경과는 `docs/pill_recognition_status.md`.
+예전 방식(OpenCV + Google): 모양 88.2% · 색 77.3% · 후보 안에 정답 81.5% · 1위 64.7% · 상위 5위 78.2%.
+각인 없이 모양·색만 쓰면 후보 안에 정답이 9.2%로 떨어진다 — **각인이 읽히느냐가 전부다.**
+
+**준비물**: `sql/015_fuzzystrmatch.sql` 을 Supabase 에 한 번 적용해야 한다. `search.py` 가 각인 한 글자
+오독을 보정하려고 `levenshtein()` 을 쓰는데, 그게 `fuzzystrmatch` 확장이라 없으면 각인 검색이 깨진다.
+
+**측정 도구** (고치기 전후를 숫자로 비교하는 용도 — 추측으로 고치지 말 것):
+
+```
+python scripts/check_pill_vision.py --miss            # 모양·색만 채점
+python scripts/check_pill_search.py --ocr google      # 사진→후보 전 과정, 진짜 성능
+python scripts/check_pill_search.py --ocr google --miss   # 놓친 건을 원인별로
+python scripts/check_pill_search.py --print           # 각인이 완벽할 때의 상한선
+python scripts/tune_pill_ocr.py                       # 전처리 방식 비교
+```
+
+사진은 `data/pill_cache/`, OCR 결과는 `data/ocr_cache.json` 에 저장해 다시 쓴다(둘 다 git 제외).
+Google Vision 은 사진 한 장에 2건을 부르고 무료가 월 1,000건이라 **캐시 없이 돌리면 한 번에 월 한도의
+1/4 이 날아간다.** `ocr.py` 의 전처리나 언어 설정을 고쳤을 때만 `--fresh` 로 다시 읽는다.
+
+**고칠 때 반드시 지킬 것** (전부 실제로 한 번씩 틀렸던 것):
+- 각인 비교 규칙을 건드리면 `tests/test_pill_search.py`부터 돌린다.
+- 색은 측정값 기준 거리로만 정한다. 손으로 규칙을 덧붙였다가 76.5% → 68.9%로 떨어뜨린 적이 있다.
+- 점수 배점(`W_*` 상수)도 손으로 고치지 않는다. 색 배점을 0.25→0.40 까지 올려가며 전부 재봤는데
+  올릴수록 나빠졌다(5위 안 79.8% → 77.3%). 색이 23% 틀리므로 세게 믿으면 손해가 더 크다.
+- 화면 점수는 만점(1.26) 대비 비율이다. 1.0 에서 자르면 근거가 다른 후보가 전부 100 으로
+  같아지고 순위가 이름순으로 정해진다 — 실제로 정답이 동점 셋 중 3위로 밀린 적이 있다.
+- OCR 언어 설정은 **엔진마다 다르다**. easyocr은 한국어를 넣으면 `allowlist`를 포기해야 해서 영문이 무너지지만(62.2% → 21.6%),
+  Google은 `allowlist`가 없어 한글을 같이 읽게 하는 쪽이 낫다(같은 119장: 72.3% → 75.6%). 엔진을 바꿀 때 같이 확인할 것.
+- 전처리는 CLAHE가 최선이다. 다른 6가지를 같은 사진 25장으로 재봤는데 전부 더 나빴다(`ocr.py` 주석의 표 참고).
+
+**배경이 넓거나 각인이 안 읽히면 가운데를 잘라 다시 한다** (`analyze_and_read`). 사용자는 알약을 가운데 놓고
+찍으므로 가장자리를 덜어내면 그늘이 빠지고 임계값이 정상으로 돌아온다. 다시 하는 기준은 추측이 아니라
+**눈에 보이는 실패**(각인을 못 읽음, 또는 집어낸 덩어리가 화면의 1/3 초과)일 때뿐이라, 잘 된 사진은 건드리지
+않고 Google 호출도 그때만 는다. 여러 번 해 본 것 중 고르는 순서는 ① 배경을 안 집었나 ② 각인이 읽혔나
+③ 모양이 또렷한가 — **①이 ②보다 먼저**다. 나무 책상 사진에서 나뭇결을 'A 13'으로 읽고 그걸 믿는 바람에
+제대로 집은 쪽을 버린 적이 있다. 실측: 벤치마크 119장은 변화 없음(81.5%/64.7%/78.2%), 직접 찍은 사진은
+모양·색 둘 다 맞음이 2/5 → 4/5.
+
+**검출의 구조적 한계 (2026-10-18)**: 배경이 고를 때만 믿을 수 있다. 나무 책상·손바닥처럼 그늘이 지면
+흰 알약은 밝은 배경과 색 차이가 작아 임계값 아래로 떨어져 **배경으로 분류되고**, 정작 그림자는 전경이 되며
+그 그림자가 임계값 자체를 끌어올린다(실측: 알약 자리 마스크 0, 그림자 자리 255). 고치려고 7가지를 재봤고
+전부 벤치마크를 깎았다 — 볼록함 조건 88.2%→81.5%, 그늘 펴기 87.5%→67~75%, 안쪽 윤곽까지 변화 0,
+여러 크기 중 고르기 87.5%→43~53%. 자세한 숫자는 `src/pills/vision.py` 의 `_find_pill` 독스트링에 있다.
+**임계값 조정으로 풀 문제가 아니다** — 학습된 세그멘테이션이 필요하고, 모델 없이 가려면 화면에 안내 원을
+그려 알약이 화면의 8~40%를 차지하게 찍히도록 해야 한다(실패 3장 중 2장이 가운데 50~70%로 자르자 정답).
+
+**아직 안 된 것**: 남은 22건은 각인 오독 6 · DB 에 각인이 없는 약(로고뿐) 5 · 색 틀림 5 ·
+모양 틀림 2 · 못 읽음 2 · 순위 밖 2 다. 색·모양은 각인이 맞았는데도 순위에서 밀린 경우라
+점수 조정 여지가 있고, '각인이 없는 약' 5건은 OCR 로는 못 고친다. Google Vision 키가 없으면
+오픈소스(easyocr)로 자동 대체되는데 정확도가 5pp 낮고, Render 무료 인스턴스에는 easyocr(torch)을 올릴 수 없어
+키가 없으면 각인 없이 9.2% 로 떨어진다.
