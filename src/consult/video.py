@@ -6,6 +6,8 @@
 """
 
 import time
+import hashlib
+from urllib.parse import urlparse, quote
 
 import requests
 
@@ -31,6 +33,44 @@ def create_room() -> str | None:
 
 _PRESENCE_CACHE: dict[str, tuple[float, int | None]] = {}
 _PRESENCE_TTL_SECONDS = 2  # 여러 화면이 3초마다 물어봐도 Daily API는 방마다 최대 2초에 한 번만 호출
+
+
+def pharmacist_identity(subject):
+    return 'pharm-' + hashlib.sha256(subject.encode()).hexdigest()[:24]
+
+
+def pharmacist_token(room_url, subject):
+    if not config.DAILY_API_KEY or not room_url:
+        return None
+    try:
+        response = requests.post('https://api.daily.co/v1/meeting-tokens',
+            headers={'Authorization': f'Bearer {config.DAILY_API_KEY}'},
+            json={'properties': {'room_name': urlparse(room_url).path.strip('/'),
+                  'user_id': pharmacist_identity(subject), 'user_name': '약사',
+                  'exp': int(time.time()) + ROOM_TTL_SECONDS}}, timeout=10)
+        response.raise_for_status()
+        return response.json()['token']
+    except (requests.RequestException, ValueError, KeyError):
+        return None
+
+
+def pharmacist_presence(room_url, subject):
+    """Identify the token-bound pharmacist, never infer a role from headcount."""
+    if not room_url or not config.DAILY_API_KEY:
+        return None
+    try:
+        name = quote(urlparse(room_url).path.strip('/'), safe='')
+        response = requests.get(f'https://api.daily.co/v1/rooms/{name}/presence',
+            headers={'Authorization': f'Bearer {config.DAILY_API_KEY}'}, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        rows = data.get('data')
+        if not isinstance(rows, list): return None
+        if any(not isinstance(p, dict) for p in rows): return None
+        present = bool(subject) and any(p.get('userId') == pharmacist_identity(subject) for p in rows)
+        return int(data.get('total_count', len(rows))), present
+    except (requests.RequestException, ValueError, TypeError):
+        return None
 
 
 def room_participant_count(room_url: str | None) -> int | None:

@@ -160,12 +160,36 @@ def test_pharmacist_role_comes_from_users_table(setup):
 def test_signup_rolls_back_auth_account_when_profile_save_fails(setup, monkeypatch):
     client, _, fake = setup
 
-    def broken(*args):
+    def broken(*args, **kwargs):
         raise RuntimeError("db down")
     monkeypatch.setattr(users, "add", broken)
     with pytest.raises(RuntimeError):
         signup(client)
     assert fake.deleted == [fake.accounts["grandma_01@moyak.app"][0]]
+
+
+def test_name_saved_separately_and_returned_on_login_and_me(setup):
+    client, factory, _ = setup
+    response = client.post('/auth/signup', json={'username': 'named_user', 'password': PASSWORD, 'name': '  홍길동  '})
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body['user']['name'] == '홍길동'
+    assert body['user']['username'] == 'named_user'
+    with factory() as db:
+        user = users.find_by_id(db, body['user']['id'])
+        assert user['name'] == '홍길동'
+        assert user['nickname'] == 'named_user'
+    login = client.post('/auth/login', json={'username': 'named_user', 'password': PASSWORD}).json()
+    assert login['user']['name'] == '홍길동'
+    assert client.get('/auth/me', headers={'Authorization': 'Bearer ' + login['access_token']}).json()['name'] == '홍길동'
+
+
+@pytest.mark.parametrize('name', ['', '   ', '가' * 41, '이\x00름'])
+def test_invalid_name_does_not_create_auth_account(setup, name):
+    client, _, fake = setup
+    response = client.post('/auth/signup', json={'username': 'named_user', 'password': PASSWORD, 'name': name})
+    assert response.status_code == 422
+    assert fake.accounts == {}
 
 
 def test_unconfigured_supabase_returns_503(setup, monkeypatch):

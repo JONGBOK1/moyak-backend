@@ -1,6 +1,7 @@
 """회원가입·로그인 흐름. 앱 화면 규칙(utils/input_validation.dart)과 같은 검사를 서버에서도 한다."""
 import logging
 import re
+import unicodedata
 
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -73,6 +74,11 @@ def username_available(db: Session, username: str) -> bool:
 def signup(db: Session, username: str, password: str, name: str | None = None) -> dict:
     username = normalize_username(username)
     check_password(password)
+    # Legacy clients may omit the field. New Flutter signup requires a name.
+    if name is not None:
+        name = name.strip()
+        if not 1 <= len(name) <= 40 or any(unicodedata.category(c).startswith('C') for c in name):
+            raise HTTPException(422, '이름은 공백만 입력할 수 없으며 40자 이내로 입력해주세요.')
     name = normalize_name(name)
     email = email_for(username)
     if users.find_by_email(db, email) is not None:

@@ -4,7 +4,7 @@
 상담 모델과 메타데이터를 분리해 둔 이유: 기존 테스트가 임시 SQLite에 `users` 테이블을 직접 만들기 때문(충돌 방지).
 로컬 SQLite에서는 init_db가 같은 이름의 테이블을 만들어 준다(auth.users 외래키는 Supabase에만 있음).
 """
-from sqlalchemy import Boolean, Column, DateTime, MetaData, String, Table, insert, select, update
+from sqlalchemy import Boolean, Column, DateTime, MetaData, String, Table, insert, select, update, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ users = Table(
     Column("id", UUIDString, primary_key=True),
     Column("email", String, unique=True),
     Column("nickname", String),
-    Column("name", String),  # 실명(마이페이지 표시용, 2026-10-19). 팀 Supabase users.name varchar(40)
+    Column("name", String(40)),
     Column("role", String, nullable=False, default="user"),
     Column("is_active", Boolean, nullable=False, default=True),
     Column("last_login_at", DateTime),
@@ -29,11 +29,9 @@ users = Table(
 
 def create_local_table(engine: Engine) -> None:
     users.create(bind=engine, checkfirst=True)
-    from sqlalchemy import inspect, text
-
-    if "name" not in {c["name"] for c in inspect(engine).get_columns("users")}:  # 예전 로컬 SQLite users 테이블
+    if engine.dialect.name == 'sqlite' and 'name' not in {c['name'] for c in inspect(engine).get_columns('users')}:
         with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
+            conn.execute(text('ALTER TABLE users ADD COLUMN name VARCHAR(40)'))
 
 
 def find_by_email(db: Session, email: str):

@@ -420,13 +420,43 @@
         </div>
         <span class="chip">${direct ? "⚡ 바로 상담 (챗봇 대화 없음)" : "💬 챗봇 상담 후 요청"}</span>
         ${c.machine_code ? `<span class="chip kiosk">📍 키오스크 ${escapeHtml(c.machine_code)}</span>` : ""}
-        ${c.room_url ? `<button type="button" class="video-link room-btn" data-room-url="${escapeHtml(c.room_url)}" data-user="${escapeHtml(c.user_id)}">🎥 상담실 열기</button>` : ""}
+        ${c.room_url && !c.ended_at && c.status !== "cancelled" ? `<button type="button" class="video-link room-btn" data-room-url="${escapeHtml(c.room_url)}" data-user="${escapeHtml(c.user_id)}">🎥 상담실 열기</button>` : ""}
       </div>`;
   }
 
   // ---------- 화상 상담 중 채팅 + 음성 기록·AI 요약 ----------
   // 카드가 화면에서 사라지면(승인/거절로 대기 목록에서 빠지는 등) 폴링도 스스로 멈춘다.
   function attachLiveChat(card, c, chatHost, recHost) {
+    const care = document.createElement('section');
+    care.className = 'live-chat';
+    care.style.whiteSpace = 'pre-wrap';
+    chatHost.prepend(care);
+    let careBusy = false;
+    async function refreshCare() {
+      if (careBusy) return;
+      const id = pharmacistIdEl.value.trim();
+      if (!id) { care.textContent = '상담 참고사항: 약사 ID를 입력해주세요.'; return; }
+      careBusy = true;
+      try {
+        const data = await pharmacistApi('GET', `/consultations/${encodeURIComponent(c.id)}/care-profile`);
+        if (id !== pharmacistIdEl.value.trim()) return;
+        const labels = {allergy:'알러지', disease:'질환', pregnancy:'임신', breastfeeding:'수유', other:'기타'};
+        const lines = ['환자가 등록한 상담 참고사항 (현재 정보)'];
+        for (const row of data.conditions) lines.push(`${labels[row.condition_type] || '기타'}: ${row.label}${row.note ? ' — ' + row.note : ''}`);
+        for (const row of data.medications) lines.push(`복용약: ${row.drug_name}${row.dosage_note ? ' — ' + row.dosage_note : ''}`);
+        if (data.care_note) lines.push(`기타 메모: ${data.care_note}`);
+        if (lines.length === 1) lines.push('등록된 정보가 없습니다. 해당 사항이 없다는 의미는 아닙니다.');
+        care.textContent = lines.join('\n');
+      } catch (err) {
+        care.textContent = '상담 참고사항을 확인하지 못했습니다: ' + err.message;
+      } finally { careBusy = false; }
+    }
+    // 카드의 채팅·입력 DOM을 유지하면서 참고사항만 갱신한다.
+    setTimeout(refreshCare, 0);
+    const careTimer = setInterval(() => {
+      if (!card.isConnected) { clearInterval(careTimer); return; }
+      refreshCare();
+    }, 5000);
     const box = document.createElement("div");
     box.className = "live-chat";
     box.innerHTML = `
@@ -910,6 +940,15 @@
     }
   }
 
+  async function pharmacistApi(method, path) {
+    const response = await fetch(path, {method, headers: {
+      'X-Moyak-User-Id': encodeURIComponent(pharmacistIdEl.value.trim()),
+      'X-Moyak-Role': 'pharmacist',
+    }});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || '요청 실패');
+    return data;
+  }
   // ---------- 상담실 (2026-10-23) ----------
   // 카드의 "상담실 열기" → 화면 전체 상담실: 왼쪽에 Daily 화상(페이지 안), 오른쪽에 그 상담 카드를 그대로 옮겨 놓는다.
   // 카드를 옮기기만 하므로 채팅·처방·수량·녹음·요약은 원래 기능 그대로 이어진다(폴링도 끊기지 않음).
@@ -946,10 +985,19 @@
     if (!document.getElementById("historyTab").hidden) loadHistory();
   }
 
-  document.addEventListener("click", (e) => {
+  document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".room-btn");
-    if (!btn) return;
-    openRoom(btn.closest(".card"), btn.dataset.roomUrl, btn.dataset.user);
+    if (!btn || btn.disabled || !requirePharmacistId()) return;
+    if (roomState.card) return;
+    const card = btn.closest(".card");
+    btn.disabled = true;
+    try {
+      const data = await pharmacistApi('POST', `/consultations/${encodeURIComponent(card.dataset.id)}/pharmacist-token`);
+      const url = new URL(data.room_url);
+      url.searchParams.set('t', data.meeting_token);
+      openRoom(card, url.toString(), btn.dataset.user);
+    } catch (err) { toast(err.message, true); }
+    finally { btn.disabled = false; }
   });
   document.getElementById("roomLeave").addEventListener("click", leaveRoom);
 
