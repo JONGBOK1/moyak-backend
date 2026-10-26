@@ -34,8 +34,14 @@ logger = logging.getLogger(__name__)
 REF_DIR = Path(__file__).resolve().parents[2] / "data" / "pill_cache"
 CELL_W, CELL_H, COLS = 360, 180, 2
 
+#: 사용자 사진이 한 장일 때와 두 장일 때 설명이 달라야 한다. 앞면만 보내면서
+#: "반대쪽 면" 이라고 하면 Claude 가 없는 사진을 찾는다.
+_HEAD_ONE = "앞의 사진 2장은 사용자가 찍은 알약이다(두 번째는 첫 사진의 가운데를 확대한 것)."
+_HEAD_TWO = ("앞의 사진 3장은 사용자가 찍은 알약이다 — 첫 장이 한쪽 면, 두 번째는 그 가운데를 "
+             "확대한 것, 세 번째는 **같은 알약의 반대쪽 면**이다.")
+
 _PROMPT = """\
-앞의 사진은 사용자가 찍은 알약이다(두 번째 사진은 첫 사진의 가운데를 확대한 것).
+{head}
 마지막 사진은 후보 약들의 식약처 공식 사진을 모은 것이다. 칸마다 왼쪽 위에 번호가 있고,
 한 칸에 같은 약의 앞면과 뒷면이 함께 있다.
 
@@ -44,7 +50,7 @@ _PROMPT = """\
 
 사용자 알약과 **같은 약**일 가능성이 높은 순서로 후보 번호를 나열해라.
 각인 글자, 로고 모양, 분할선, 모양, 색을 비교한다. 사용자 사진은 조명 때문에 색이 달라 보일 수
-있고, 한 면만 찍혔을 수 있다. 확실히 다른 후보는 빼도 된다.
+있다. 확실히 다른 후보는 빼도 된다.
 """
 
 _SCHEMA = {
@@ -129,6 +135,24 @@ def _table(cands: list[Candidate]) -> str:
         for i, c in enumerate(cands))
 
 
+def _user_images(images: list[bytes], width: int, quality: int) -> list[bytes]:
+    """재순위에 보낼 사용자 사진: 앞면 + 앞면 가운데 확대 + (있으면) 뒷면.
+
+    **뒷면을 빼면 안 된다.** 후보 모음 사진은 칸마다 앞·뒤가 같이 들어 있는데
+    사용자 쪽만 앞면이면 뒷면 각인을 비교할 짝이 없다. 각인이 뒷면에만 있는 약
+    (앞은 제조사 로고, 뒤에 식별 문자)에서 재순위가 앞면만 보고 고르게 된다.
+    앞뒤 두 장을 받아 판정에는 쓰면서 재순위에서만 버리던 것을 고친 것이다.
+
+    뒷면은 가운데 확대본까지 보내지 않는다 — 사진이 늘수록 요청이 커지고 큰
+    요청은 연결이 끊긴다(모듈 설명 참고). 확대는 앞면에만 준다.
+    """
+    out = [_shrink(images[0], width, quality),
+           _shrink(_center(images[0], 0.5), width, quality)]
+    if len(images) > 1:
+        out.append(_shrink(images[1], width, quality))
+    return out
+
+
 def rerank(images: list[bytes], cands: list[Candidate], seen: PillVision,
            model: str | None = None) -> list[int] | None:
     """후보 번호(0부터)를 다시 매긴 순서. Claude 가 아니거나 실패하면 None — 원래 순서를 쓴다."""
@@ -137,15 +161,16 @@ def rerank(images: list[bytes], cands: list[Candidate], seen: PillVision,
         return None
     from src.pills.vision_claude import ask_claude
 
-    prompt = _PROMPT.format(table=_table(cands))
+    head = _HEAD_TWO if len(images) > 1 else _HEAD_ONE
+    prompt = _PROMPT.format(head=head, table=_table(cands))
     try:
         sheet = make_sheet(cands)
-        user = [_shrink(images[0], 640, 85), _shrink(_center(images[0], 0.5), 640, 85)]
+        user = _user_images(images, 640, 85)
         try:
             data = ask_claude(user + [sheet], model, prompt, _SCHEMA)
         except ConnectionError:
             # 큰 요청이 끊기는 문제(vision_llm 참고) — 사용자 사진을 줄여 한 번 더.
-            user = [_shrink(images[0], 480, 80), _shrink(_center(images[0], 0.5), 480, 80)]
+            user = _user_images(images, 480, 80)
             data = ask_claude(user + [sheet], model, prompt, _SCHEMA)
     except Exception as exc:
         logger.warning("재순위 실패: %s", type(exc).__name__)

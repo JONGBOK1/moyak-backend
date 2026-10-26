@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from src.consult.auth import Actor, current_actor
 from src.consult.db import get_db
-from src.consult.patient_safety import check_drug_for_user
+from src.consult.patient_safety import check_drug_for_user, year_age
 from src.privacy import mask_name
 
 router = APIRouter(prefix="/pharmacist/patients", tags=["pharmacist-patient"])
@@ -72,7 +72,7 @@ def get_patient(user_id: str, actor: Actor = Depends(current_actor),
         "nickname": mask_name(row["nickname"]),
         "care_note": row["care_note"],           # 참고사항은 가리지 않는다
         "birth_year": birth,
-        "age": (date.today().year - birth) if birth else None,
+        "age": year_age(birth),
         "sex": row["sex"],
         "medications": [dict(m) for m in meds],
         "conditions": [dict(c) for c in conds],

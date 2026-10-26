@@ -34,6 +34,16 @@ logger = logging.getLogger(__name__)
 #: 노인주의 판정 기준 나이 (DUR 고시 기준)
 ELDERLY_AGE = 65
 
+#: 생년만 알고 생일은 모르니 만 나이를 정확히 낼 수 없다. 그래서 화면 표시와 DUR 판정
+#: **둘 다** 연 나이(올해 - 생년)를 쓴다. 예전엔 판정만 세는 나이(+1)를 써서, 화면에
+#: 64세로 뜨는 환자에게 노인주의 경고가 붙어 약사가 왜 뜨는지 알 수 없었다.
+#: 연 나이는 만 나이보다 최대 1살 많으므로 노인주의·연령금기가 경계에서 1년 일찍
+#: 걸린다 — 경고를 놓치는 쪽보다 낫다고 보고 그대로 둔다.
+def year_age(birth_year: int | None) -> int | None:
+    """생년으로 계산한 연 나이. 생년이 없으면 None."""
+    return (date.today().year - birth_year) if birth_year else None
+
+
 
 class Level(str, Enum):
     """경고 심각도. 화면 색상·정렬에 그대로 쓴다."""
@@ -183,7 +193,7 @@ def _check_dur_warnings(session: Session, user_id: str, item_seq: str, report: S
     if not profile:
         return
 
-    age = date.today().year - profile["birth_year"] + 1 if profile["birth_year"] else None
+    age = year_age(profile["birth_year"])
 
     #: 사용자 상태 → 신경 써야 할 DUR 경고 종류
     applicable: list[str] = []
