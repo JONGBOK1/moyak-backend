@@ -188,6 +188,11 @@ moyak-backend/
 - **약 여러 종류 처방 (2026-10-23)**: 승인 요청에 `items: [{drug_item_seq, drug_item_name, quantity, price}]`(1~5종, 같은 약 중복 불가, 키오스크 지정 상담은 종류마다 재고 확인) → 약 하나당 승인 건(ApprovedPurchase) 1개. `items`가 없으면 예전 단일 필드 그대로. 상담 응답에 `approved_items`(전체 목록) 추가, `approved_drug_name`은 여러 종류면 "A × 2개, B" 한 줄(`approved_quantity`는 한 종류일 때만). 키오스크는 원래 여러 승인 건 결제·배출을 지원. 약사 콘솔은 약·수량·금액을 고르고 "+ 처방 목록에 추가"로 담아 한 번에 승인.
 - **상담 자동 삭제 (2026-10-23)**: 서버가 10분마다 취소된 상담과 24시간 넘게 대기 중인 상담을 딸린 채팅·녹음·요약·세션과 함께 삭제(`purge_stale_consultations`). 승인·거절된 상담(처방·수령 기록)과 팀 Supabase 샘플(`is_sample=true`)은 남긴다.
 - **약사 콘솔 상담실 (2026-10-23)**: 카드의 "상담실 열기" → 화면 전체에 왼쪽 Daily 화상(페이지 안 iframe, 크게) + 오른쪽 420px에 그 상담 카드(챗봇 대화·채팅·처방·녹음)를 옮겨 표시. 나가면 통화 종료 확인 후 원래 자리로.
+- **약사 실제 입장 확인 · 환자 참고사항 (2026-10-26, 한별 `hanbyeol` 브랜치 통합, 상세 `docs/consultation-request-care-profile.md`)**:
+  - `POST /consultations/{id}/pharmacist-token`(약사 헤더) → `{room_url, meeting_token}` — 담당 약사 배정 + 그 약사 전용 Daily 입장 토큰. 환자·다른 약사·취소/종료 상담은 거절(403/409). 약사 콘솔 "상담실 열기"가 이 토큰을 붙인 주소로 페이지 안 상담실을 연다.
+  - `GET /consultations/{id}/presence` → `{available, participants, pharmacist_in_room}` — Daily 참가자 중 담당 약사 토큰으로 들어온 사람이 있을 때만 `true`(방 생성·배정·토큰 발급만으로는 false). 앱은 3초마다 확인해 약사 입장 알림을 띄운다.
+  - `GET|PATCH /auth/me/care-profile`(Bearer) — 환자가 알러지·질환·임신·수유·복용약·메모를 등록. `GET /consultations/{id}/care-profile` — 담당 약사만 조회(약사 콘솔 카드 상단 표시). 팀 Supabase 기존 테이블(`user_conditions`, `user_medications`, `users.care_note`) 사용, 로컬 SQLite엔 없어 503.
+  - 회원가입: `name`을 보냈는데 비어 있으면 422(새 Flutter 가입은 이름 필수), 안 보내면 예전처럼 선택.
 - `GET /consultations?status=pending&user_id=` — 대기 목록 (약사 대시보드용으로는 `status`만, 특정 사용자의 중복 상담 확인용으로는 `user_id`도 같이 필터링)
 - `GET /consultations/{id}` — 단건 조회. 챗봇/상담 페이지가 자신이 만든 상담의 상태를 폴링할 때 쓴다. 없는 id면 404.
 - `POST /consultations/{id}/decision` — 약사 승인/거절. **약사가 `drug_item_seq`/`drug_item_name`을 직접 입력해 "처방"하며(요청에 없었어도 됨)**, 승인 시에만 `ApprovedPurchase` 생성(기본 60분 유효). 응답에 `approved_purchase_id`/`approved_drug_name`을 포함해 무엇이 승인됐는지 바로 확인 가능.

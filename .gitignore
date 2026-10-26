@@ -72,3 +72,4 @@ data/flutter-integration/
 # OS
 .DS_Store
 Thumbs.db
+data/kiosk-review-*/
