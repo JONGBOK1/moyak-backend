@@ -147,11 +147,49 @@ def test_legacy_immediate_summary_blocked_once_pharmacist_connected(setup):
 
 
 def test_no_consent_ends_without_ai_summary(setup):
+    """녹음 동의가 없으면 AI 요약은 만들지 않지만, 약사는 직접 쓸 수 있어야 한다.
+
+    예전엔 약사에게도 not_requested 를 돌려줘 상담 내용을 남길 방법이 아예 없었다
+    (한별 요청, 2026-10-27). 지금은 빈 초안을 주고, 공개할 때 행이 만들어진다.
+    환자에게는 약사가 공개하기 전까지 그대로 "요약 없음"이다.
+    """
     client, _ = setup
     client.post("/consultations/c1/session/claim", headers=PHARM)
     client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
     assert client.post("/consultations/c1/session/end", headers=PHARM).status_code == 200
-    assert client.get("/consultations/c1/summary", headers=PHARM).json()["status"] == "not_requested"
+
+    pharm = client.get("/consultations/c1/summary", headers=PHARM).json()
+    assert pharm["status"] == "draft" and pharm["manual"] is True  # 약사는 직접 쓸 수 있다
+    assert pharm["content"] is None                                # AI 가 만든 내용은 없다
+    assert client.get("/consultations/c1/summary", headers=USER).json()["status"] == "not_requested"
+
+
+def test_pharmacist_can_publish_summary_without_recording(setup):
+    """녹음 없이도 약사가 쓴 상담 요약이 환자에게 전달된다 (한별 요청 1)."""
+    client, _ = setup
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
+    client.post("/consultations/c1/session/end", headers=PHARM)
+
+    body = {"symptoms": ["두통"], "discussion": ["휴식 권고"], "medication_guidance": [],
+            "precautions": [], "follow_up": [], "needs_verification": []}
+    assert client.post("/consultations/c1/summary/publish", json=body, headers=PHARM).status_code == 200
+
+    seen = client.get("/consultations/c1/summary", headers=USER).json()
+    assert seen["status"] == "published"
+    assert seen["content"]["symptoms"] == ["두통"]
+
+
+def test_empty_summary_can_be_published(setup):
+    """비워 두고 공개해도 된다 — 적을 게 없는 상담도 있다 (한별 요청 1)."""
+    client, _ = setup
+    client.post("/consultations/c1/session/claim", headers=PHARM)
+    client.post("/consultations/c1/decision", json={"pharmacist_id": "p1", "approve": False})
+    client.post("/consultations/c1/session/end", headers=PHARM)
+    empty = {k: [] for k in ("symptoms", "discussion", "medication_guidance",
+                             "precautions", "follow_up", "needs_verification")}
+    assert client.post("/consultations/c1/summary/publish", json=empty, headers=PHARM).status_code == 200
+    assert client.get("/consultations/c1/summary", headers=USER).json()["status"] == "published"
 
 
 def test_auto_recording_segments_time_base_and_failed_segments(setup, monkeypatch):

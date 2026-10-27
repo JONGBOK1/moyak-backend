@@ -239,10 +239,16 @@
         : `<div class="note">약사가 상담 요약을 준비하고 있어요.</div>`;
       if (st === "draft") {
         if (!isPharm) return `<div class="note">📝 약사가 요약을 검토하고 있어요. 검토가 끝나면 여기에 표시돼요.</div>`;
-        return `<div class="sum-label">📝 요약 초안 검토 (한 줄에 한 항목, 수정 후 공개)</div>` +
+        //: manual = AI 초안이 없는 상담(녹음 미동의·대화 없음). 약사가 처음부터 쓴다.
+        const head = summary.manual
+          ? `<div class="sum-label">📝 상담 요약 작성 (녹음이 없어 AI 초안이 없어요 — 직접 적어 주세요)</div>`
+            + `<div class="note">비워 두고 공개해도 됩니다. 환자에게는 "약사가 검토한 요약"으로 보여요.</div>`
+          : `<div class="sum-label">📝 요약 초안 검토 (한 줄에 한 항목, 수정 후 공개)</div>`;
+        //: 공개 버튼은 **맨 위**에 둔다. 6항목 입력칸이 길어 아래에 두면 스크롤해야 보였다(한별 요청).
+        const btn = `<div class="row"><button data-a="publish">검토 완료 · 환자에게 공개</button></div>`;
+        return head + btn +
           Object.entries(LABELS).map(([k, label]) =>
-            `<div class="sum-label">${label}</div><textarea data-f="${k}">${esc((summary.content?.[k] || []).join("\n"))}</textarea>`).join("") +
-          `<div class="row"><button data-a="publish">검토 완료 · 환자에게 공개</button></div>`;
+            `<div class="sum-label">${label}</div><textarea data-f="${k}">${esc((summary.content?.[k] || []).join("\n"))}</textarea>`).join("");
       }
       if (st === "published") {
         const c = summary.content || {};
