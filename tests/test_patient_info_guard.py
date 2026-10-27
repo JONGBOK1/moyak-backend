@@ -103,3 +103,78 @@ def test_danger_still_wins():
     report = SafetyReport(item_seq="1", item_name="약", can_check_interactions=True, unknown_medications=["x"])
     report.findings.append(Finding(Level.DANGER, "병용금기", "같이 먹으면 안 됨"))
     assert report.level is Level.DANGER
+
+
+# ── 알러지: 성분코드 대조로 못 잡은 경우 (2026-10-27) ─────────────────────
+class _Result:
+    def __init__(self, rows=None, scalar=None):
+        self._rows, self._scalar = rows or [], scalar
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+    def scalar(self):
+        return self._scalar
+
+
+class _FakeSession:
+    """SQL 문 종류로 응답을 고른다 — Postgres 전용 CAST 를 쓰는 함수라 SQLite 로는 못 돌린다."""
+
+    def __init__(self, allergies, main_item_ingr, code_hits=()):
+        self.allergies, self.main, self.code_hits = allergies, main_item_ingr, list(code_hits)
+
+    def execute(self, sql, params=None):
+        q = str(sql)
+        if "JOIN drug_ingredients di ON di.ingr_code = uc.ingr_code" in q:
+            return _Result(self.code_hits)
+        if "FROM user_conditions uc" in q:
+            return _Result(self.allergies)
+        if "main_item_ingr FROM drug_permissions" in q:
+            return _Result(scalar=self.main)
+        raise AssertionError(q)
+
+
+def _allergy_report(session):
+    from src.consult.patient_safety import _check_allergies
+    report = SafetyReport(item_seq="1", item_name="약", can_check_interactions=False, drug_ingredients_known=True)
+    _check_allergies(session, PATIENT, "1", report)
+    return report
+
+
+def test_allergy_found_in_full_ingredient_list_even_if_not_dur_indexed():
+    session = _FakeSession([{"label": "아세트아미노펜", "ingr_code": "X1", "ingr_name": "아세트아미노펜"}],
+                           "[M040353]아세트아미노펜")
+    report = _allergy_report(session)
+    assert report.level is Level.DANGER
+
+
+def test_text_only_allergy_is_never_green():
+    session = _FakeSession([{"label": "페니실린계", "ingr_code": None, "ingr_name": None}],
+                           "[M1]아목시실린수화물")
+    report = _allergy_report(session)
+    assert report.level is Level.UNKNOWN
+    assert any("페니실린계" in f.message for f in report.findings)
+
+
+def test_coded_allergy_absent_from_known_ingredients_is_checked():
+    session = _FakeSession([{"label": "이부프로펜", "ingr_code": "X2", "ingr_name": "이부프로펜"}],
+                           "[M040353]아세트아미노펜")
+    report = _allergy_report(session)
+    assert report.findings == []
+
+
+def test_allergy_with_unknown_drug_ingredients_is_unknown():
+    session = _FakeSession([{"label": "이부프로펜", "ingr_code": "X2", "ingr_name": "이부프로펜"}], None)
+    report = _allergy_report(session)
+    assert report.level is Level.UNKNOWN
+
+
+def test_code_match_is_not_reported_twice():
+    session = _FakeSession([{"label": "아세트아미노펜", "ingr_code": "X1", "ingr_name": "아세트아미노펜"}],
+                           "[M040353]아세트아미노펜",
+                           code_hits=[{"label": "아세트아미노펜", "ingr_name": "아세트아미노펜"}])
+    report = _allergy_report(session)
+    assert [f.level for f in report.findings] == [Level.DANGER]

@@ -218,6 +218,53 @@ def _check_allergies(session: Session, user_id: str, item_seq: str, report: Safe
             message=f"등록하신 알러지 성분('{r['label']}')이 들어 있습니다",
             detail=r["ingr_name"],
         ))
+    _check_unmatched_allergies(session, user_id, item_seq, report, {r["label"] for r in rows})
+
+
+def _check_unmatched_allergies(session: Session, user_id: str, item_seq: str, report: SafetyReport,
+                               already: set[str]) -> None:
+    """성분코드 대조로 못 잡은 알러지를 허가정보 **주성분 전체 목록**으로 다시 본다 (2026-10-27).
+
+    `drug_ingredients` 는 DUR 성분만 담는 색인이라, 거기 없는 성분에 대한 알러지는 위 쿼리로
+    절대 안 걸린다. 알러지를 글자로만 적은 경우("페니실린", 성분코드 없음)도 마찬가지다.
+    "대조를 못 했다" 를 "없다" 로 넘기면 초록불이 뜨므로, 끝까지 확인 못 한 알러지는
+    확인 불가(unknown)로 남겨 약사가 직접 묻게 한다.
+    """
+    from src.rag.drug_facts import normalize_ingredient, parse_main_ingredients
+
+    allergies = session.execute(text("""
+        SELECT uc.label, uc.ingr_code,
+               (SELECT di.ingr_name FROM drug_ingredients di WHERE di.ingr_code = uc.ingr_code LIMIT 1) AS ingr_name
+        FROM user_conditions uc
+        WHERE uc.user_id = CAST(:user_id AS uuid) AND uc.condition_type = 'allergy'
+    """), {"user_id": user_id}).mappings().all()
+    allergies = [a for a in allergies if a["label"] not in already]
+    if not allergies:
+        return
+
+    main = session.execute(text(
+        "SELECT main_item_ingr FROM drug_permissions WHERE item_seq = :s LIMIT 1"), {"s": item_seq}).scalar()
+    ingredients = {normalize_ingredient(n) for n in parse_main_ingredients(main)} - {""}
+
+    for a in allergies:
+        name = normalize_ingredient(a["ingr_name"] or a["label"] or "")
+        if ingredients and name and name in ingredients:
+            report.findings.append(Finding(
+                level=Level.DANGER,
+                category="알러지",
+                message=f"등록하신 알러지 성분('{a['label']}')이 들어 있습니다",
+                detail=a["ingr_name"] or a["label"],
+            ))
+        elif ingredients and a["ingr_name"]:
+            continue  # 성분이 정확히 특정된 알러지이고, 주성분 전체 목록에 없다 → 확인됨
+        else:
+            # 주성분을 모르거나, 알러지가 글자로만 적혀 있어("페니실린계") 정확히 대조할 수 없다
+            report.findings.append(Finding(
+                level=Level.UNKNOWN,
+                category="알러지 확인 필요",
+                message=f"등록하신 알러지('{a['label']}')는 자동으로 확인하지 못했습니다",
+                detail="안전하다는 뜻이 아닙니다. 환자분께 알러지 성분을 직접 확인해 주세요.",
+            ))
 
 
 def _check_dur_warnings(session: Session, user_id: str, item_seq: str, report: SafetyReport) -> None:
