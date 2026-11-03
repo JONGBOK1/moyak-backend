@@ -182,9 +182,16 @@ def finish(db, cid, actor):
 
 
 def summary(db, cid, actor):
-    participant(db, cid, actor)
+    _, room = participant(db, cid, actor)
     row = db.get(ConsultationSummary, cid)
     if not row:
+        # 녹음 동의가 없었거나 요약할 대화가 없으면 AI 초안이 아예 안 만들어진다.
+        # 그래도 약사는 상담 내용을 환자에게 남길 수 있어야 하므로, 종료된 상담이면
+        # **빈 초안**을 내준다 — 화면이 편집 칸을 띄우고 publish 가 그때 행을 만든다.
+        # 환자에게는 예전처럼 "요약 없음"으로 보인다(약사가 공개해야 보인다).
+        if actor.role == "pharmacist" and room is not None and room.ended_at:
+            return {"status": "draft", "content": None, "manual": True,
+                    "reviewed_by": None, "reviewed_at": None, "error": None}
         return {"status": "not_requested", "content": None}
     return {"status": row.status, "content": row.published if row.status == "published" else (
         row.draft if actor.role == "pharmacist" else None),
@@ -208,7 +215,19 @@ def publish(db, cid, actor, content: SummaryContent):
     if actor.role != "pharmacist":
         raise HTTPException(403, "담당 약사만 요약을 확정할 수 있습니다.")
     row = db.get(ConsultationSummary, cid)
-    if not row or row.status != "draft":
+    if row is None:
+        # AI 초안이 없던 상담(녹음 안 함). 약사가 직접 쓴 내용을 그대로 공개한다.
+        # source 는 NOT NULL 이라 "사람이 쓴 것"임을 남겨 둔다 — 나중에 이 요약이
+        # 어디서 왔는지 따질 때 AI 초안과 구분돼야 한다.
+        _, room = participant(db, cid, actor)
+        if room is None or not room.ended_at:
+            raise HTTPException(409, "상담을 먼저 종료해주세요.")
+        row = ConsultationSummary(
+            consultation_id=cid, status="draft",
+            source={"manual": True, "reason": "AI 초안 없음(녹음 미동의 또는 대화 없음)"})
+        db.add(row)
+        db.flush()
+    elif row.status != "draft":
         raise HTTPException(409, "확인 대기 중인 요약이 없습니다.")
     row.published = content.model_dump()
     row.reviewed_by = actor.id
