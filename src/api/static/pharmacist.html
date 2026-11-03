@@ -153,7 +153,17 @@
   .summary-box { background: var(--cream); border: 1px solid #f1e3b8; border-radius: 12px; padding: 10px 12px; margin-top: 8px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
 
   /* ---------- 처방 결정 ---------- */
+  /* **상담실에 들어가야 보인다** (한별 요청, 2026-10-27). 목록에서 환자를 만나기도 전에
+     승인 버튼이 보이면 "상담 없이 승인"이 가능한 화면처럼 읽힌다 — 이 프로젝트는
+     약사가 상담하고 승인한다는 흐름 자체가 규제샌드박스 근거라 화면도 그 순서여야 한다.
+     카드를 상담실로 '옮기는' 구조라 선택자 하나로 갈린다. */
+  .decision-hint { background: var(--cream); border: 1px solid #f1e3b8; border-radius: 12px;
+                   padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--ink-soft); }
+  .room-slot .decision-hint { display: none; }
   .decision { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  /* 위 규칙보다 **뒤에** 와야 이긴다 — 목록에서는 감추고 상담실에서만 편다. */
+  .decision { display: none; }
+  .room-slot .decision { display: flex; }
   .decision-title { font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px; }
   .field label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 4px; }
   .field .won { position: relative; }
@@ -792,6 +802,10 @@
               </div>
             </div>
             <div class="col right">
+              <div class="decision-hint">
+                💊 처방은 <b>상담실에서</b> 결정합니다.<br>
+                위 "🎥 상담실 열기"로 환자와 상담한 뒤 승인·거절해 주세요.
+              </div>
               <div class="decision">
                 <div class="decision-title">💊 처방 결정</div>
                 <div class="safety-slot"></div>
