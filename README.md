@@ -2,6 +2,7 @@
 
 **MOYAK(모두의 약)** 은 AI 챗봇 상담 → 약사 화상 상담·처방 승인 → 자판기 수령까지 이어지는 스마트 의약품 자판기 서비스입니다.
 이 저장소는 그 백엔드(FastAPI)와 시연용 웹 화면 3종(사용자 앱 · 약사 웹 · 자판기 키오스크)을 담고 있습니다.
+Flutter 사용자 앱은 별도 저장소([byeol0211/moyak-frontend](https://github.com/byeol0211/moyak-frontend))에서 이 API를 그대로 호출합니다.
 
 > **핵심 원칙 — AI는 판매를 승인하지 않습니다.**
 > 챗봇은 공식 자료(식약처 e약은요) 안에서만 안내하고, 어떤 약을 줄지는 항상 약사가 상담 후 직접 정해 승인합니다.
@@ -45,9 +46,15 @@ sequenceDiagram
   - 특정 약 질문 / **증상 기반 추천**(약마다 "💊 약 이름 → 추천 이유 → 성분 → 주의 1가지", 앱에서는 약별 카드) / **병용 안전성 확인**(명시 안 됨 ≠ 안전) /
     **임산부·소아·고령자 필터** / 후속 질문 맥락 유지 / 위험 질문 시 약사 상담 권유
   - (선택, `DRUG_DB_ENRICH=1`) **식약처 허가정보·DUR 보강**: 병용금기를 공식 목록으로 판정, 임부금기·노인주의 등 표시, e약은요에 없는 전문의약품 **3만여 개도 의미 검색**(약효분류·성분)으로 찾아 기본 정보 안내(처방 필요 안내, 복용법은 안내 안 함)
+  - 증상 추천은 후보를 넉넉히(12개) 찾은 뒤 **전문의약품·수출용 등 자판기에서 살 수 없는 약을 빼고** 최대 3개만 추천
+- **📷 알약 사진으로 약 찾기** (`POST /pills/identify`): 사진 1장(또는 앞·뒷면 2장) → **Claude(`claude-opus-5-5`)**가 모양·색·각인·로고 판정 → 알약 DB(25,350개)에서 후보 → 1위가 애매하면 후보들의 식약처 사진과 비교해 다시 고름
+  - 식약처 사진 119장 기준 **1위 93.3%**(예전 OpenCV+Google 방식 64.7%), 실사진은 3위 안 71.4% — 그래서 확실할 때만 1개, 아니면 여러 후보를 보여주고 사용자가 고름
+  - 약을 **특정하는 단계까지만** 하고, 설명은 고른 약 이름으로 `/chat`(RAG)이 답함 — 사진만 보고 설명을 지어내지 않음
+  - Claude 키가 없거나 하루 상한(기본 300장)을 넘으면 OpenCV(모양·색) + Google Vision(각인)으로 자동 대체
+- **상담 참고사항**: 알러지·지병·임신·수유·복용약·메모를 등록해 두면 약사가 상담 중에 확인
 - **회원가입·로그인**: Supabase Auth 연동(아이디·비밀번호 + **실명**), 마이페이지에 "OOO 님" 표시
 - **약사 화상 상담**: 하단 가운데 "상담하기" 버튼으로 챗봇 대화 없이 바로 입장, 또는 챗봇 대화 내용을 약사에게 전달하며 요청
-  - 화상(Daily.co) 중 **💬 채팅**, 양측 동의 시 **자동 녹음·전사** → 약사가 검토·수정한 **6항목 요약** 공개
+  - 화상(Daily.co) 중 **💬 채팅**, 양측 동의 시 **자동 녹음·전사** → 약사가 검토·수정한 **6항목 요약** 공개 (동의가 없어도 약사가 요약을 직접 써서 공개 가능)
   - 지도에서 고른 자판기를 상담에 함께 보내, 그 자판기에서 바로 받을 수 있는 약으로 처방받음
   - 약사 승인/거절 결과가 3초 간격으로 자동 반영, **내 상담 내역**에서 처방약(× 수량)·요약 다시 보기
 - **내 주변 자판기 지도**: 카카오 지도 + 가까운 순 목록(거리·도보 시간·재고 상태) → 자판기별 품목 재고 → 자판기 선택
@@ -56,14 +63,17 @@ sequenceDiagram
 ### 🩺 약사 웹 (`/pharmacist`)
 - 상담 대기 목록 (챗봇 대화 기록 또는 "직접 상담 요청", 환자가 고른 키오스크 표시)
 - **🎥 상담실**: 한 화면에서 왼쪽 화상(크게) + 오른쪽 채팅·처방·녹음/요약
-- **처방**: 환자가 고른 키오스크면 그 **재고 목록에서만** 선택(품절 불가, 판매가 자동), 아니면 약 자동완성 검색
+  - 처방 결정은 **상담실에 들어간 뒤에만** 보임 (목록에서 "상담 없이 승인"이 불가능하게 — 규제샌드박스 흐름)
+- **환자 참고사항·안전 판정**: 알러지·지병·임신·복용약(이름은 가림) + 처방하려는 약의 DUR 판정 `위험/주의/정보/확인 필요`
+  - 약을 특정하지 못했거나 성분 대조가 안 된 알러지는 초록(문제 없음) 대신 **"확인 필요"** — 모른다는 사실을 숨기지 않음
+- **처방**: 환자가 고른 키오스크면 그 **재고 목록에서만** 선택(품절 불가, 판매가 자동), 아니면 약 자동완성 검색(**전문의약품 제외**)
   - **수량** −/+ (재고·10개까지, 금액 = 판매가 × 수량), **처방 목록**에 최대 5종류 담아 한 번에 승인 / 거절(사유)
-- 녹음 전사 원문 확인, AI 요약 초안 검토·수정 후 공개, 처리 내역 탭
+- 녹음 전사 원문 확인, AI 요약 초안 검토·수정 후 공개(녹음 동의가 없으면 빈 초안에 직접 작성), 처리 내역 탭
 
 ### 🖥️ 자판기 키오스크 (`/kiosk`)
 - 시작 → 회원 QR 로그인(앱으로 스캔, 화면에 가린 실명 "이*복 님") 또는 비회원 의약외품 구매
 - **회원**: 승인받은 약(여러 종류·수량)이 있으면 승인 약 확인(장바구니) → 결제 → 배출(재고 차감), 없으면 안내 홈
-- **비회원**: 의약외품 목록 → 장바구니(수량/삭제) → 결제 → 배출
+- **비회원**: 의약외품 목록(자판기 9대 모두 실제 제품 20종) → 장바구니(수량/삭제) → 결제 → 배출
 - 결제 완료 시 자동 로그아웃, 10분 무조작 시 장바구니 초기화/로그아웃 (공용 기기 보안)
 
 ## 🛠 기술 스택
@@ -80,6 +90,7 @@ sequenceDiagram
 | 회원가입·로그인 | Supabase Auth (+ 서버 서명 토큰) |
 | 자판기 위치/재고·약 허가정보/DUR | Supabase (PostgreSQL + PostGIS) |
 | 상담 녹음 전사·요약 | OpenAI `gpt-4o-mini-transcribe` / GPT-4o 구조화 출력 |
+| 알약 사진 인식 | Claude `claude-opus-5-5` (예비: OpenCV + Google Cloud Vision) + Supabase `drug_pills` |
 | 지도 | 카카오 지도 JavaScript API |
 | 화상 상담 | Daily.co (Prebuilt) |
 | 프론트 (시연용) | Figma → HTML/CSS 내보내기 + Vanilla JS |
@@ -114,7 +125,10 @@ STEP 0 수집 → STEP 1 정제 → STEP 2 청킹 → STEP 3 임베딩 → STEP 
 | 약사 결정 | `POST /consultations/{id}/decision` (`approve`, `items: [{drug_item_seq, drug_item_name, quantity, price}]` 또는 단일 필드, `reason`) → `approved_items` |
 | 상담 채팅/요약 | `GET·POST /consultations/{id}/messages` · `POST /consultations/{id}/end` (즉시 요약) |
 | 녹음·검토 요약 | `.../session/claim·consent·end` · `POST .../audio` · `GET .../transcript` · `GET .../summary` · `POST .../summary/publish·retry` |
-| 약품 검색 | `GET /drugs/search?q=` (약사 자동완성) |
+| 약품 검색 | `GET /drugs/search?q=` (약사 자동완성, 전문의약품 제외) |
+| 알약 사진 | `POST /pills/identify` (`files` 최대 2장, `otc_only`, `limit`) → `detected`(모양·색·각인·`engine`), `candidates`, `confident`, `message` · IP당 10회/분, 100회/일 — [docs/pills-api.md](./docs/pills-api.md) |
+| 상담 참고사항 | `GET·PATCH /auth/me/care-profile` (환자) · `GET /consultations/{id}/care-profile` (담당 약사) |
+| 환자 안전 판정 | `GET /pharmacist/patients/{user_id}` · `GET /pharmacist/patients/{user_id}/safety/{item_seq}` (약사 + 담당·대기 상담이 있을 때만) |
 | 자판기 로그인 | `POST /vending/machines/{id}/rotate-qr` · `POST /vending/scan` · `GET /vending/machines/{id}/session` (`user_display_name` 가린 실명) |
 | 키오스크 의약품 재고 | `GET /vending/machines/{code}/medicines` (약사 처방 목록용) |
 | 승인 약 | `GET /vending/purchases?user_id=` · `POST /vending/purchases/pay` · `POST /vending/dispense` |
@@ -145,6 +159,10 @@ pip install -r requirements.txt
 | `SUPABASE_URL` · `SUPABASE_ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` | 회원가입·로그인 (service_role은 서버 전용 비밀값) | 가입·로그인 503 |
 | `CONSULT_AUTH_SECRET` | 로그인 토큰 서명 (32자 이상 무작위) | 로그인 토큰 발급 불가 |
 | `DRUG_DB_ENRICH` | `1`이면 챗봇에 식약처 허가정보·DUR 보강 | 보강 없이 e약은요만 |
+| `ANTHROPIC_API_KEY` | 알약 사진 인식(Claude). **이 이름으로만 읽음** | 예비 방식(OpenCV + Google)으로 자동 대체 — 정확도 하락 |
+| `GOOGLE_VISION_API_KEY` | 예비 방식의 각인 읽기 | 예비 방식은 모양·색만 |
+| `PILL_DATABASE_URL` | 알약 DB(`drug_pills`) | `DRUG_DATABASE_URL` → `MAP_DATABASE_URL` 순으로 사용 |
+| `PILL_LLM_MODEL` · `PILL_RERANK` · `PILL_LLM_DAILY_LIMIT` | 사진 판정 모델 / 다시 고르기 / 하루 상한 | `claude-opus-5-5` / 켬 / 300장 |
 
 > ⚠️ 로컬 개발은 SQLite를 권장합니다. 로컬에서 `DATABASE_URL`을 팀 Supabase로 바꾸면 테스트 데이터가 팀 DB에 바로 저장됩니다.
 
@@ -164,7 +182,7 @@ python -m uvicorn src.api.main:app --reload
 ## ✅ 테스트
 
 ```bash
-pytest                              # 유닛 테스트 141건 — 외부 API 호출 없음
+pytest                              # 유닛 테스트 208건 — 외부 API 호출 없음
 python tests/check_rag_quality.py   # RAG 답변 품질 셀프 체크 (실제 API 호출, 소액 비용, 수동 실행)
 ```
 
@@ -173,9 +191,11 @@ python tests/check_rag_quality.py   # RAG 답변 품질 셀프 체크 (실제 AP
 ```
 moyak-backend/
 ├── data/                    # raw/processed 데이터, SQLite DB — git 미포함
-├── docs/map-api.md          # 지도 API 문서
+├── docs/                    # map-api.md(지도), pills-api.md(알약 사진), flutter-handoff.md(앱 인수인계)
 ├── scripts/
-│   ├── build_drug_index.py          # 약사 자동완성용 약품 인덱스 생성
+│   ├── build_drug_index.py          # 약사 자동완성용 약품 인덱스 생성 (전문의약품 구분 칸 포함)
+│   ├── index_dur_ingredients.py     # DUR 성분 색인 보강 (허가정보 주성분으로 병용금기 대조 범위 확대)
+│   ├── seed_kiosk_products.py       # 키오스크 의약외품 (운영 중인 자판기 전체)
 │   ├── index_permissions.py         # 허가정보 3만여 품목 Pinecone 임베딩
 │   ├── supabase_demo_machines.sql   # Supabase 시연용 자판기/재고 (동양미래대 주변)
 │   └── supabase_consultation_machine_code.sql  # 상담 키오스크·처방 수량 컬럼 (2026-10 실행 완료)
@@ -184,11 +204,12 @@ moyak-backend/
 │   ├── ingestion/ indexing/ # STEP 0~4 데이터 파이프라인
 │   ├── rag/                 # 프롬프트, RAG 체인, 식약처 허가정보·DUR 보강(drug_facts)
 │   ├── accounts/            # 회원가입·로그인 (Supabase Auth, users 프로필·실명)
-│   ├── consult/             # 상담·승인·결제·자판기·재고, 녹음 전사·검토 요약, 화상방, 자동 삭제
+│   ├── consult/             # 상담·승인·결제·자판기·재고, 녹음 전사·검토 요약, 화상방, 자동 삭제, 환자 안전 판정
+│   ├── pills/               # 알약 사진 인식 (Claude 판정·후보 검색·재순위, 예비 OpenCV·Google Vision)
 │   ├── map_database.py      # Supabase 연결
 │   └── api/
 │       ├── main.py          # FastAPI 진입점 (map_app.py: 지도 단독 서버)
-│       ├── routes/          # auth, chat, consultation, conversation, drugs, vending, shop, map
+│       ├── routes/          # auth, chat, care_profile, consultation, conversation, drugs, pills, patient_info, vending, shop, map
 │       └── static/          # app/(사용자 앱 20개 화면), kiosk/(13개 화면), pharmacist.html
 └── tests/
 ```
@@ -203,6 +224,7 @@ moyak-backend/
 | 화상 상담 | Daily.co 기본 UI(약사 상담실에 내장), 녹음은 각자 기기 마이크 | 자체 통화 UI |
 | 자판기 위치 | 시연용 가상 자판기 (동양미래대 주변) | 실제 설치 자판기 데이터 |
 | 운영 데이터 | 시연·테스트 데이터, 취소·24시간 지난 대기 상담 자동 삭제 | 보관 정책·백업 |
+| 알약 사진 인식 | 식약처 사진 1위 93.3%, 실사진 3위 안 71.4% — 후보를 보여주고 사용자가 고름 | 실사진 정확도 개선, 약 봉투 인식 |
 
 ## 🗺 로드맵
 
@@ -211,13 +233,18 @@ moyak-backend/
 3. ✅ 상담 중 채팅 + 녹음 전사 + 약사 검토 AI 요약
 4. ✅ 자판기 지도 · 재고 조회 (Supabase + 카카오 지도)
 5. ✅ 팀 Supabase DB 통합 · 회원가입/로그인(실명) · 키오스크 재고 기반 처방(여러 종류·수량)
-6. ⏳ 실제 결제 · 자판기 하드웨어(MQTT) 연동 · 약사 로그인
-7. ⏳ 사진 기반(멀티모달) 약 식별
+6. ✅ 사진 기반(멀티모달) 약 식별 — 알약 사진 → 후보 → 챗봇 설명 (Flutter 앱 연동)
+7. ✅ 환자 참고사항 · DUR 안전 판정 · 약사 처방 검색 전문의약품 차단
+8. ⏳ 실제 결제 · 자판기 하드웨어(MQTT) 연동 · 약사 로그인
+9. ⏳ 약 봉투 사진 인식 · 실사진 정확도 개선
 
 ## 📝 최근 변경 이력
 
 | 날짜 | 변경 |
 |---|---|
+| 2026-11-03 | 알약 사진 인식 **Claude 키 교체·동작 확인**(판정 엔진 `claude-opus-5-5`), 선우 브랜치 master 반영: **약사 처방 검색 전문의약품 9종 차단**, 녹음 동의 없이도 **약사가 요약 직접 작성**, 상담실 전 처방 결정 숨김, 키오스크 의약외품 **실제 제품명**(20종) |
+| 2026-10-27 | 안전 판정 개선(**"못 했다"와 "할 게 없었다" 구분**, 성분 대조 못 한 알러지는 "확인 필요"), DUR 성분 색인 보강, 키오스크 의약외품 **자판기 9대 전체** |
+| 2026-10-26 | **알약 사진 인식**(`/pills/identify`), **환자 참고사항·안전 판정**, 증상 추천에서 **살 수 없는 약 제외**, 보안·안정성 수정 |
 | 2026-10-23 | 약사 콘솔 **상담실**(화상+채팅+처방 한 화면), **약 여러 종류 처방**(최대 5종), 취소·24시간 지난 대기 상담 **자동 삭제** |
 | 2026-10-19 | 환자가 고른 **키오스크 재고 약만 처방**, **처방 수량**(재고 차감), 챗봇 증상 추천 **약별 정리**, 회원가입 **실명**·마이페이지 "OOO 님", 키오스크 **"이*복 님"** |
 | 2026-10-17 | 앱 **회원가입·로그인 API**(Supabase Auth), 채팅 중복 전송 방지, 수령 시 재고 차감·구매 기록, 의약외품 미결제 주문 자동 취소 |
@@ -231,6 +258,7 @@ API 스펙 변경 상세는 [`CLAUDE.md`](./CLAUDE.md), 앱 연동 방법은 [do
 
 - 지도 API(Supabase PostGIS 조회), 녹음 전사·검토 요약, 회원가입·로그인 API, DB 통합 후속 수정(재고 차감·주문 만료): 한별
 - 챗봇(RAG)·약사 상담·키오스크 흐름·웹 화면·DB 통합: 종복
+- 알약 사진 인식, 환자 참고사항·안전 판정(DUR), 키오스크 의약외품 데이터, 약사 처방 검색 전문의약품 차단: 선우
 
 ---
 
